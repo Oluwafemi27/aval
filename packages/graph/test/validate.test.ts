@@ -133,12 +133,12 @@ describe("validateMotionGraphDefinition", () => {
     };
     expectInvalid(duplicateState, /duplicates state ID/);
 
-    const duplicateStatic = simpleGraph();
-    duplicateStatic.states[1] = {
-      ...duplicateStatic.states[1]!,
+    const sharedStatic = simpleGraph();
+    sharedStatic.states[1] = {
+      ...sharedStatic.states[1]!,
       staticFrameId: "idle-static"
     };
-    expectInvalid(duplicateStatic, /duplicates static-frame ID/);
+    expect(() => validateMotionGraphDefinition(sharedStatic)).not.toThrow();
 
     const duplicateUnit = simpleGraph();
     duplicateUnit.states[1] = {

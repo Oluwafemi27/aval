@@ -67,7 +67,6 @@ export function validateMotionGraphDefinition(
   }
 
   const stateIds = new Set<string>();
-  const staticFrameIds = new Set<string>();
   const reservedUnitIds = new Set<string>();
   const states = Array.from(stateInputs, (state, index) =>
     cloneState(
@@ -75,7 +74,6 @@ export function validateMotionGraphDefinition(
       index,
       initialState,
       stateIds,
-      staticFrameIds,
       reservedUnitIds
     )
   );
@@ -172,7 +170,6 @@ function cloneState(
   index: number,
   initialState: string,
   stateIds: Set<string>,
-  staticFrameIds: Set<string>,
   reservedUnitIds: Set<string>
 ): GraphStateDefinition {
   const path = `states[${String(index)}]`;
@@ -184,13 +181,6 @@ function cloneState(
     input.staticFrameId,
     `${path}.staticFrameId`
   );
-  addUnique(
-    staticFrameIds,
-    staticFrameId,
-    `${path}.staticFrameId`,
-    "static-frame ID"
-  );
-
   const body = cloneBody(input.body, `${path}.body`);
   reserveUnit(reservedUnitIds, body.unitId, `${path}.body.unitId`);
 

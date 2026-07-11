@@ -42,7 +42,8 @@ owned by that state.
 A state declares:
 
 - a unique ID;
-- a unique static-frame ID;
+- a static-frame ID, which may be shared by states that use the same immutable
+  fallback image;
 - one body with a unique unit ID;
 - body kind `loop`, `finite`, or `held`;
 - a positive frame count (`held` requires exactly one); and
