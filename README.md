@@ -25,10 +25,18 @@ M2 adds one arbitrary reversible endpoint pair:
 - context-loss and visibility-safe logical-time freezing; and
 - 1,000 cached resident reversal draws with 1,000+ framebuffer tag reads.
 
-The general user-defined graph, compiled container, FFmpeg compiler, packed
-alpha, range loader, and custom element follow in later milestones. M2 accepts
-creator-defined endpoint names internally but deliberately does not expose the
-public multi-state graph planned for M3.
+M3 freezes the browser-independent user-defined graph:
+
+- one to 32 creator-defined states with loop, finite, or held bodies;
+- portal, finish, cut, locked, reversible, completion, and static routes;
+- deterministic frame commands from explicit consecutive content ticks;
+- latest-wins input, direct follow-ons, and adjacent-frame active reversal;
+- immutable ordered effects and exactly-once request settlement descriptors;
+- strict input, routing-operation, resource, and diagnostic-trace bounds; and
+- 10,320 seeded fuzz ticks replayed with deep deterministic equality.
+
+The compiled container, FFmpeg compiler, integrated decoder scheduler, packed
+alpha, range loader, and public custom element follow in later milestones.
 
 ## Run it
 
