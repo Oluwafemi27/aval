@@ -35,8 +35,18 @@ M3 freezes the browser-independent user-defined graph:
 - strict input, routing-operation, resource, and diagnostic-trace bounds; and
 - 10,320 seeded fuzz ticks replayed with deep deterministic equality.
 
-The compiled container, FFmpeg compiler, integrated decoder scheduler, packed
-alpha, range loader, and public custom element follow in later milestones.
+M4 freezes the minimal compiled asset contract:
+
+- one canonical, deterministic 0.1 header, manifest, front index, and payload layout;
+- strict UTF-8 canonical JSON with duplicate, dangerous-key, and hostile-input rejection;
+- closed rendition, unit, graph, readiness, fallback, and resource-limit schemas;
+- canonical reference-RGBA samples plus deliberately shallow M4 PNG envelopes;
+- a bounded writer with a verified static-offset fixed point and byte-identical round trips;
+- range-only immutable parsing with no retained media payload views; and
+- two checked-in conformance assets plus deterministic mutation fuzzing.
+
+The FFmpeg compiler, integrated decoder scheduler, packed alpha, range loader,
+and public custom element follow in later milestones.
 
 ## Run it
 
@@ -72,7 +82,11 @@ npx playwright install chromium
 - [Implementation plan](docs/superpowers/plans/2026-07-11-web-rendered-motion-implementation.md)
 - [M2 design addendum](docs/superpowers/specs/2026-07-11-m2-resident-reversible-interaction-design.md)
 - [M2 implementation plan](docs/superpowers/plans/2026-07-11-m2-resident-reversible-interaction-implementation.md)
+- [M4 format design](docs/superpowers/specs/2026-07-11-m4-minimal-compiled-format-design.md)
+- [M4 implementation plan](docs/superpowers/plans/2026-07-11-m4-minimal-compiled-format-implementation.md)
 - [M1 browser evidence](docs/evidence/2026-07-11-m1-continuous-loop.md)
 - [M2 browser evidence](docs/evidence/2026-07-11-m2-resident-reversal.md)
+- [M3 graph evidence](docs/evidence/2026-07-11-m3-deterministic-graph.md)
+- [M4 format evidence](docs/evidence/2026-07-11-m4-minimal-compiled-format.md)
 
 Headless browser results prove decoded ordering and lifecycle behavior, not physical display scan-out continuity. Display certification requires separate headed device profiles and external observation.

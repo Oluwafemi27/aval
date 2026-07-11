@@ -1,0 +1,108 @@
+import type {
+  AccessUnitInputV01,
+  AccessUnitRecord,
+  BindingSourceV01,
+  BindingV01,
+  BitrateV01,
+  ByteRange,
+  CanvasV01,
+  CanonicalAssetInputV01,
+  CompiledManifestInputV01,
+  CompiledManifestV01,
+  DeclaredLimitsV01,
+  EdgeV01,
+  FallbackV01,
+  FormatBudgets,
+  FormatErrorCode,
+  FormatErrorDetails,
+  FormatHeader,
+  FormatOptions,
+  Id,
+  ParsedFrontIndex,
+  PortV01,
+  RationalV01,
+  ReadinessV01,
+  Rect,
+  ReferenceFrameDescriptor,
+  ReferenceFrameHeader,
+  ReferenceFrameInput,
+  ReferenceFrameValidationInput,
+  RenditionV01,
+  ResidencyEndpointV01,
+  SampleDigestInputV01,
+  SampleSpanV01,
+  Sha256Hex,
+  StartV01,
+  StateV01,
+  StaticBlobRange,
+  StaticFrameInputV01,
+  StaticFrameV01,
+  StaticPayloadInputV01,
+  TransitionV01,
+  TriggerV01,
+  UnitBlobRange,
+  UnitInputV01,
+  UnitV01,
+  ValidatedAssetLayout
+} from "@rendered-motion/format";
+
+// This tuple is never emitted. It makes every approved public type cross the
+// package export boundary during the test TypeScript project build.
+export type PublicFormatTypes = readonly [
+  AccessUnitInputV01,
+  AccessUnitRecord,
+  BindingSourceV01,
+  BindingV01,
+  BitrateV01,
+  ByteRange,
+  CanvasV01,
+  CanonicalAssetInputV01,
+  CompiledManifestInputV01,
+  CompiledManifestV01,
+  DeclaredLimitsV01,
+  EdgeV01,
+  FallbackV01,
+  FormatBudgets,
+  FormatErrorCode,
+  FormatErrorDetails,
+  FormatHeader,
+  FormatOptions,
+  Id,
+  ParsedFrontIndex,
+  PortV01,
+  RationalV01,
+  ReadinessV01,
+  Rect,
+  ReferenceFrameDescriptor,
+  ReferenceFrameHeader,
+  ReferenceFrameInput,
+  ReferenceFrameValidationInput,
+  RenditionV01,
+  ResidencyEndpointV01,
+  SampleDigestInputV01,
+  SampleSpanV01,
+  Sha256Hex,
+  StartV01,
+  StateV01,
+  StaticBlobRange,
+  StaticFrameInputV01,
+  StaticFrameV01,
+  StaticPayloadInputV01,
+  TransitionV01,
+  TriggerV01,
+  UnitBlobRange,
+  UnitInputV01,
+  UnitV01,
+  ValidatedAssetLayout
+];
+
+// Internal implementation contracts deliberately do not cross the package
+// root even though their defining modules use named exports internally.
+// @ts-expect-error canonical JSON is private
+export type { CanonicalJsonValue } from "@rendered-motion/format";
+// @ts-expect-error canonical layout is private
+export type { CanonicalAssetLayout } from "@rendered-motion/format";
+// @ts-expect-error PNG validation inputs are private
+export type { PngEnvelopeValidationInput } from "@rendered-motion/format";
+// @ts-expect-error writer normalization is private
+export type { NormalizedWriterInput } from "@rendered-motion/format";
