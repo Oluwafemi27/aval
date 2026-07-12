@@ -1,20 +1,41 @@
 import {
   CompilerError,
+  bt709LimitedAlphaLuma,
+  bt709LimitedChroma2x2,
+  bt709LimitedLuma,
   compileDirectInput,
   compileProjectFile,
+  dilateTransparentRgba,
   inspectAssetFile,
+  packRgbaToPlanarYuv420,
   parseCliArguments,
   runCli,
+  roundSignedRatio,
   startDevCommand,
   unpackAssetFile,
   validateAssetFile,
   validateAssetReport,
   type CliArguments,
   type CliRuntime,
+  type AlphaAuditSummary,
+  type AlphaErrorStatistics,
+  type AlphaFrameQualitySummary,
+  type AlphaPolicyDecision,
+  type AvcRenditionSummary,
+  type Bt709LimitedChroma,
   type CompileResult,
+  type CompileStaticValidationDetails,
+  type CompositeBackground,
+  type CompositeBackgroundQualitySummary,
+  type CompositeQualitySummary,
   type DevSession,
   type DirectCompileOptions,
-  type ProjectCompileOptions
+  type NormalizedSourceProject,
+  type PackedPlanarYuv420Frame,
+  type PlanarYuv420Planes,
+  type ProjectCompileOptions,
+  type SourceAlphaPolicy,
+  type SourceProjectV02
 } from "../src/index.js";
 
 const direct: (input: DirectCompileOptions) => Promise<Readonly<CompileResult>> =
@@ -25,6 +46,7 @@ const directTimeoutOptions: DirectCompileOptions = {
   inputPath: "input.mov",
   outputPath: "output.rma",
   loop: [0, 1],
+  alpha: "auto",
   probeTimeoutMs: 1_000,
   mediaTimeoutMs: 5_000
 };
@@ -47,6 +69,36 @@ const cancelledValidationReport = validateAssetReport("asset.rma", controller.si
 const unpack = unpackAssetFile("asset.rma", "output");
 const cancelledUnpack = unpackAssetFile("asset.rma", "output", controller.signal);
 const error: Error = new CompilerError("CLI_USAGE", "test");
+const policy: SourceAlphaPolicy = "auto";
+const normalized = null as unknown as Readonly<NormalizedSourceProject>;
+const modern = null as unknown as Readonly<SourceProjectV02>;
+const audit = null as unknown as Readonly<AlphaAuditSummary>;
+const avcSummary = null as unknown as Readonly<AvcRenditionSummary>;
+const decision = null as unknown as Readonly<AlphaPolicyDecision>;
+const qualityStatistics = null as unknown as Readonly<AlphaErrorStatistics>;
+const frameQuality = null as unknown as Readonly<AlphaFrameQualitySummary>;
+const compositeBackground: CompositeBackground = "black";
+const compositeStatistics = null as unknown as Readonly<
+  CompositeBackgroundQualitySummary
+>;
+const compositeQuality = null as unknown as Readonly<CompositeQualitySummary>;
+const staticValidation = null as unknown as Readonly<
+  CompileStaticValidationDetails
+>;
+const rounded: number = roundSignedRatio(-3, 2);
+const luma: number = bt709LimitedLuma(1, 2, 3);
+const alphaLuma: number = bt709LimitedAlphaLuma(128);
+const chroma: Readonly<Bt709LimitedChroma> = bt709LimitedChroma2x2(
+  new Uint8Array(12)
+);
+const dilated: Uint8Array = dilateTransparentRgba({
+  width: 1,
+  height: 1,
+  rgba: Uint8Array.of(0, 0, 0, 0)
+});
+const packed = null as unknown as Readonly<PackedPlanarYuv420Frame>;
+const planes: Readonly<PlanarYuv420Planes> = packed.planes;
+const packer: typeof packRgbaToPlanarYuv420 = packRgbaToPlanarYuv420;
 
 void direct;
 void project;
@@ -63,6 +115,25 @@ void cancelledValidationReport;
 void unpack;
 void cancelledUnpack;
 void error;
+void policy;
+void normalized;
+void modern;
+void audit;
+void avcSummary;
+void decision;
+void qualityStatistics;
+void frameQuality;
+void compositeBackground;
+void compositeStatistics;
+void compositeQuality;
+void staticValidation;
+void rounded;
+void luma;
+void alphaLuma;
+void chroma;
+void dilated;
+void planes;
+void packer;
 
 // Verify the public session shape without starting a watcher.
 const sessionFactory: typeof startDevCommand = startDevCommand;

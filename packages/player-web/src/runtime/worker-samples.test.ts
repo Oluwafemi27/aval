@@ -18,6 +18,38 @@ const LIMITS = Object.freeze({
 });
 
 describe("WorkerSampleFactory", () => {
+  it("accepts the exact packed-alpha AVC profile on the shared sample path", () => {
+    const timeline = new DecodeTimeline({ numerator: 30, denominator: 1 });
+    const catalog = {
+      renditions: {
+        require: () => ({
+          id: "packed",
+          profile: "avc-annexb-packed-alpha-v0" as const,
+          codec: "avc1.42E020" as const,
+          codedWidth: 64,
+          codedHeight: 144,
+          alphaLayout: {
+            type: "stacked-v0" as const,
+            colorRect: [0, 0, 64, 64] as const,
+            alphaRect: [0, 72, 64, 64] as const
+          },
+          bitrate: { average: 1_000, peak: 2_000 },
+          capabilities: ["webcodecs", "webgl2"] as const
+        })
+      },
+      units: { require: () => { throw new Error("unused"); } },
+      records: { require: () => { throw new Error("unused"); } },
+      copySample: () => new ArrayBuffer(0)
+    } satisfies WorkerSampleCatalog;
+
+    expect(() => new WorkerSampleFactory({
+      catalog,
+      timeline,
+      rendition: "packed",
+      limits: LIMITS
+    })).not.toThrow();
+  });
+
   it("creates one closed batch across complete unit boundaries", () => {
     const fixture = createFixture();
 

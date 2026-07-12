@@ -7,8 +7,13 @@ import type {
   BrowserRehearsalRouteRun
 } from "./browser-readiness-rehearsal-driver.js";
 import type {
-  OpaqueCandidateReadinessSessionInput
-} from "./opaque-candidate-factory.js";
+  AvcCandidateReadinessSessionInput
+} from "./avc-candidate-factory.js";
+import type {
+  BrowserProductionMotionPolicyEvidence,
+  BrowserProductionProfileEvidence,
+  BrowserProductionStrictStaticEvidence
+} from "./browser-production-readiness-m6-evidence.js";
 
 export interface BrowserProductionMediaEvidence {
   readonly graphKind: BrowserFrameMedia["graphKind"];
@@ -76,6 +81,9 @@ export interface BrowserProductionScenarioEvidence {
 export interface BrowserProductionReadinessReport {
   readonly passed: boolean;
   readonly ringCapacity: number;
+  readonly profile: Readonly<BrowserProductionProfileEvidence>;
+  readonly strictStatic: Readonly<BrowserProductionStrictStaticEvidence>;
+  readonly motionPolicy: Readonly<BrowserProductionMotionPolicyEvidence>;
   readonly initialRingReady: boolean;
   readonly loops: readonly Readonly<BrowserProductionLoopEvidence>[];
   readonly routes: readonly Readonly<BrowserProductionRouteEvidence>[];
@@ -88,7 +96,7 @@ export interface BrowserProductionReadinessReport {
 }
 
 export function createProductionRouteEvidence(input: {
-  readonly candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
+  readonly candidate: Readonly<AvcCandidateReadinessSessionInput>;
   readonly edge: Readonly<GraphEdgeDefinition>;
   readonly run: Readonly<BrowserRehearsalRouteRun>;
 }): Readonly<BrowserProductionRouteEvidence> {
@@ -274,7 +282,7 @@ function verifyTargetEntry(
 }
 
 function verifyTargetHandoff(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   edge: Readonly<GraphEdgeDefinition>,
   run: Readonly<BrowserRehearsalRouteRun>
 ): boolean {
@@ -305,7 +313,7 @@ function verifyGenerations(
 }
 
 function requireCutRunwayFrames(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   edge: string
 ): number {
   const runway = input.interactionCache.cutRunways.find(
@@ -318,7 +326,7 @@ function requireCutRunwayFrames(
 }
 
 function requireEndpointRunwayFrames(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   edge: Readonly<GraphEdgeDefinition>
 ): number {
   if (edge.transition?.kind !== "reversible") {
@@ -339,7 +347,7 @@ function requireEndpointRunwayFrames(
 }
 
 function requireStateBody(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   state: string
 ) {
   const value = input.context.catalog.graph.definition.states.find(

@@ -3,7 +3,7 @@ import type {
   GraphStateDefinition
 } from "@rendered-motion/graph";
 
-import type { BrowserOpaqueCandidateHub } from "./browser-opaque-candidate-hub.js";
+import type { BrowserAvcCandidateHub } from "./browser-avc-candidate-hub.js";
 import {
   BrowserReadinessRehearsalDriver,
   assertRehearsalActive,
@@ -11,8 +11,8 @@ import {
   type BrowserRehearsalTick
 } from "./browser-readiness-rehearsal-driver.js";
 import type {
-  OpaqueCandidateReadinessSessionInput
-} from "./opaque-candidate-factory.js";
+  AvcCandidateReadinessSessionInput
+} from "./avc-candidate-factory.js";
 import { measureBrowserProductionPhase } from "./browser-production-readiness-phases.js";
 import {
   createProductionEndpointEvidence,
@@ -25,6 +25,11 @@ import {
   type BrowserProductionRouteEvidence,
   type BrowserProductionScenarioEvidence
 } from "./browser-production-readiness-evidence.js";
+import {
+  collectProductionStrictStaticEvidence,
+  createProductionProfileEvidence,
+  rehearseProductionMotionPolicy
+} from "./browser-production-readiness-m6-evidence.js";
 
 export type {
   BrowserProductionEndpointEvidence,
@@ -36,6 +41,12 @@ export type {
   BrowserProductionRouteEvidence,
   BrowserProductionScenarioEvidence
 } from "./browser-production-readiness-evidence.js";
+export type {
+  BrowserProductionMotionPhaseEvidence,
+  BrowserProductionMotionPolicyEvidence,
+  BrowserProductionProfileEvidence,
+  BrowserProductionStrictStaticEvidence
+} from "./browser-production-readiness-m6-evidence.js";
 
 /**
  * Production-backed readiness certificate. Synthetic decode timing remains a
@@ -43,15 +54,15 @@ export type {
  * graph route and resident/streaming ownership boundary.
  */
 export class BrowserProductionReadinessRehearsal {
-  readonly #input: Readonly<OpaqueCandidateReadinessSessionInput>;
-  readonly #hub: BrowserOpaqueCandidateHub;
+  readonly #input: Readonly<AvcCandidateReadinessSessionInput>;
+  readonly #hub: BrowserAvcCandidateHub;
   readonly #ringCapacity: number;
   readonly #cleanups: Readonly<BrowserRehearsalCleanup>[] = [];
   readonly #scenarios: Readonly<BrowserProductionScenarioEvidence>[] = [];
 
   public constructor(options: {
-    readonly input: Readonly<OpaqueCandidateReadinessSessionInput>;
-    readonly hub: BrowserOpaqueCandidateHub;
+    readonly input: Readonly<AvcCandidateReadinessSessionInput>;
+    readonly hub: BrowserAvcCandidateHub;
     readonly ringCapacity: number;
   }) {
     this.#input = options.input;
@@ -61,6 +72,10 @@ export class BrowserProductionReadinessRehearsal {
 
   public async run(): Promise<Readonly<BrowserProductionReadinessReport>> {
     assertRehearsalActive(this.#input);
+    const strictStatic = await collectProductionStrictStaticEvidence(
+      this.#input
+    );
+    const motionPolicy = rehearseProductionMotionPolicy();
     const primary = await this.#withDriver("primary", async (driver) => {
       const initialRingReady = await this.#measureInitialRing(driver);
       const loops: Readonly<BrowserProductionLoopEvidence>[] = [];
@@ -111,8 +126,12 @@ export class BrowserProductionReadinessRehearsal {
 
     // A late abort can arrive after the final draw but before certification.
     assertRehearsalActive(this.#input);
+    const profile = createProductionProfileEvidence(this.#input);
     const cleanupReady = this.#cleanups.every(({ passed }) => passed);
     const passed =
+      profile.passed &&
+      strictStatic.passed &&
+      motionPolicy.passed &&
       primary.initialRingReady &&
       cleanupReady &&
       primary.loops.every((value) => value.passed) &&
@@ -129,6 +148,9 @@ export class BrowserProductionReadinessRehearsal {
     return Object.freeze({
       passed,
       ringCapacity: this.#ringCapacity,
+      profile,
+      strictStatic,
+      motionPolicy,
       initialRingReady: primary.initialRingReady,
       loops: primary.loops,
       routes: primary.routes,
@@ -338,7 +360,7 @@ export class BrowserProductionReadinessRehearsal {
 }
 
 function requireStateForUnit(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   unit: string
 ): Readonly<GraphStateDefinition> {
   const state = input.context.catalog.graph.definition.states.find(

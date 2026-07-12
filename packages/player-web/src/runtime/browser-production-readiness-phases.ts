@@ -11,11 +11,11 @@ import {
 } from "./browser-readiness-rehearsal-driver.js";
 import type { BrowserProductionPhaseEvidence } from "./browser-production-readiness-evidence.js";
 import type {
-  OpaqueCandidateReadinessSessionInput
-} from "./opaque-candidate-factory.js";
+  AvcCandidateReadinessSessionInput
+} from "./avc-candidate-factory.js";
 
 export async function measureBrowserProductionPhase(input: {
-  readonly candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
+  readonly candidate: Readonly<AvcCandidateReadinessSessionInput>;
   readonly driver: BrowserReadinessRehearsalDriver;
   readonly edge: Readonly<GraphEdgeDefinition>;
 }): Promise<Readonly<BrowserProductionPhaseEvidence>> {
@@ -116,7 +116,7 @@ async function measureAutomaticCompletion(
 }
 
 async function measureLockedFollowOn(
-  candidate: Readonly<OpaqueCandidateReadinessSessionInput>,
+  candidate: Readonly<AvcCandidateReadinessSessionInput>,
   driver: BrowserReadinessRehearsalDriver,
   edge: Readonly<GraphEdgeDefinition>
 ): Promise<boolean> {
@@ -157,7 +157,7 @@ async function measureLockedFollowOn(
 }
 
 async function measureVisibleRunway(
-  candidate: Readonly<OpaqueCandidateReadinessSessionInput>,
+  candidate: Readonly<AvcCandidateReadinessSessionInput>,
   driver: BrowserReadinessRehearsalDriver,
   edge: Readonly<GraphEdgeDefinition>
 ): Promise<boolean> {
@@ -214,7 +214,7 @@ function admitEdgeIntent(
 }
 
 function requireState(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   state: string
 ): Readonly<GraphStateDefinition> {
   const value = input.context.catalog.graph.definition.states.find(

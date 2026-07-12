@@ -19,35 +19,36 @@ import type {
   DecoderWorkerMetrics,
   DecoderWorkerSample
 } from "../decoder-worker/protocol.js";
+import { strictTestPng } from "./asset-test-fixture.js";
 import {
   installRuntimeAssetCatalog,
   type RuntimeAssetCatalog
 } from "./asset-catalog.js";
-import { BrowserOpaqueCandidateHub } from "./browser-opaque-candidate-hub.js";
-import { BrowserOpaquePlaybackSession } from "./browser-opaque-playback-session.js";
+import { BrowserAvcCandidateHub } from "./browser-avc-candidate-hub.js";
+import { BrowserAvcPlaybackSession } from "./browser-avc-playback-session.js";
 import { DecodeTimeline } from "./decode-timeline.js";
 import type { IntegratedCandidateAttemptContext } from "./integrated-player-contracts.js";
 import { createIntegratedActivationPresentation } from "./integrated-player-support.js";
 import { createInteractionCachePlan } from "./interaction-cache-plan.js";
 import type {
-  OpaqueCandidateActivationInput,
-  OpaqueCandidateReadinessSessionInput,
-  OpaqueCandidateWorker
-} from "./opaque-candidate-factory.js";
+  AvcCandidateActivationInput,
+  AvcCandidateReadinessSessionInput,
+  AvcCandidateWorker
+} from "./avc-candidate-factory.js";
 import type {
-  OpaqueFrameRenderer,
+  FrameRenderer,
   RenderFrameHandle,
   ResidentFrameHandle,
   StreamingFrameHandle
-} from "./opaque-frame-renderer.js";
+} from "./frame-renderer.js";
 import {
   PathScheduler,
   type PathSchedulerSnapshot
 } from "./path-scheduler.js";
 import {
-  createOpaqueRenditionCandidates,
-  inspectOpaqueRenditionCandidate
-} from "./rendition-selection.js";
+  createAvcRenditionCandidates,
+  inspectAvcRenditionCandidate
+} from "./avc-rendition-selection.js";
 import { createRuntimeResourcePlan } from "./resource-plan.js";
 import { evaluateAllRoutesReadiness } from "./readiness-evaluator.js";
 import {
@@ -602,13 +603,13 @@ class BrowserSessionHarness {
   public readonly routeReady: boolean[] = [];
 
   readonly #catalog: RuntimeAssetCatalog;
-  readonly #session: BrowserOpaquePlaybackSession;
+  readonly #session: BrowserAvcPlaybackSession;
   #nextOrdinal = 1n;
   #disposed = false;
 
   private constructor(options: {
     readonly catalog: RuntimeAssetCatalog;
-    readonly session: BrowserOpaquePlaybackSession;
+    readonly session: BrowserAvcPlaybackSession;
     readonly graph: MotionGraphEngine;
     readonly worker: PhaseWorker;
     readonly renderer: PhaseRenderer;
@@ -626,11 +627,11 @@ class BrowserSessionHarness {
     const catalog = installRuntimeAssetCatalog(createBrowserPhaseAsset(options));
     const graph = new MotionGraphEngine();
     const installed = graph.install(catalog.graph);
-    const candidate = createOpaqueRenditionCandidates(
+    const candidate = createAvcRenditionCandidates(
       catalog.renditions.values()
     )[0];
     if (candidate === undefined) throw new Error("all-routes candidate is absent");
-    const inspected = inspectOpaqueRenditionCandidate(catalog, candidate);
+    const inspected = inspectAvcRenditionCandidate(catalog, candidate);
     if (!inspected.ok) throw new Error("all-routes candidate inspection failed");
 
     const worker = new PhaseWorker();
@@ -665,7 +666,7 @@ class BrowserSessionHarness {
     });
     const runtime = new AbortController();
     let now = 0;
-    const input: Readonly<OpaqueCandidateReadinessSessionInput> = Object.freeze({
+    const input: Readonly<AvcCandidateReadinessSessionInput> = Object.freeze({
       context,
       worker,
       renderer: renderer.asOpaqueRenderer(),
@@ -687,7 +688,7 @@ class BrowserSessionHarness {
       limits: LIMITS,
       clock: input.clock
     });
-    const activation: Readonly<OpaqueCandidateActivationInput> = Object.freeze({
+    const activation: Readonly<AvcCandidateActivationInput> = Object.freeze({
       graphSnapshot: installed.snapshot,
       expectedPresentation: createIntegratedActivationPresentation(
         catalog.graph,
@@ -698,11 +699,11 @@ class BrowserSessionHarness {
       signal: runtime.signal,
       deadlineMs: 10_000
     });
-    const hub = new BrowserOpaqueCandidateHub({
+    const hub = new BrowserAvcCandidateHub({
       width: catalog.manifest.canvas.width,
       height: catalog.manifest.canvas.height
     } as HTMLCanvasElement);
-    const session = await BrowserOpaquePlaybackSession.create({
+    const session = await BrowserAvcPlaybackSession.create({
       candidate: input,
       activation,
       hub
@@ -893,8 +894,8 @@ class PhaseRenderer {
     this.draws.push(handle);
   }
 
-  public asOpaqueRenderer(): OpaqueFrameRenderer {
-    return this as unknown as OpaqueFrameRenderer;
+  public asOpaqueRenderer(): FrameRenderer {
+    return this as unknown as FrameRenderer;
   }
 }
 
@@ -903,7 +904,7 @@ interface PendingSample {
   readonly sample: Omit<DecoderWorkerSample, "data">;
 }
 
-class PhaseWorker implements OpaqueCandidateWorker {
+class PhaseWorker implements AvcCandidateWorker {
   public activeGeneration: number | null = null;
   readonly #pending: PendingSample[] = [];
   readonly #ready: PhaseManagedFrame[] = [];
@@ -1080,7 +1081,7 @@ function createStandaloneScheduler(): {
   readonly scheduler: PathScheduler;
 } {
   const catalog = installRuntimeAssetCatalog(createBrowserPhaseAsset());
-  const candidate = createOpaqueRenditionCandidates(
+  const candidate = createAvcRenditionCandidates(
     catalog.renditions.values()
   )[0];
   if (candidate === undefined) throw new Error("phase candidate is absent");
@@ -1326,7 +1327,7 @@ function createBrowserPhaseAsset(options: {
     accessUnits,
     staticPayloads: stateIds.map((id) => ({
       staticFrame: `${id}-static`,
-      bytes: phaseShallowPng(64, 64)
+      bytes: strictTestPng(64, 64)
     }))
   });
 }
@@ -1443,27 +1444,4 @@ function phaseDeltaAccessUnit(frameNumber: number): readonly number[] {
     }
   }
   return [0, 0, 0, 1, 9, 48, 0, 0, 1, 97, ...slice];
-}
-
-function phaseShallowPng(width: number, height: number): Uint8Array {
-  const bytes = new Uint8Array(33);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-  phaseWriteUint32Be(bytes, 8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  phaseWriteUint32Be(bytes, 16, width);
-  phaseWriteUint32Be(bytes, 20, height);
-  bytes.set([8, 6, 0, 0, 0], 24);
-  bytes.set([0xde, 0xad, 0xbe, 0xef], 29);
-  return bytes;
-}
-
-function phaseWriteUint32Be(
-  bytes: Uint8Array,
-  offset: number,
-  value: number
-): void {
-  bytes[offset] = Math.floor(value / 0x100_0000) & 0xff;
-  bytes[offset + 1] = Math.floor(value / 0x1_0000) & 0xff;
-  bytes[offset + 2] = Math.floor(value / 0x100) & 0xff;
-  bytes[offset + 3] = value & 0xff;
 }

@@ -1,8 +1,11 @@
 import {
   FORMAT_DEFAULT_BUDGETS,
   FormatError,
+  decodePngRgba,
+  deriveAvcRenditionGeometry,
   inspectAvcAnnexBRendition,
   validateCompleteAsset,
+  validatePngProfile,
   type AvcRenditionInspection,
   type ParsedFrontIndex,
   type ValidatedAssetLayout
@@ -10,7 +13,6 @@ import {
 
 import { readBoundedRegularFile } from "../bounded-file.js";
 import { throwIfAborted } from "../cancellation.js";
-import { crc32 } from "../compile/crc32.js";
 import { createSha256Accumulator } from "../compile/hash.js";
 import { CompilerError } from "../diagnostics.js";
 
@@ -50,7 +52,8 @@ export async function readValidatedAsset(
     const layout = validateCompleteAsset({ bytes });
     throwIfAborted(signal);
     verifyBlobDigests(bytes, layout, signal);
-    const avc = inspectOpaqueRenditions(bytes, layout.frontIndex, signal);
+    decodeStaticPngs(bytes, layout.frontIndex, signal);
+    const avc = inspectAvcRenditions(bytes, layout.frontIndex, signal);
     throwIfAborted(signal);
     return Object.freeze({ bytes, layout, avc });
   } catch (error) {
@@ -75,33 +78,28 @@ export async function readValidatedAsset(
   }
 }
 
-export function staticPngClaim(
+function decodeStaticPngs(
   bytes: Uint8Array,
   front: ParsedFrontIndex,
   signal?: AbortSignal
-): "generated-profile-envelope" | "m4-envelope-only" {
-  throwIfAborted(signal);
-  if (!front.manifest.generator.startsWith("rendered-motion-compiler/")) {
-    return "m4-envelope-only";
-  }
+): void {
   for (let index = 0; index < front.staticBlobs.length; index += 1) {
     throwIfAborted(signal);
     const blob = front.staticBlobs[index];
-    const frame = front.manifest.staticFrames[index];
-    if (
-      blob === undefined ||
-      frame === undefined ||
-      !isGeneratedPngEnvelope(
-        bytes.subarray(blob.offset, blob.offset + blob.length),
-        frame.width,
-        frame.height,
-        signal
-      )
-    ) {
-      return "m4-envelope-only";
+    const descriptor = front.manifest.staticFrames[index];
+    if (blob === undefined || descriptor === undefined) {
+      throw new CompilerError(
+        "ASSET_INVALID",
+        "Static PNG descriptors are incomplete"
+      );
     }
+    decodePngRgba(validatePngProfile({
+      png: bytes.subarray(blob.offset, blob.offset + blob.length),
+      expectedWidth: descriptor.width,
+      expectedHeight: descriptor.height
+    }));
   }
-  return "generated-profile-envelope";
+  throwIfAborted(signal);
 }
 
 export function describeAccessUnits(
@@ -152,7 +150,7 @@ export function sha256AssetBytes(
   return digest.digestHex();
 }
 
-function inspectOpaqueRenditions(
+function inspectAvcRenditions(
   bytes: Uint8Array,
   front: ParsedFrontIndex,
   signal?: AbortSignal
@@ -165,7 +163,30 @@ function inspectOpaqueRenditions(
   ) {
     throwIfAborted(signal);
     const rendition = front.manifest.renditions[renditionIndex];
-    if (rendition?.profile !== "avc-annexb-opaque-v0") continue;
+    if (
+      rendition?.profile !== "avc-annexb-opaque-v0" &&
+      rendition?.profile !== "avc-annexb-packed-alpha-v0"
+    ) continue;
+    const geometry = deriveAvcRenditionGeometry(
+      rendition.profile === "avc-annexb-opaque-v0"
+        ? {
+            canvasWidth: front.manifest.canvas.width,
+            canvasHeight: front.manifest.canvas.height,
+            profile: rendition.profile,
+            codedWidth: rendition.codedWidth,
+            codedHeight: rendition.codedHeight,
+            colorRect: rendition.alphaLayout.colorRect
+          }
+        : {
+            canvasWidth: front.manifest.canvas.width,
+            canvasHeight: front.manifest.canvas.height,
+            profile: rendition.profile,
+            codedWidth: rendition.codedWidth,
+            codedHeight: rendition.codedHeight,
+            colorRect: rendition.alphaLayout.colorRect,
+            alphaRect: rendition.alphaLayout.alphaRect
+          }
+    );
     const units = front.manifest.units.map((unit, unitIndex) => {
       const accessUnits: Array<{ readonly key: boolean; readonly bytes: Uint8Array }> = [];
       for (const record of front.records) {
@@ -190,6 +211,7 @@ function inspectOpaqueRenditions(
       profile: {
         codedWidth: rendition.codedWidth,
         codedHeight: rendition.codedHeight,
+        expectedDecodedStorageRect: geometry.decodedStorageRect,
         frameRate: front.manifest.frameRate,
         averageBitrate: rendition.bitrate.average,
         peakBitrate: rendition.bitrate.peak,
@@ -225,67 +247,4 @@ function verifyBlobDigests(
       );
     }
   }
-}
-
-const PNG_SIGNATURE = Uint8Array.of(
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
-);
-
-function isGeneratedPngEnvelope(
-  bytes: Uint8Array,
-  width: number,
-  height: number,
-  signal?: AbortSignal
-): boolean {
-  throwIfAborted(signal);
-  if (
-    bytes.length < 58 ||
-    !PNG_SIGNATURE.every((value, index) => bytes[index] === value)
-  ) {
-    return false;
-  }
-  let cursor = 8;
-  const chunks: Array<{ readonly type: string; readonly data: Uint8Array }> = [];
-  while (cursor <= bytes.length - 12) {
-    throwIfAborted(signal);
-    const length = readUint32BE(bytes, cursor);
-    const end = cursor + 12 + length;
-    if (!Number.isSafeInteger(end) || end > bytes.length) return false;
-    const typeBytes = bytes.subarray(cursor + 4, cursor + 8);
-    const data = bytes.subarray(cursor + 8, cursor + 8 + length);
-    const expectedCrc = readUint32BE(bytes, cursor + 8 + length);
-    if (crc32(bytes.subarray(cursor + 4, cursor + 8 + length)) !== expectedCrc) {
-      return false;
-    }
-    chunks.push({ type: String.fromCharCode(...typeBytes), data });
-    cursor = end;
-  }
-  if (cursor !== bytes.length || chunks.length !== 4) return false;
-  const [ihdr, srgb, idat, iend] = chunks;
-  return ihdr?.type === "IHDR" &&
-    ihdr.data.length === 13 &&
-    readUint32BE(ihdr.data, 0) === width &&
-    readUint32BE(ihdr.data, 4) === height &&
-    equalBytes(ihdr.data.subarray(8), Uint8Array.of(8, 6, 0, 0, 0)) &&
-    srgb?.type === "sRGB" &&
-    srgb.data.length === 1 &&
-    srgb.data[0] === 0 &&
-    idat?.type === "IDAT" &&
-    idat.data.length > 0 &&
-    iend?.type === "IEND" &&
-    iend.data.length === 0;
-}
-
-function readUint32BE(bytes: Uint8Array, offset: number): number {
-  return (
-    (bytes[offset]! * 0x100_0000) +
-    (bytes[offset + 1]! << 16) +
-    (bytes[offset + 2]! << 8) +
-    bytes[offset + 3]!
-  ) >>> 0;
-}
-
-function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length &&
-    left.every((value, index) => value === right[index]);
 }

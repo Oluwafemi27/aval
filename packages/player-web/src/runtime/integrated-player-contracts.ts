@@ -17,13 +17,15 @@ import type {
   RuntimeTraceRecord
 } from "./model.js";
 import type {
-  RuntimeOpaqueRenditionCandidate,
-  RuntimeOpaqueRenditionInspection
-} from "./rendition-selection.js";
+  RuntimeAvcRenditionCandidate,
+  RuntimeAvcRenditionInspection
+} from "./avc-rendition-selection.js";
 import type { RealtimeUnderflowEvent } from "./realtime-driver.js";
+import type { MotionPolicy } from "./motion-policy.js";
+import type { RuntimeCanvasResourceHost } from "./static-resource-plan.js";
 
 type SuccessfulRenditionInspection = Extract<
-  RuntimeOpaqueRenditionInspection,
+  RuntimeAvcRenditionInspection,
   { readonly ok: true }
 >;
 
@@ -35,8 +37,14 @@ export interface IntegratedStaticSurfaceStore {
   validateAll(options: { readonly signal: AbortSignal }): Promise<unknown>;
   presentState(
     state: string,
-    options: { readonly signal: AbortSignal }
+    options: {
+      readonly signal: AbortSignal;
+      /** False stages pixels without changing the visible plane. */
+      readonly cover?: boolean;
+    }
   ): Promise<unknown>;
+  /** Exact state identity of the currently retained strict surface. */
+  currentState(): string | null;
   coverCurrent(): void;
   revealAnimated(): void;
   /** Resolves after every aborted decoder/presentation callback has retired. */
@@ -46,7 +54,7 @@ export interface IntegratedStaticSurfaceStore {
 
 export interface IntegratedCandidateAttemptContext {
   readonly catalog: RuntimeAssetCatalog;
-  readonly candidate: Readonly<RuntimeOpaqueRenditionCandidate>;
+  readonly candidate: Readonly<RuntimeAvcRenditionCandidate>;
   readonly inspection: SuccessfulRenditionInspection["inspection"];
   readonly graphSnapshot: Readonly<MotionGraphSnapshot>;
   readonly hostMaxRuntimeBytes: number | null;
@@ -89,6 +97,7 @@ export interface IntegratedCandidateAvailability {
 
 export interface IntegratedCandidateFactory {
   readonly availability: Readonly<IntegratedCandidateAvailability>;
+  readonly resourceHost?: RuntimeCanvasResourceHost;
   create(
     context: Readonly<IntegratedCandidateAttemptContext>
   ): IntegratedCandidateAttempt;
@@ -163,6 +172,8 @@ export interface IntegratedPlayerOptions {
   readonly eventSink?: (event: Readonly<EffectHostEvent>) => void;
   readonly diagnosticsSink?: (failure: Readonly<RuntimeFailure>) => void;
   readonly hostMaxRuntimeBytes?: number;
+  readonly motionPolicy?: MotionPolicy;
+  readonly hostReducedMotion?: boolean;
   readonly now?: () => number;
   readonly timers?: IntegratedTimerHost;
   /** Internal M5.5 clock ownership; public pause/autoplay remains M8. */

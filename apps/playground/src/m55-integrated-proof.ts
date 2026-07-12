@@ -13,15 +13,15 @@ import {
   RESOURCE_DECODE_SURFACE_COUNT,
   StaticSurfaceStore,
   asStaticSurfaceCatalog,
-  createBrowserOpaqueCandidateComposition,
+  createBrowserAvcCandidateComposition,
   createDecoderWorkerClient,
-  createOpaqueRenditionCandidates,
-  inspectOpaqueRenditionCandidate,
+  createAvcRenditionCandidates,
+  inspectAvcRenditionCandidate,
   installRuntimeAssetCatalog,
   timestampForFrame,
   type AllRoutesReadinessEvidence,
-  type BrowserOpaqueCandidateComposition,
-  type BrowserOpaqueCandidateSnapshot,
+  type BrowserAvcCandidateComposition,
+  type BrowserAvcCandidateSnapshot,
   type EffectHostEvent,
   type IntegratedCandidateFactory,
   type IntegratedCandidateAttempt,
@@ -29,7 +29,7 @@ import {
   type IntegratedPlaybackSession,
   type RuntimeFailure,
   type RuntimeMediaPresentation,
-  type RuntimeOpaqueRenditionCandidate,
+  type RuntimeAvcRenditionCandidate,
   type RuntimeReadinessResult,
   type StaticSurfaceStoreSnapshot
 } from "@rendered-motion/player-web";
@@ -67,6 +67,7 @@ export interface M55CandidateSupport {
   readonly codedWidth: number;
   readonly codedHeight: number;
   readonly codedArea: number;
+  readonly visibleColorArea: number;
   readonly peakBitrate: number;
   readonly exactConfigSupported: boolean;
   readonly reason: string | null;
@@ -182,7 +183,7 @@ interface ReadinessSummary {
 interface ReadinessSnapshotWithEvidence {
   readonly policy: "all-routes";
   readonly passed: boolean | null;
-  readonly evaluation: BrowserOpaqueCandidateSnapshot["readiness"]["evaluation"];
+  readonly evaluation: BrowserAvcCandidateSnapshot["readiness"]["evaluation"];
   readonly evidence?: Readonly<AllRoutesReadinessEvidence> | null;
 }
 
@@ -343,12 +344,15 @@ export async function probeM55IntegratedSupport(
       manifest.readiness.policy === "all-routes",
     "M5.5 proof requires the all-routes format 0.1 fixture"
   );
-  const candidates = createOpaqueRenditionCandidates(manifest.renditions);
-  requireProof(candidates.length > 0, "M5.5 fixture has no opaque candidates");
+  const candidates = createAvcRenditionCandidates(
+    manifest.renditions,
+    manifest.canvas
+  );
+  requireProof(candidates.length > 0, "M5.5 fixture has no AVC candidates");
 
   const webCodecs = typeof VideoDecoder !== "undefined";
   const staticPng =
-    typeof createImageBitmap === "function" && typeof Blob !== "undefined";
+    typeof createImageBitmap === "function" && typeof ImageData !== "undefined";
   const webgl2 = probeWebGl2();
   const mainThreadCandidateSupport = await Promise.all(candidates.map(async (candidate) => {
     const rendition = candidate.rendition;
@@ -378,6 +382,7 @@ export async function probeM55IntegratedSupport(
       codedWidth: rendition.codedWidth,
       codedHeight: rendition.codedHeight,
       codedArea: candidate.codedArea,
+      visibleColorArea: candidate.visibleColorArea,
       peakBitrate: rendition.bitrate.peak,
       exactConfigSupported,
       reason
@@ -438,7 +443,7 @@ export async function probeM55IntegratedSupport(
 
 async function probePackagedDecoderWorker(
   bytes: Uint8Array,
-  candidate: Readonly<RuntimeOpaqueRenditionCandidate>
+  candidate: Readonly<RuntimeAvcRenditionCandidate>
 ): Promise<Readonly<{
   moduleWorker: boolean;
   exactConfigSupported: boolean;
@@ -455,7 +460,7 @@ async function probePackagedDecoderWorker(
   let client: ReturnType<typeof createDecoderWorkerClient> | null = null;
   let moduleWorker = false;
   try {
-    const inspected = inspectOpaqueRenditionCandidate(catalog, candidate);
+    const inspected = inspectAvcRenditionCandidate(catalog, candidate);
     if (!inspected.ok) {
       return Object.freeze({
         moduleWorker: false,
@@ -596,8 +601,8 @@ export async function runM55IntegratedProof(
   let finalReport: M55IntegratedProofReport | null = null;
   let disposed = false;
 
-  const composition: BrowserOpaqueCandidateComposition =
-    createBrowserOpaqueCandidateComposition({
+  const composition: BrowserAvcCandidateComposition =
+    createBrowserAvcCandidateComposition({
       canvas: animatedCanvas,
       clock: { now: () => performance.now() },
       diagnosticsSink: (failure: Readonly<RuntimeFailure>) => diagnostics.push(
@@ -633,7 +638,11 @@ export async function runM55IntegratedProof(
     const localFrame = presentation.frameIndex;
     const pixels = controls.readPixels();
     const decoded = decodeFixtureTag(pixels.rgba, pixels.width, pixels.height);
-    const expectedSourceOrdinal = sourceOrdinal(unit, localFrame);
+    const expectedSourceOrdinal = sourceOrdinal(
+      unit,
+      localFrame,
+      pixels.width >= 45 && pixels.height >= 27
+    );
     requireProof(
       decoded.sourceOrdinal === expectedSourceOrdinal,
       `GPU tag mismatch for ${unit}:${String(localFrame)}; expected ${String(
@@ -1173,7 +1182,7 @@ export async function runM55IntegratedProof(
     requireProof(
       preparedSnapshot.candidateOrder.every((candidate, index: number) =>
         candidate.id === selectionOrder[index]?.id &&
-        candidate.area === selectionOrder[index]?.codedArea &&
+        candidate.area === support.candidates[index]?.visibleColorArea &&
         candidate.peakBitrate === selectionOrder[index]?.peakBitrate
       ),
       "attempted browser candidates diverged from deterministic ordering"
@@ -1324,7 +1333,7 @@ async function runRealtimeIntroLoopProof(
   let disposed = false;
   const callbacks = new Map<number, number | null>();
 
-  const composition = createBrowserOpaqueCandidateComposition({
+  const composition = createBrowserAvcCandidateComposition({
     canvas: animatedCanvas,
     clock: { now: () => performance.now() },
     diagnosticsSink: (failure: Readonly<RuntimeFailure>) => diagnostics.push(
@@ -1345,7 +1354,8 @@ async function runRealtimeIntroLoopProof(
       // validating that every reported media identity belongs to the fixture.
       sourceOrdinal(
         presentation.unitId,
-        presentation.frameIndex
+        presentation.frameIndex,
+        manifest.canvas.width >= 45 && manifest.canvas.height >= 27
       );
       if (realtimeStartedAtMs !== null) {
         requireProof(activeDisplayCallbackTimestampMs !== null,
@@ -1758,7 +1768,7 @@ async function driveUntilStopped(
 }
 
 function summarizeReadiness(
-  snapshot: Readonly<BrowserOpaqueCandidateSnapshot>,
+  snapshot: Readonly<BrowserAvcCandidateSnapshot>,
   manifest: Readonly<CompiledManifestV01>
 ): Readonly<ReadinessSummary> {
   const readiness = snapshot.readiness as ReadinessSnapshotWithEvidence;
@@ -1962,7 +1972,7 @@ function requireOrderSequence(
 function requireAnimated(
   result: Readonly<RuntimeReadinessResult>,
   diagnostics: readonly string[],
-  browser: Readonly<BrowserOpaqueCandidateSnapshot>
+  browser: Readonly<BrowserAvcCandidateSnapshot>
 ): asserts result is Extract<RuntimeReadinessResult, { mode: "animated" }> {
   requireProof(
     result.mode === "animated" &&
@@ -1979,7 +1989,7 @@ function requireAnimated(
 }
 
 function describeReadinessFailure(
-  browser: Readonly<BrowserOpaqueCandidateSnapshot>
+  browser: Readonly<BrowserAvcCandidateSnapshot>
 ) {
   const evaluation = browser.readiness.evaluation;
   const evidence = browser.readiness.evidence;
@@ -2028,7 +2038,7 @@ function requireStaticRecovery(
 }
 
 function requireWorkerMetrics(
-  snapshot: Readonly<BrowserOpaqueCandidateSnapshot>
+  snapshot: Readonly<BrowserAvcCandidateSnapshot>
 ) {
   const metrics = snapshot.worker.metrics;
   requireProof(metrics !== null, "browser worker retained no protocol metrics");
@@ -2062,7 +2072,7 @@ function requireTerminalWorkerAccounting(
   );
 }
 
-function workerSummary(snapshot: Readonly<BrowserOpaqueCandidateSnapshot>) {
+function workerSummary(snapshot: Readonly<BrowserAvcCandidateSnapshot>) {
   const metrics = requireWorkerMetrics(snapshot);
   requireProof(metrics.disposed,
     "terminal worker summary was captured before disposal");
@@ -2095,7 +2105,7 @@ function requireStaticSnapshot(
 }
 
 function assertCompleteCleanup(
-  composition: Readonly<BrowserOpaqueCandidateSnapshot>,
+  composition: Readonly<BrowserAvcCandidateSnapshot>,
   staticStore: Readonly<StaticSurfaceStoreSnapshot>,
   pendingPromises: number
 ): void {
@@ -2175,12 +2185,18 @@ function eventLabel(event: Readonly<EffectHostEvent>): string {
   }
 }
 
-function sourceOrdinal(unit: string, localFrame: number): number {
+function sourceOrdinal(
+  unit: string,
+  localFrame: number,
+  m6PackedFixture = false
+): number {
   const start = FIXTURE_SOURCE_ORDINALS[
     unit as keyof typeof FIXTURE_SOURCE_ORDINALS
   ];
   requireProof(start !== undefined, `unknown fixture unit ${unit}`);
-  const ordinal = start + localFrame;
+  const ordinal = (
+    m6PackedFixture && unit === "done-body" ? 26 : start
+  ) + localFrame;
   requireProof(
     Number.isSafeInteger(localFrame) && localFrame >= 0 && ordinal < 30,
     "fixture frame identity is out of range"
@@ -2198,19 +2214,23 @@ function decodeFixtureTag(
   readonly minimumLumaMargin: number;
 } {
   requireProof(
-    Number.isSafeInteger(width) && width === 32 &&
-      Number.isSafeInteger(height) && height === 32 &&
+    Number.isSafeInteger(width) && width >= 32 &&
+      Number.isSafeInteger(height) && height >= 18 &&
       rgba.byteLength === width * height * 4,
-    "GPU readback does not match the 32x32 logical fixture canvas"
+    "GPU readback cannot contain the fixture marker grid"
   );
   let code = 0;
   let minimumDistance = Number.POSITIVE_INFINITY;
+  const m6MarkerGrid = width >= 45 && height >= 27;
   for (let bit = 0; bit < 6; bit += 1) {
     let sum = 0;
     let samples = 0;
-    const startX = 4 + bit * 4;
-    for (let y = 14; y < 18; y += 1) {
-      for (let x = startX + 1; x < startX + 3; x += 1) {
+    const startX = m6MarkerGrid ? 2 + bit * 5 : 4 + bit * 4;
+    const startY = 14;
+    const endY = m6MarkerGrid ? 20 : 18;
+    for (let y = startY; y < endY; y += 1) {
+      const sampleStartX = m6MarkerGrid ? startX : startX + 1;
+      for (let x = sampleStartX; x < startX + 3; x += 1) {
         const offset = (y * width + x) * 4;
         const red = rgba[offset]!;
         const green = rgba[offset + 1]!;

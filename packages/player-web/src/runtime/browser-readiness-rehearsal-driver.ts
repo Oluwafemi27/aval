@@ -6,14 +6,14 @@ import {
   type MotionGraphSnapshot
 } from "@rendered-motion/graph";
 
-import type { BrowserOpaqueCandidateHub } from "./browser-opaque-candidate-hub.js";
-import { BrowserOpaquePlaybackSession } from "./browser-opaque-playback-session.js";
+import type { BrowserAvcCandidateHub } from "./browser-avc-candidate-hub.js";
+import { BrowserAvcPlaybackSession } from "./browser-avc-playback-session.js";
 import type { BrowserFrameMedia } from "./browser-playback-types.js";
 import type { IntegratedPreparedContentTick } from "./integrated-player-contracts.js";
 import { createIntegratedActivationPresentation } from "./integrated-player-support.js";
 import type {
-  OpaqueCandidateReadinessSessionInput
-} from "./opaque-candidate-factory.js";
+  AvcCandidateReadinessSessionInput
+} from "./avc-candidate-factory.js";
 import { PathScheduler } from "./path-scheduler.js";
 import { createRuntimeResourcePlan } from "./resource-plan.js";
 
@@ -48,20 +48,20 @@ export interface BrowserRehearsalCleanup {
  * dispose it before another scenario can start on the sole decoder worker.
  */
 export class BrowserReadinessRehearsalDriver {
-  readonly #candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
-  readonly #hub: BrowserOpaqueCandidateHub;
+  readonly #candidate: Readonly<AvcCandidateReadinessSessionInput>;
+  readonly #hub: BrowserAvcCandidateHub;
   readonly #graph: MotionGraphEngine;
-  readonly #session: BrowserOpaquePlaybackSession;
+  readonly #session: BrowserAvcPlaybackSession;
   readonly #tickLimit: number;
   #nextOrdinal = 1n;
   #lastTick: Readonly<BrowserRehearsalTick> | null = null;
   #disposed = false;
 
   private constructor(options: {
-    readonly candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
-    readonly hub: BrowserOpaqueCandidateHub;
+    readonly candidate: Readonly<AvcCandidateReadinessSessionInput>;
+    readonly hub: BrowserAvcCandidateHub;
     readonly graph: MotionGraphEngine;
-    readonly session: BrowserOpaquePlaybackSession;
+    readonly session: BrowserAvcPlaybackSession;
     readonly tickLimit: number;
   }) {
     this.#candidate = options.candidate;
@@ -72,8 +72,8 @@ export class BrowserReadinessRehearsalDriver {
   }
 
   public static async create(options: {
-    readonly candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
-    readonly hub: BrowserOpaqueCandidateHub;
+    readonly candidate: Readonly<AvcCandidateReadinessSessionInput>;
+    readonly hub: BrowserAvcCandidateHub;
     readonly ringCapacity: number;
   }): Promise<BrowserReadinessRehearsalDriver> {
     assertRehearsalActive(options.candidate);
@@ -100,9 +100,9 @@ export class BrowserReadinessRehearsalDriver {
               options.candidate.context.hostMaxRuntimeBytes
           })
     });
-    let session: BrowserOpaquePlaybackSession | null = null;
+    let session: BrowserAvcPlaybackSession | null = null;
     try {
-      session = await BrowserOpaquePlaybackSession.create({
+      session = await BrowserAvcPlaybackSession.create({
         candidate: options.candidate,
         activation: Object.freeze({
           graphSnapshot: installed.snapshot,
@@ -148,7 +148,7 @@ export class BrowserReadinessRehearsalDriver {
     return this.#tickLimit;
   }
 
-  public playbackSnapshot(): ReturnType<BrowserOpaquePlaybackSession["snapshot"]> {
+  public playbackSnapshot(): ReturnType<BrowserAvcPlaybackSession["snapshot"]> {
     return this.#session.snapshot();
   }
 
@@ -403,7 +403,7 @@ function rationalDeadlineUs(
 }
 
 function rehearsalTickLimit(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>
+  input: Readonly<AvcCandidateReadinessSessionInput>
 ): number {
   const unitFrames = input.context.catalog.manifest.units.reduce(
     (sum, unit) => sum + unit.frameCount,
@@ -418,7 +418,7 @@ function rehearsalTickLimit(
 
 export function assertRehearsalActive(
   input: Readonly<Pick<
-    OpaqueCandidateReadinessSessionInput,
+    AvcCandidateReadinessSessionInput,
     "signal" | "clock" | "deadlineMs"
   >>
 ): void {

@@ -108,13 +108,9 @@ export class DecoderWorkerClient {
     this.#messageListener = (event) => {
       this.#handleMessage(event.data);
     };
-    this.#errorListener = (event) => {
+    this.#errorListener = () => {
       this.#failTransport(
-        new DecoderWorkerTransportError(
-          event.message.length > 0
-            ? `decoder worker failed: ${event.message}`
-            : "decoder worker failed"
-        )
+        new DecoderWorkerTransportError("decoder worker failed")
       );
     };
     this.#messageErrorListener = () => {

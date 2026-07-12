@@ -1,0 +1,395 @@
+import type {
+  GraphPresentation,
+  MotionGraphSnapshot
+} from "@rendered-motion/graph";
+
+import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
+import {
+  RuntimePlaybackError,
+  normalizeRuntimeFailure,
+  type RuntimeFailure,
+  type RuntimeFailureCode
+} from "./errors.js";
+import {
+  IntegratedPlayer,
+  type IntegratedCandidateAttempt,
+  type IntegratedCandidateAttemptContext,
+  type IntegratedCandidateFactory,
+  type IntegratedPlaybackSession,
+  type IntegratedPlayerSnapshot,
+  type IntegratedRealtimeDriverOptions,
+  type IntegratedStaticSurfaceStore,
+  type IntegratedTimerHost
+} from "./integrated-player.js";
+import type { MotionPolicy } from "./motion-policy.js";
+
+export type CandidateBehavior =
+  | { readonly kind: "success" }
+  | { readonly kind: "draw-failure" }
+  | {
+      readonly kind: "failure";
+      readonly code: RuntimeFailureCode;
+      readonly cleanupFailure?: boolean;
+    }
+  | { readonly kind: "gated"; readonly gate: Deferred<void> }
+  | { readonly kind: "activation-gated"; readonly gate: Deferred<void> }
+  | { readonly kind: "pending" };
+
+export interface PreparationHarnessOptions {
+  readonly bytes?: Uint8Array;
+  readonly behaviors?: readonly CandidateBehavior[];
+  readonly staticBehavior?: StaticBehavior;
+  readonly timers?: IntegratedTimerHost;
+  readonly availability?: {
+    readonly workerAvailable: boolean;
+    readonly rendererAvailable: boolean;
+  };
+  readonly motionPolicy?: MotionPolicy;
+  readonly hostReducedMotion?: boolean;
+  readonly realtime?: Readonly<IntegratedRealtimeDriverOptions>;
+}
+
+export function createPreparationHarness(
+  options: PreparationHarnessOptions = {}
+) {
+  const order: string[] = [];
+  const staticStore = new FakeStaticStore(
+    options.staticBehavior ?? "immediate",
+    order
+  );
+  const factory = new FakeCandidateFactory(
+    options.behaviors ?? [{ kind: "success" }],
+    options.availability,
+    order
+  );
+  const events: Array<{ readonly type: string }> = [];
+  const failures: Readonly<RuntimeFailure>[] = [];
+  const eventSnapshots: IntegratedPlayerSnapshot[] = [];
+  const timers = options.timers ?? new ManualTimers();
+  let player: IntegratedPlayer | null = null;
+  player = new IntegratedPlayer({
+    bytes: options.bytes ?? createIntegratedOpaqueTestAsset(),
+    createStaticStore: () => staticStore,
+    candidateFactory: factory,
+    eventSink: (event) => {
+      events.push(event);
+      if (player !== null) eventSnapshots.push(player.snapshot());
+    },
+    diagnosticsSink: (failure) => failures.push(failure),
+    timers,
+    ...(options.realtime === undefined
+      ? {}
+      : { realtime: options.realtime }),
+    ...(options.motionPolicy === undefined
+      ? {}
+      : { motionPolicy: options.motionPolicy }),
+    ...(options.hostReducedMotion === undefined
+      ? {}
+      : { hostReducedMotion: options.hostReducedMotion })
+  });
+  return {
+    player,
+    staticStore,
+    factory,
+    events,
+    eventSnapshots,
+    failures,
+    timers,
+    order
+  };
+}
+
+export type StaticBehavior =
+  | "immediate"
+  | "pending-initial"
+  | "fail-first-reveal"
+  | "fail-stage"
+  | "fail-stage-and-cover"
+  | "pending-present"
+  | {
+      readonly kind: "gate-first-present";
+      readonly gate: Deferred<void>;
+    };
+
+export class FakeStaticStore implements IntegratedStaticSurfaceStore {
+  public readonly calls: string[] = [];
+  public readonly committed: string[] = [];
+  readonly #behavior: StaticBehavior;
+  readonly #order: string[];
+  #revealFailed = false;
+  #presentations = 0;
+  #coverAttempts = 0;
+
+  public constructor(behavior: StaticBehavior, order: string[] = []) {
+    this.#behavior = behavior;
+    this.#order = order;
+  }
+
+  public async installInitial(options: {
+    readonly state: string;
+    readonly signal: AbortSignal;
+  }): Promise<void> {
+    this.calls.push(`install:${options.state}`);
+    if (this.#behavior === "pending-initial") {
+      await abortablePending(options.signal);
+    }
+  }
+
+  public async validateAll(options: {
+    readonly signal: AbortSignal;
+  }): Promise<void> {
+    this.calls.push("validate-all");
+    throwIfAborted(options.signal);
+  }
+
+  public async presentState(
+    state: string,
+    options: { readonly signal: AbortSignal; readonly cover?: boolean }
+  ): Promise<void> {
+    this.calls.push(`${options.cover === false ? "stage" : "present"}:${state}`);
+    this.#presentations += 1;
+    if (
+      (this.#behavior === "fail-stage" ||
+        this.#behavior === "fail-stage-and-cover") &&
+      options.cover === false
+    ) {
+      throw new Error("injected strict PNG surface failure");
+    }
+    if (this.#behavior === "pending-present") {
+      await abortablePending(options.signal);
+    }
+    if (
+      typeof this.#behavior === "object" &&
+      this.#behavior.kind === "gate-first-present" &&
+      this.#presentations === 1
+    ) {
+      await this.#behavior.gate.promise;
+    }
+    throwIfAborted(options.signal);
+    this.committed.push(state);
+    this.#order.push(`${options.cover === false
+      ? "static:staged"
+      : "static:presented"}:${state}`);
+  }
+
+  public revealAnimated(): void {
+    this.calls.push("reveal-animated");
+    this.#order.push("static:reveal-animated");
+    if (this.#behavior === "fail-first-reveal" && !this.#revealFailed) {
+      this.#revealFailed = true;
+      throw new Error("injected reveal failure");
+    }
+  }
+
+  public currentState(): string | null {
+    return this.committed.at(-1) ?? "idle";
+  }
+
+  public coverCurrent(): void {
+    this.calls.push("cover-current");
+    this.#order.push("static:cover-current");
+    this.#coverAttempts += 1;
+    if (
+      this.#behavior === "fail-stage-and-cover" &&
+      this.#coverAttempts <= 2
+    ) {
+      throw new Error("injected strict PNG cover failure");
+    }
+  }
+
+  public async settled(): Promise<void> {}
+
+  public dispose(): void {
+    this.calls.push("dispose");
+  }
+}
+
+export class FakeCandidateFactory implements IntegratedCandidateFactory {
+  public readonly calls: string[] = [];
+  public readonly draws: Readonly<GraphPresentation>[] = [];
+  public readonly activationSnapshots: Readonly<MotionGraphSnapshot>[] = [];
+  public activeAttempts = 0;
+  public maximumActiveAttempts = 0;
+  public failTrace = false;
+  public readonly availability: Readonly<{
+    workerAvailable: boolean;
+    rendererAvailable: boolean;
+  }>;
+  readonly #behaviors: CandidateBehavior[];
+  readonly #order: string[];
+
+  public constructor(
+    behaviors: readonly CandidateBehavior[],
+    availability: PreparationHarnessOptions["availability"] = undefined,
+    order: string[] = []
+  ) {
+    this.#behaviors = [...behaviors];
+    this.#order = order;
+    this.availability = Object.freeze(availability ?? {
+      workerAvailable: true,
+      rendererAvailable: true
+    });
+  }
+
+  public create(
+    context: Readonly<IntegratedCandidateAttemptContext>
+  ): IntegratedCandidateAttempt {
+    const rendition = context.candidate.rendition.id;
+    const behavior = this.#behaviors.shift() ?? { kind: "success" };
+    this.calls.push(`create:${rendition}`);
+    this.activeAttempts += 1;
+    this.maximumActiveAttempts = Math.max(
+      this.maximumActiveAttempts,
+      this.activeAttempts
+    );
+    let disposed = false;
+    return {
+      playback: Object.freeze({
+        ...PREPARATION_PLAYBACK,
+        traceState: () => {
+          if (this.failTrace) throw new Error("injected trace failure");
+          return PREPARATION_PLAYBACK.traceState();
+        }
+      }),
+      prepare: async ({ signal }) => {
+        this.calls.push(`prepare:${rendition}`);
+        if (behavior.kind === "pending") await abortablePending(signal);
+        if (behavior.kind === "gated") await behavior.gate.promise;
+        if (behavior.kind === "failure") {
+          throw new RuntimePlaybackError(normalizeRuntimeFailure(
+            behavior.code,
+            `injected ${behavior.code}`,
+            { rendition }
+          ));
+        }
+        throwIfAborted(signal);
+      },
+      prepareActivation: async ({ expectedPresentation, graphSnapshot }) => {
+        this.activationSnapshots.push(graphSnapshot);
+        if (behavior.kind === "activation-gated") {
+          await behavior.gate.promise;
+        }
+        return Object.freeze({ expectedPresentation });
+      },
+      drawInitial: (_activation, presentation) => {
+        this.calls.push(`draw:${rendition}:${presentation.kind}`);
+        this.draws.push(presentation);
+        if (behavior.kind === "draw-failure") {
+          throw new Error("injected activation draw failure");
+        }
+      },
+      dispose: async () => {
+        if (disposed) return;
+        disposed = true;
+        this.calls.push(`dispose:${rendition}`);
+        this.#order.push(`candidate:dispose:${rendition}`);
+        this.activeAttempts -= 1;
+        if (behavior.kind === "failure" && behavior.cleanupFailure === true) {
+          throw new Error("injected cleanup failure");
+        }
+      }
+    };
+  }
+}
+
+const PREPARATION_PLAYBACK: IntegratedPlaybackSession = Object.freeze({
+  prepareContentTick: () => null,
+  drawContentTick: () => null,
+  synchronizeGraph: () => undefined,
+  traceState: () => Object.freeze({
+    scheduler: Object.freeze({
+      generation: null,
+      activePath: null,
+      sourceCursor: null,
+      submittedCursor: null,
+      decodedCursor: null,
+      displayedCursor: null,
+      ringSize: 0,
+      ringCapacity: 6,
+      smoothSession: true
+    }),
+    submitted: Object.freeze([]),
+    selectedBoundary: null,
+    decodeLeadFrames: null
+  })
+});
+
+export class ManualTimers {
+  #next = 1;
+  readonly #callbacks = new Map<number, () => void>();
+
+  public readonly setTimeout = (callback: () => void, _ms: number): number => {
+    const id = this.#next++;
+    this.#callbacks.set(id, callback);
+    return id;
+  };
+
+  public readonly clearTimeout = (id: number): void => {
+    this.#callbacks.delete(id);
+  };
+
+  public fireAll(): void {
+    const callbacks = [...this.#callbacks.values()];
+    this.#callbacks.clear();
+    for (const callback of callbacks) callback();
+  }
+}
+
+export class Deferred<T> {
+  public readonly promise: Promise<T>;
+  readonly #resolve: (value: T) => void;
+
+  public constructor() {
+    let resolve!: (value: T) => void;
+    this.promise = new Promise<T>((done) => {
+      resolve = done;
+    });
+    this.#resolve = resolve;
+  }
+
+  public resolve(value: T): void {
+    this.#resolve(value);
+  }
+}
+
+async function abortablePending(signal: AbortSignal): Promise<never> {
+  throwIfAborted(signal);
+  return new Promise<never>((_resolve, reject) => {
+    signal.addEventListener("abort", () => reject(abortReason(signal)), {
+      once: true
+    });
+  });
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw abortReason(signal);
+}
+
+function abortReason(signal: AbortSignal): DOMException {
+  return signal.reason instanceof DOMException &&
+    signal.reason.name === "AbortError"
+    ? signal.reason
+    : new DOMException("integrated test operation aborted", "AbortError");
+}
+
+export async function waitForCall(
+  calls: readonly string[],
+  expected: string
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (calls.includes(expected)) return;
+    await Promise.resolve();
+  }
+  throw new Error(`timed out waiting for ${expected}`);
+}
+
+export async function waitForLength(
+  values: readonly unknown[],
+  length: number
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (values.length >= length) return;
+    await Promise.resolve();
+  }
+  throw new Error(`timed out waiting for ${String(length)} values`);
+}

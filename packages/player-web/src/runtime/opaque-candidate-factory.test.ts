@@ -1,27 +1,51 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { maximumAvcDecodedRgbaBytes } from "@rendered-motion/format";
+import { MotionGraphEngine } from "@rendered-motion/graph";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { OpaqueCandidateFactory } from "./opaque-candidate-factory.js";
+import {
+  AvcCandidateFactory,
+  OpaqueCandidateFactory,
+  type AvcCandidateFactoryOptions,
+  type AvcCandidateReadinessSession,
+  type AvcCandidateRendererReservation
+} from "./avc-candidate-factory.js";
+import {
+  createBrowserAvcCandidateComposition,
+  createBrowserOpaqueCandidateComposition
+} from "./browser-avc-candidate.js";
+import { createIntegratedResumePresentation } from "./integrated-player-support.js";
+import type {
+  RuntimeCanvasResourceHost,
+  RuntimeCanvasResourceLease
+} from "./static-resource-plan.js";
 import {
   LeakTracker,
   ManualTimers,
   activationPresentation,
   createContexts,
   createDependencies,
-  disposeOpaqueCandidateTestCatalogs,
+  disposeAvcCandidateTestCatalogs,
   operationOptions,
   waitFor
-} from "./opaque-candidate-factory-test-support.js";
+} from "./avc-candidate-factory-test-support.js";
 
 afterEach(() => {
-  disposeOpaqueCandidateTestCatalogs();
+  disposeAvcCandidateTestCatalogs();
 });
 
-describe("OpaqueCandidateFactory", () => {
+describe("AvcCandidateFactory", () => {
+  it("keeps the deprecated factory name on the same implementation", () => {
+    expect(OpaqueCandidateFactory).toBe(AvcCandidateFactory);
+    expect(createBrowserOpaqueCandidateComposition).toBe(
+      createBrowserAvcCandidateComposition
+    );
+  });
+
   it("derives the exact inspected worker configuration and final scheduler", async () => {
     const contexts = createContexts();
     const tracker = new LeakTracker();
     const dependencies = createDependencies(tracker);
-    const factory = new OpaqueCandidateFactory(dependencies.options);
+    const factory = new AvcCandidateFactory(dependencies.options);
     const attempt = factory.create(contexts.high);
 
     await attempt.prepare(operationOptions());
@@ -64,15 +88,15 @@ describe("OpaqueCandidateFactory", () => {
         maxDecodeQueueSize: 12,
         maxPendingSamples: 24,
         maxOutstandingFrames: 12,
-        maxDecodedBytes: 307_200
+        maxDecodedBytes: maximumAvcDecodedRgbaBytes(64, 64) * 12
       }
     }]);
     expect(tracker.cacheInputs).toHaveLength(1);
     expect(tracker.workerActivations).toEqual([1]);
     expect(tracker.order.slice(0, 7)).toEqual([
+      "reservation:create:opaque-high",
       "worker:create:opaque-high",
       "worker:configure:opaque-high",
-      "reservation:create:opaque-high",
       "renderer:create:opaque-high",
       "worker:activate:opaque-high:1",
       "cache:prepare:opaque-high",
@@ -103,13 +127,38 @@ describe("OpaqueCandidateFactory", () => {
     tracker.expectZeroLeaks();
   });
 
+  it("accepts a settled static graph snapshot for body-zero re-entry", async () => {
+    const contexts = createContexts();
+    const graph = new MotionGraphEngine();
+    graph.install(contexts.high.catalog.graph);
+    graph.beginStatic("reduced-motion");
+    const graphSnapshot = graph.snapshot();
+    const context = Object.freeze({ ...contexts.high, graphSnapshot });
+    const tracker = new LeakTracker();
+    const factory = new AvcCandidateFactory(createDependencies(tracker).options);
+    const attempt = factory.create(context);
+    await attempt.prepare(operationOptions());
+    const expectedPresentation = createIntegratedResumePresentation(
+      context.catalog.graph,
+      graphSnapshot
+    );
+
+    await expect(attempt.prepareActivation({
+      ...operationOptions(),
+      graphSnapshot,
+      expectedPresentation
+    })).resolves.toMatchObject({ expectedPresentation });
+
+    await attempt.dispose();
+  });
+
   it("fully retires a failed high candidate before creating the low worker", async () => {
     const contexts = createContexts();
     const tracker = new LeakTracker({
       modes: { "opaque-high": "configure-failure" }
     });
     const dependencies = createDependencies(tracker);
-    const factory = new OpaqueCandidateFactory(dependencies.options);
+    const factory = new AvcCandidateFactory(dependencies.options);
 
     const high = factory.create(contexts.high);
     await expect(high.prepare(operationOptions())).rejects.toThrow(
@@ -137,14 +186,14 @@ describe("OpaqueCandidateFactory", () => {
     const contexts = createContexts(1);
     const tracker = new LeakTracker();
     const dependencies = createDependencies(tracker);
-    const attempt = new OpaqueCandidateFactory(dependencies.options)
+    const attempt = new AvcCandidateFactory(dependencies.options)
       .create(contexts.high);
 
     await expect(attempt.prepare(operationOptions())).rejects.toMatchObject({
       code: "resource-rejection"
     });
 
-    expect(tracker.configurations).toHaveLength(1);
+    expect(tracker.configurations).toHaveLength(0);
     expect(tracker.rendererAllocations).toBe(0);
     expect(tracker.cacheInputs).toHaveLength(0);
     expect(tracker.readinessInputs).toHaveLength(0);
@@ -161,7 +210,7 @@ describe("OpaqueCandidateFactory", () => {
       modes: { "opaque-high": mode }
     });
     const dependencies = createDependencies(tracker);
-    const attempt = new OpaqueCandidateFactory(dependencies.options)
+    const attempt = new AvcCandidateFactory(dependencies.options)
       .create(contexts.high);
 
     await expect(attempt.prepare(operationOptions())).rejects.toBeDefined();
@@ -179,7 +228,7 @@ describe("OpaqueCandidateFactory", () => {
       modes: { "opaque-high": "activation-failure" }
     });
     const dependencies = createDependencies(tracker);
-    const attempt = new OpaqueCandidateFactory(dependencies.options)
+    const attempt = new AvcCandidateFactory(dependencies.options)
       .create(contexts.high);
     await attempt.prepare(operationOptions());
 
@@ -205,7 +254,7 @@ describe("OpaqueCandidateFactory", () => {
       const contexts = createContexts();
       const tracker = new LeakTracker({ modes: { "opaque-high": mode } });
       const dependencies = createDependencies(tracker);
-      const attempt = new OpaqueCandidateFactory(dependencies.options)
+      const attempt = new AvcCandidateFactory(dependencies.options)
         .create(contexts.high);
       if (activation) await attempt.prepare(operationOptions());
       const controller = new AbortController();
@@ -232,7 +281,7 @@ describe("OpaqueCandidateFactory", () => {
       modes: { "opaque-high": "cache-pending" }
     });
     const dependencies = createDependencies(tracker, timers);
-    const attempt = new OpaqueCandidateFactory(dependencies.options)
+    const attempt = new AvcCandidateFactory(dependencies.options)
       .create(contexts.high);
     const operation = attempt.prepare({
       signal: new AbortController().signal,
@@ -250,7 +299,7 @@ describe("OpaqueCandidateFactory", () => {
     const contexts = createContexts();
     const tracker = new LeakTracker();
     const dependencies = createDependencies(tracker);
-    const attempt = new OpaqueCandidateFactory(dependencies.options)
+    const attempt = new AvcCandidateFactory(dependencies.options)
       .create(contexts.high);
     await attempt.prepare(operationOptions());
 
@@ -268,7 +317,7 @@ describe("OpaqueCandidateFactory", () => {
     const contexts = createContexts();
     const tracker = new LeakTracker();
     const dependencies = createDependencies(tracker);
-    const attempt = new OpaqueCandidateFactory(dependencies.options)
+    const attempt = new AvcCandidateFactory(dependencies.options)
       .create(contexts.high);
     await attempt.prepare(operationOptions());
     const expected = activationPresentation(contexts.high);
@@ -307,7 +356,7 @@ describe("OpaqueCandidateFactory", () => {
       modes: { "opaque-high": "configure-pending" }
     });
     const dependencies = createDependencies(tracker);
-    const factory = new OpaqueCandidateFactory(dependencies.options);
+    const factory = new AvcCandidateFactory(dependencies.options);
     const high = factory.create(contexts.high);
     const low = factory.create(contexts.low);
     const controller = new AbortController();
@@ -318,11 +367,371 @@ describe("OpaqueCandidateFactory", () => {
     await waitFor(() => tracker.order.includes("pending:configure"));
 
     await expect(low.prepare(operationOptions())).rejects.toThrow(
-      "only one opaque candidate decoder worker"
+      "only one AVC candidate decoder worker"
     );
     expect(tracker.maximumWorkersAlive).toBe(1);
     controller.abort();
     await expect(highPreparation).rejects.toMatchObject({ name: "AbortError" });
     tracker.expectZeroLeaks();
   });
+
+  it("captures the candidate resource host and a reentrant lease exactly once", async () => {
+    const contexts = createContexts();
+    const tracker = new LeakTracker();
+    const dependencies = createDependencies(tracker);
+    let hostReads = 0;
+    let backingMethodReads = 0;
+    let reserveMethodReads = 0;
+    let releaseMethodReads = 0;
+    let reserveCalls = 0;
+    let releaseCalls = 0;
+    let reenterDispose: (() => void) | null = null;
+    const rawHost = Object.defineProperties({}, {
+      currentCanvasBacking: {
+        get() {
+          backingMethodReads += 1;
+          if (backingMethodReads > 1) {
+            throw new Error("injected changing backing getter");
+          }
+          return () => Object.freeze({ width: 64, height: 64 });
+        }
+      },
+      reserveCanvasResources: {
+        get() {
+          reserveMethodReads += 1;
+          if (reserveMethodReads > 1) {
+            throw new Error("injected changing reserve getter");
+          }
+          return () => {
+            reserveCalls += 1;
+            return Object.defineProperty({}, "release", {
+              get() {
+                releaseMethodReads += 1;
+                if (releaseMethodReads > 1) {
+                  throw new Error("injected changing release getter");
+                }
+                return () => {
+                  releaseCalls += 1;
+                  void reenterDispose?.();
+                };
+              }
+            });
+          };
+        }
+      }
+    });
+    const options = Object.defineProperty(
+      { ...dependencies.options },
+      "resourceHost",
+      {
+        enumerable: true,
+        get() {
+          hostReads += 1;
+          if (hostReads > 1) {
+            throw new Error("injected changing resource host getter");
+          }
+          return rawHost;
+        }
+      }
+    ) as Readonly<AvcCandidateFactoryOptions>;
+
+    const factory = new AvcCandidateFactory(options);
+    const attempt = factory.create(contexts.high);
+    reenterDispose = () => {
+      void attempt.dispose();
+    };
+    await attempt.prepare(operationOptions());
+    await attempt.dispose();
+
+    expect({
+      hostReads,
+      backingMethodReads,
+      reserveMethodReads,
+      releaseMethodReads,
+      reserveCalls,
+      releaseCalls
+    }).toEqual({
+      hostReads: 1,
+      backingMethodReads: 1,
+      reserveMethodReads: 1,
+      releaseMethodReads: 1,
+      reserveCalls: 1,
+      releaseCalls: 1
+    });
+    tracker.expectZeroLeaks();
+  });
+
+  it.each([
+    ["null", (): unknown => null],
+    ["missing release", (): unknown => Object.freeze({})],
+    ["throwing release getter", (): unknown => Object.defineProperty({}, "release", {
+      get() {
+        throw new Error("private candidate lease capability failure");
+      }
+    })]
+  ] as const)("rolls back a candidate after a %s canvas lease", async (
+    _label,
+    createLease
+  ) => {
+    const contexts = createContexts();
+    const tracker = new LeakTracker();
+    const reserveCanvasResources = vi.fn(() => createLease());
+    const resourceHost = Object.freeze({
+      currentCanvasBacking: () => Object.freeze({ width: 64, height: 64 }),
+      reserveCanvasResources
+    }) as unknown as RuntimeCanvasResourceHost;
+    const attempt = new AvcCandidateFactory({
+      ...createDependencies(tracker).options,
+      resourceHost
+    }).create(contexts.high);
+    let error: unknown;
+
+    try {
+      await attempt.prepare(operationOptions());
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toMatchObject({ code: "resource-rejection" });
+    expect(error).not.toHaveProperty(
+      "message",
+      expect.stringContaining("private candidate lease capability failure")
+    );
+    expect(reserveCanvasResources).toHaveBeenCalledOnce();
+    tracker.expectZeroLeaks();
+  });
+
+  it("captures every candidate owner cleanup capability exactly once", async () => {
+    const contexts = createContexts();
+    const tracker = new LeakTracker();
+    const base = createDependencies(tracker).options;
+    const reads: Record<string, number> = {};
+    const rendererFactory = {
+      available: base.rendererFactory.available,
+      create(context: Parameters<typeof base.rendererFactory.create>[0]) {
+        const reservation = base.rendererFactory.create(context);
+        const allocate = reservation.allocate.bind(reservation);
+        const guardedReservation = guardMethodReads(
+          reservation,
+          ["dispose"],
+          reads,
+          "reservation"
+        );
+        return {
+          limits: reservation.limits,
+          allocate(layout: Parameters<AvcCandidateRendererReservation["allocate"]>[0]) {
+            return guardMethodReads(
+              allocate(layout),
+              ["dispose", "settled"],
+              reads,
+              "renderer"
+            );
+          },
+          get dispose() {
+            return guardedReservation.dispose;
+          }
+        };
+      }
+    };
+    const readinessFactory = {
+      create(input: Parameters<typeof base.readinessFactory.create>[0]): AvcCandidateReadinessSession {
+        const readiness = base.readinessFactory.create(input);
+        const guardedReadiness = guardMethodReads(
+          readiness,
+          ["dispose"],
+          reads,
+          "readiness"
+        );
+        return {
+          adapters: readiness.adapters,
+          prepareActivation: async (activationInput) => guardMethodReads(
+            await readiness.prepareActivation(activationInput),
+            ["dispose"],
+            reads,
+            "prepared"
+          ),
+          get dispose() {
+            return guardedReadiness.dispose;
+          }
+        };
+      }
+    };
+    const factory = new AvcCandidateFactory({
+      ...base,
+      workerFactory: {
+        available: base.workerFactory.available,
+        create: (context) => guardMethodReads(
+          base.workerFactory.create(context),
+          ["dispose"],
+          reads,
+          "worker"
+        )
+      },
+      rendererFactory,
+      readinessFactory
+    });
+    const attempt = factory.create(contexts.high);
+    await attempt.prepare(operationOptions());
+    await attempt.prepareActivation({
+      ...operationOptions(),
+      graphSnapshot: contexts.high.graphSnapshot,
+      expectedPresentation: activationPresentation(contexts.high)
+    });
+
+    await attempt.dispose();
+
+    expect(reads).toEqual({
+      reservation: 1,
+      worker: 1,
+      "renderer:dispose": 1,
+      "renderer:settled": 1,
+      readiness: 1,
+      prepared: 1
+    });
+    tracker.expectZeroLeaks();
+  });
+
+  it("continues cleanup after an early disposer throws", async () => {
+    const contexts = createContexts();
+    const tracker = new LeakTracker();
+    const base = createDependencies(tracker).options;
+    const release = vi.fn();
+    const readinessFactory = {
+      create(input: Parameters<typeof base.readinessFactory.create>[0]): AvcCandidateReadinessSession {
+        const readiness = base.readinessFactory.create(input);
+        return {
+          adapters: readiness.adapters,
+          async prepareActivation(activationInput) {
+            const prepared = await readiness.prepareActivation(activationInput);
+            const dispose = prepared.dispose.bind(prepared);
+            return {
+              playback: prepared.playback,
+              drawInitial: prepared.drawInitial.bind(prepared),
+              dispose() {
+                dispose();
+                throw new Error("injected prepared cleanup failure");
+              }
+            };
+          },
+          dispose: readiness.dispose.bind(readiness)
+        };
+      }
+    };
+    const factory = new AvcCandidateFactory({
+      ...base,
+      readinessFactory,
+      resourceHost: Object.freeze({
+        currentCanvasBacking: () => Object.freeze({ width: 64, height: 64 }),
+        reserveCanvasResources: () => Object.freeze({ release })
+      })
+    });
+    const high = factory.create(contexts.high);
+    await high.prepare(operationOptions());
+    await high.prepareActivation({
+      ...operationOptions(),
+      graphSnapshot: contexts.high.graphSnapshot,
+      expectedPresentation: activationPresentation(contexts.high)
+    });
+
+    await expect(high.dispose()).rejects.toThrow(
+      "injected prepared cleanup failure"
+    );
+    await expect(high.dispose()).rejects.toThrow(
+      "injected prepared cleanup failure"
+    );
+    expect(release).toHaveBeenCalledOnce();
+    tracker.expectZeroLeaks();
+
+    const low = factory.create(contexts.low);
+    await low.prepare(operationOptions());
+    await low.dispose();
+    expect(release).toHaveBeenCalledTimes(2);
+    tracker.expectZeroLeaks();
+  });
+
+  it.each(["direct", "async-immediate"] as const)(
+    "does not self-await a %s reentrant candidate disposer",
+    async (mode) => {
+      const contexts = createContexts();
+      const tracker = new LeakTracker();
+      const base = createDependencies(tracker).options;
+      let releaseReadiness!: () => void;
+      const readinessGate = new Promise<void>((resolve) => {
+        releaseReadiness = resolve;
+      });
+      let attempt!: ReturnType<AvcCandidateFactory["create"]>;
+      const readinessFactory = {
+        create(input: Parameters<typeof base.readinessFactory.create>[0]): AvcCandidateReadinessSession {
+          const readiness = base.readinessFactory.create(input);
+          return {
+            adapters: readiness.adapters,
+            async prepareActivation(activationInput) {
+              const prepared = await readiness.prepareActivation(activationInput);
+              const disposePrepared = prepared.dispose.bind(prepared);
+              return {
+                playback: prepared.playback,
+                drawInitial: prepared.drawInitial.bind(prepared),
+                dispose: mode === "direct"
+                  ? () => {
+                      disposePrepared();
+                      return attempt.dispose();
+                    }
+                  : async () => {
+                      disposePrepared();
+                      return attempt.dispose();
+                    }
+              };
+            },
+            dispose() {
+              readiness.dispose();
+              return readinessGate;
+            }
+          };
+        }
+      };
+      attempt = new AvcCandidateFactory({
+        ...base,
+        readinessFactory
+      }).create(contexts.high);
+      await attempt.prepare(operationOptions());
+      await attempt.prepareActivation({
+        ...operationOptions(),
+        graphSnapshot: contexts.high.graphSnapshot,
+        expectedPresentation: activationPresentation(contexts.high)
+      });
+      let settled = false;
+
+      const disposal = Promise.resolve(attempt.dispose()).then(() => {
+        settled = true;
+      });
+      await waitFor(() => tracker.readinessDisposals === 1);
+
+      expect(settled).toBe(false);
+      releaseReadiness();
+      await disposal;
+      expect(settled).toBe(true);
+      tracker.expectZeroLeaks();
+    }
+  );
 });
+
+function guardMethodReads<T extends object>(
+  target: T,
+  methods: readonly string[],
+  reads: Record<string, number>,
+  label: string
+): T {
+  return new Proxy(target, {
+    get(owner, property) {
+      const value = Reflect.get(owner, property, owner) as unknown;
+      if (typeof property === "string" && methods.includes(property)) {
+        const key = methods.length === 1 ? label : `${label}:${property}`;
+        reads[key] = (reads[key] ?? 0) + 1;
+        if (reads[key] > 1) {
+          throw new Error(`injected changing ${key} getter`);
+        }
+      }
+      return typeof value === "function" ? value.bind(owner) : value;
+    }
+  });
+}

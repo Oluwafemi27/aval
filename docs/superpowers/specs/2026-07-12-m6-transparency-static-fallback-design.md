@@ -596,17 +596,31 @@ largest copied static PNG
 + static canvas backing allocation
 ```
 
-The unfiltered RGBA buffer transfers into the incoming static surface instead
-of being charged twice. Native and pure inflater scratch plans are calculated
-separately and the larger peak is used. The owned asset bytes already include
-the compressed PNG payload and are not counted again except for the explicit
-decode-time copy.
+The unfiltered RGBA buffer is passed to `ImageData` through a zero-copy clamped
+view, but browser bitmap creation is not a transferable-buffer API. The plan
+therefore charges the RGBA working buffer while the incoming bitmap allocation
+is also live. Native and pure working peaks are calculated separately. Native
+streaming charges the copied zlib member, the fixed filtered output, and one
+browser-returned chunk as simultaneous owners; pure inflate charges filtered
+output plus unfiltered RGBA. The larger peak is used. The owned asset bytes
+already include the compressed PNG payload and are not counted again except
+for the explicit decode-time copy and the validator-owned concatenated zlib
+member.
+
+The persistent coded renderer staging buffer remains additive during static
+recovery. Transferred encoded samples and decoder-owned `EncodedVideoChunk`
+copies are likewise separate windows; submitted metadata never retains the
+transferred sample buffer after chunk construction.
 
 Canvas backing allocations use the same conservative GPU rounding as texture
-allocations. Resize recomputes only the two backing terms and uniformly clamps
-resolution before allocation. Candidate selection, preparation, reduced-mode
-entry, and re-entry all fail safely to the already installed static plane when
-their complete peak cannot fit the effective per-player cap.
+allocations. A static-only baseline plan is admitted before any PNG copy,
+decode, bitmap, or animated owner is created. Static and animated resource
+leases expose the remaining rounded two-plane budget to the shared presentation
+owner. Every resize uniformly clamps before allocation, and releasing an
+animated lease restores only the still-live static constraint. Candidate
+selection, preparation, reduced-mode entry, and re-entry fail safely to the
+already installed static plane when their complete peak cannot fit the
+effective per-player cap.
 
 ## 13. Reduced-Motion Policy and Re-entry
 

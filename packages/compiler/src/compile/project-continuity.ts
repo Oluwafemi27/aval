@@ -42,8 +42,13 @@ interface FramePoint {
   readonly direction: "forward" | "reverse";
 }
 
+type ProjectMediaDefinition = Pick<
+  SourceProjectV01,
+  "canvas" | "units" | "initialState" | "states" | "edges"
+>;
+
 export async function validateProjectMedia(input: {
-  readonly project: SourceProjectV01;
+  readonly project: ProjectMediaDefinition;
   readonly sources: ReadonlyMap<string, Readonly<PreparedProjectSource>>;
   readonly ffmpeg: string;
   readonly signal?: AbortSignal;
@@ -52,20 +57,40 @@ export async function validateProjectMedia(input: {
   const units = new Map(input.project.units.map((unit) => [unit.id, unit]));
   const states = new Map(input.project.states.map((state) => [state.id, state]));
   const posters = new Map<string, Uint8Array>();
-  for (const state of input.project.states) {
+  for (let stateIndex = 0;
+    stateIndex < input.project.states.length;
+    stateIndex += 1) {
+    const state = input.project.states[stateIndex]!;
     const body = requiredUnit(units, state.bodyUnit, "body");
-    const sourceId = state.poster?.source ?? body.source;
-    const frame = state.poster?.frame ?? body.range[0];
-    const source = requiredSource(input.sources, sourceId);
-    if (frame >= source.probe.frameCount) {
+    const bodySource = requiredSource(input.sources, body.source);
+    const bodyEntry = (
+      await readProjectFrames(bodySource, [body.range[0]], input.signal)
+    )[0]!;
+    if (state.poster === undefined) {
+      posters.set(state.id, bodyEntry);
+      continue;
+    }
+    const posterSource = requiredSource(input.sources, state.poster.source);
+    if (state.poster.frame >= posterSource.probe.frameCount) {
       throw new CompilerError(
         "FRAME_RANGE_INVALID",
-        `Poster frame ${String(frame)} is outside source ${sourceId}`
+        `Poster frame ${String(state.poster.frame)} is outside source ${state.poster.source}`
       );
     }
-    const rgba = await readProjectFrames(source, [frame], input.signal);
-    assertOpaqueFrame(rgba[0]!, input.project.canvas.width, frame);
-    posters.set(state.id, rgba[0]!);
+    const poster = (
+      await readProjectFrames(posterSource, [state.poster.frame], input.signal)
+    )[0]!;
+    if (!equalBytes(poster, bodyEntry)) {
+      throw new CompilerError(
+        "INPUT_INVALID",
+        "Explicit poster pixels must exactly match the state body-entry frame",
+        {
+          field: `states[${String(stateIndex)}].poster`,
+          hint: "Choose a poster frame identical to the first body frame, or omit poster."
+        }
+      );
+    }
+    posters.set(state.id, poster);
   }
 
   const boundaries: {
@@ -218,8 +243,13 @@ export async function validateProjectMedia(input: {
   });
 }
 
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength &&
+    left.every((value, index) => value === right[index]);
+}
+
 function validateRanges(
-  project: SourceProjectV01,
+  project: ProjectMediaDefinition,
   sources: ReadonlyMap<string, Readonly<PreparedProjectSource>>
 ): void {
   for (const unit of project.units) {
@@ -236,7 +266,7 @@ function validateRanges(
 async function analyzeBoundary(
   from: FramePoint,
   to: FramePoint,
-  project: SourceProjectV01,
+  project: ProjectMediaDefinition,
   sources: ReadonlyMap<string, Readonly<PreparedProjectSource>>,
   ffmpeg: string,
   signal?: AbortSignal
@@ -363,20 +393,4 @@ function requiredUnit(
     );
   }
   return unit;
-}
-
-function assertOpaqueFrame(
-  frame: Uint8Array,
-  width: number,
-  frameIndex: number
-): void {
-  for (let offset = 3; offset < frame.length; offset += 4) {
-    if (frame[offset] !== 255) {
-      const pixel = (offset - 3) / 4;
-      throw new CompilerError(
-        "OPAQUE_ONLY_M5",
-        `Poster frame ${String(frameIndex)} contains alpha at (${String(pixel % width)}, ${String(Math.floor(pixel / width))})`
-      );
-    }
-  }
 }

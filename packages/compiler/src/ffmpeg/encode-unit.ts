@@ -28,17 +28,25 @@ export type FfmpegFrameInput =
       readonly width: number;
       readonly height: number;
       readonly frameRate: RationalV01;
+    }
+  | {
+      readonly type: "raw-yuv420p";
+      readonly path: string;
+      readonly width: number;
+      readonly height: number;
+      readonly frameRate: RationalV01;
+      readonly frameBytes: number;
     };
 
 export const FROZEN_AVC_KEYINT = 901;
 
 export interface EncodeAvcUnitInput {
-  readonly source: FfmpegFrameInput;
+  readonly source: Extract<FfmpegFrameInput, { readonly type: "raw-yuv420p" }>;
   readonly startFrame: number;
   readonly endFrame: number;
-  readonly frameRate: RationalV01;
   readonly codedWidth: number;
   readonly codedHeight: number;
+  readonly decodedStorageRect?: readonly [number, number, number, number];
   readonly bitrate: {
     readonly average: number;
     readonly peak: number;
@@ -100,30 +108,35 @@ export function createEncodeAvcUnitInvocation(
   input: EncodeAvcUnitInput
 ): Readonly<EncodeAvcUnitInvocation> {
   const frameCount = validateRange(input.startFrame, input.endFrame);
-  const rawPipe = input.source.type === "raw-rgba";
+  const source = input.source as FfmpegFrameInput;
+  if (source.type !== "raw-yuv420p") {
+    throw new CompilerError(
+      "INPUT_INVALID",
+      "AVC encoding requires compiler-packed raw yuv420p input"
+    );
+  }
+  if (
+    source.width !== input.codedWidth ||
+    source.height !== input.codedHeight
+  ) {
+    throw new CompilerError(
+      "INPUT_INVALID",
+      "Raw YUV dimensions must equal the encoded coded dimensions"
+    );
+  }
+  const cropParameter = x264CropParameter(input);
   const arguments_ = Object.freeze([
     "-nostdin",
     "-hide_banner",
     "-loglevel", "error",
     "-xerror",
     "-max_alloc", String(64 * 1024 * 1024),
-    "-protocol_whitelist", rawPipe ? "pipe" : "file,pipe",
-    ...(rawPipe
-      ? rawPipeArguments(input.source)
-      : sourceArguments(input.source)),
+    "-protocol_whitelist", "pipe",
+    ...rawYuvPipeArguments(source),
     "-map", "0:v:0",
     "-an", "-sn", "-dn",
     "-map_metadata", "-1",
     "-map_chapters", "-1",
-    "-vf", rawPipe
-      ? rawUnitFilter(input.codedWidth, input.codedHeight)
-      : unitFilter(
-          input.startFrame,
-          input.endFrame,
-          input.frameRate,
-          input.codedWidth,
-          input.codedHeight
-        ),
     "-frames:v", String(frameCount),
     "-fps_mode", "passthrough",
     "-c:v", "libx264",
@@ -153,6 +166,7 @@ export function createEncodeAvcUnitInvocation(
       "cabac=0",
       "colormatrix=bt709",
       "colorprim=bt709",
+      ...(cropParameter === undefined ? [] : [cropParameter]),
       "force-cfr=1",
       `keyint=${String(FROZEN_AVC_KEYINT)}`,
       `min-keyint=${String(FROZEN_AVC_KEYINT)}`,
@@ -171,13 +185,7 @@ export function createEncodeAvcUnitInvocation(
     "-f", "h264",
     "pipe:1"
   ]);
-  if (!rawPipe) {
-    return Object.freeze({
-      arguments: arguments_,
-      cwd: dirname(input.source.path)
-    });
-  }
-  const frameBytes = checkedFrameBytes(input.source.width, input.source.height);
+  const frameBytes = checkedYuvFrameBytes(source);
   const offset = checkedProduct(input.startFrame, frameBytes, "raw unit offset");
   const length = checkedProduct(frameCount, frameBytes, "raw unit length");
   return Object.freeze({
@@ -288,151 +296,6 @@ export function createExtractRgbaRangeInvocation(
   });
 }
 
-export interface ExtractAlphaRangeInput {
-  readonly source: FfmpegFrameInput;
-  readonly startFrame: number;
-  readonly endFrame: number;
-  readonly width: number;
-  readonly height: number;
-  readonly executable?: string;
-  readonly signal?: AbortSignal;
-  /** Per-subprocess wall limit; may only lower the 120-second media default. */
-  readonly timeoutMs?: number;
-}
-
-/** Decode native-resolution alpha only, preserving transparency before scale. */
-export async function extractAlphaRange(
-  input: ExtractAlphaRangeInput
-): Promise<Uint8Array> {
-  const frameCount = validateRange(input.startFrame, input.endFrame);
-  validateNativeDimensions(input.width, input.height);
-  const frameBytes = input.width * input.height;
-  const outputBytes = frameBytes * frameCount;
-  if (!Number.isSafeInteger(outputBytes) || outputBytes > MAX_PROCESS_OUTPUT_BYTES) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      "Requested alpha extraction exceeds the process output budget"
-    );
-  }
-  const invocation = createExtractAlphaRangeInvocation(input);
-  const result = await runBoundedProcess({
-    executable: input.executable ?? "ffmpeg",
-    arguments: invocation.arguments,
-    cwd: invocation.cwd,
-    limits: {
-      timeoutMs: mediaTimeout(input.timeoutMs),
-      maxStdoutBytes: outputBytes,
-      maxStderrBytes: MAX_PROCESS_STDERR_BYTES
-    },
-    expectedStdoutBytes: outputBytes,
-    privateWorkingDirectory: true,
-    ...(input.signal === undefined ? {} : { signal: input.signal })
-  });
-  if (result.stdout.byteLength !== outputBytes) {
-    throw new CompilerError(
-      "FFMPEG_FAILED",
-      `Alpha extraction returned ${String(result.stdout.byteLength)} bytes; expected ${String(outputBytes)}`
-    );
-  }
-  return result.stdout;
-}
-
-/** Own the exact ordered targeted alpha-plane extraction argv. */
-export function createExtractAlphaRangeInvocation(
-  input: ExtractAlphaRangeInput
-): Readonly<FfmpegInvocation> {
-  const frameCount = validateRange(input.startFrame, input.endFrame);
-  validateNativeDimensions(input.width, input.height);
-  return Object.freeze({
-    arguments: Object.freeze([
-      ...decodePrefix(input.source),
-      "-vf",
-      [
-        rangeSelection(input.startFrame, input.endFrame),
-        "format=rgba",
-        "alphaextract",
-        "format=gray"
-      ].join(","),
-      "-frames:v", String(frameCount),
-      "-fps_mode", "passthrough",
-      "-f", "rawvideo",
-      "-pix_fmt", "gray",
-      "pipe:1"
-    ]),
-    cwd: dirname(input.source.path)
-  });
-}
-
-export interface InspectNativeAlphaInput {
-  readonly source: FfmpegFrameInput;
-  /** Strictly increasing source-frame indexes to inspect. */
-  readonly sourceFrames: readonly number[];
-  readonly executable?: string;
-  readonly signal?: AbortSignal;
-  /** Per-subprocess wall limit; may only lower the 120-second media default. */
-  readonly timeoutMs?: number;
-}
-
-export interface NativeAlphaAudit {
-  readonly inspectedFrames: number;
-  readonly minimumAlpha: number;
-  readonly firstFailingFrame?: number;
-}
-
-/**
- * Inspect native alpha minima using one metadata-sized FFmpeg stream.
- * No native-resolution frame plane is retained by this pass.
- */
-export async function inspectNativeAlpha(
-  input: InspectNativeAlphaInput
-): Promise<Readonly<NativeAlphaAudit>> {
-  const sourceFrames = validateSelectedFrames(input.sourceFrames);
-  const invocation = createNativeAlphaAuditInvocation(input);
-  const metadataLimit = Math.max(4_096, checkedProduct(
-    sourceFrames.length,
-    256,
-    "alpha metadata output"
-  ));
-  const result = await runBoundedProcess({
-    executable: input.executable ?? "ffmpeg",
-    arguments: invocation.arguments,
-    cwd: invocation.cwd,
-    limits: {
-      timeoutMs: mediaTimeout(input.timeoutMs),
-      maxStdoutBytes: metadataLimit,
-      maxStderrBytes: MAX_PROCESS_STDERR_BYTES
-    },
-    privateWorkingDirectory: true,
-    ...(input.signal === undefined ? {} : { signal: input.signal })
-  });
-  return parseNativeAlphaMetadata(result.stdout, sourceFrames);
-}
-
-/** Own the exact ordered metadata-scale native-alpha audit argv. */
-export function createNativeAlphaAuditInvocation(
-  input: Pick<InspectNativeAlphaInput, "source" | "sourceFrames">
-): Readonly<FfmpegInvocation> {
-  const sourceFrames = validateSelectedFrames(input.sourceFrames);
-  return Object.freeze({
-    arguments: Object.freeze([
-      ...decodePrefix(input.source),
-      "-vf",
-      [
-        `select=${selectionExpression(sourceFrames)}`,
-        "format=rgba",
-        "alphaextract",
-        "signalstats",
-        "metadata=mode=print:key=lavfi.signalstats.YMIN:file='pipe\\:1':direct=1"
-      ].join(","),
-      "-frames:v", String(sourceFrames.length),
-      "-fps_mode", "passthrough",
-      "-f", "null",
-      "-"
-    ]),
-    cwd: dirname(input.source.path)
-  });
-}
-
 export function sourceArguments(source: FfmpegFrameInput): string[] {
   if (source.type === "video") return ["-f", "mov", "-i", source.path];
   if (source.type === "png-sequence") {
@@ -443,49 +306,78 @@ export function sourceArguments(source: FfmpegFrameInput): string[] {
         "-i", source.path
       ];
   }
-  return [
+  return source.type === "raw-rgba" ? [
     "-f", "rawvideo",
     "-pixel_format", "rgba",
+    "-video_size", `${String(source.width)}x${String(source.height)}`,
+    "-framerate", `${String(source.frameRate.numerator)}/${String(source.frameRate.denominator)}`,
+    "-i", source.path
+  ] : [
+    "-f", "rawvideo",
+    "-pixel_format", "yuv420p",
     "-video_size", `${String(source.width)}x${String(source.height)}`,
     "-framerate", `${String(source.frameRate.numerator)}/${String(source.frameRate.denominator)}`,
     "-i", source.path
   ];
 }
 
-function rawPipeArguments(
-  source: Extract<FfmpegFrameInput, { readonly type: "raw-rgba" }>
+function rawYuvPipeArguments(
+  source: Extract<FfmpegFrameInput, { readonly type: "raw-yuv420p" }>
 ): string[] {
   return [
     "-f", "rawvideo",
-    "-pixel_format", "rgba",
+    "-pixel_format", "yuv420p",
     "-video_size", `${String(source.width)}x${String(source.height)}`,
     "-framerate", `${String(source.frameRate.numerator)}/${String(source.frameRate.denominator)}`,
     "-i", "pipe:0"
   ];
 }
 
-function rawUnitFilter(codedWidth: number, codedHeight: number): string {
-  return [
-    `scale=${String(codedWidth)}:${String(codedHeight)}:flags=lanczos+accurate_rnd+full_chroma_int:in_range=full:out_range=tv:in_color_matrix=bt709:out_color_matrix=bt709`,
-    "setsar=1",
-    "format=yuv420p"
-  ].join(",");
+function checkedYuvFrameBytes(
+  source: Extract<FfmpegFrameInput, { readonly type: "raw-yuv420p" }>
+): number {
+  if (source.width % 2 !== 0 || source.height % 2 !== 0) {
+    throw new CompilerError("INPUT_INVALID", "Raw YUV dimensions must be even");
+  }
+  const pixels = checkedProduct(source.width, source.height, "raw YUV pixels");
+  const frameBytes = checkedProduct(pixels, 3, "raw YUV frame bytes") / 2;
+  if (!Number.isSafeInteger(frameBytes) || source.frameBytes !== frameBytes) {
+    throw new CompilerError(
+      "INPUT_INVALID",
+      "Raw YUV frame byte count does not match yuv420p geometry"
+    );
+  }
+  return frameBytes;
 }
 
-function unitFilter(
-  startFrame: number,
-  endFrame: number,
-  frameRate: RationalV01,
-  codedWidth: number,
-  codedHeight: number
-): string {
-  return [
-    `select=between(n\\,${String(startFrame)}\\,${String(endFrame - 1)})`,
-    `setpts=N*${String(frameRate.denominator)}/(${String(frameRate.numerator)}*TB)`,
-    `scale=${String(codedWidth)}:${String(codedHeight)}:flags=lanczos+accurate_rnd+full_chroma_int:in_range=auto:out_range=tv:in_color_matrix=auto:out_color_matrix=bt709`,
-    "setsar=1",
-    "format=yuv420p"
-  ].join(",");
+function x264CropParameter(input: EncodeAvcUnitInput): string | undefined {
+  const rect = input.decodedStorageRect;
+  if (rect === undefined) return undefined;
+  if (
+    !Array.isArray(rect) ||
+    rect.length !== 4 ||
+    rect[0] !== 0 ||
+    rect[1] !== 0 ||
+    !Number.isSafeInteger(rect[2]) ||
+    !Number.isSafeInteger(rect[3]) ||
+    rect[2] < 1 ||
+    rect[3] < 1 ||
+    rect[2] > input.codedWidth ||
+    rect[3] > input.codedHeight
+  ) {
+    throw new CompilerError("INPUT_INVALID", "Decoded storage crop is invalid");
+  }
+  const right = input.codedWidth - rect[2];
+  const bottom = input.codedHeight - rect[3];
+  if (right % 2 !== 0 || bottom % 2 !== 0) {
+    throw new CompilerError(
+      "INPUT_INVALID",
+      "Decoded storage crop must preserve yuv420p chroma alignment"
+    );
+  }
+  return right === 0 && bottom === 0
+    ? undefined
+    : `crop-rect=0,0,${String(right)},${String(bottom)}`;
 }
 
 function decodePrefix(source: FfmpegFrameInput): readonly string[] {
@@ -543,61 +435,10 @@ function validateSelectedFrames(frames: readonly number[]): readonly number[] {
   ) {
     throw new CompilerError(
       "FRAME_RANGE_INVALID",
-      "Native alpha frame selection must be nonempty, unique, and increasing"
+      "RGBA frame selection must be nonempty, unique, and increasing"
     );
   }
   return frames;
-}
-
-function parseNativeAlphaMetadata(
-  bytes: Uint8Array,
-  sourceFrames: readonly number[]
-): Readonly<NativeAlphaAudit> {
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch (error) {
-    throw new CompilerError(
-      "FFMPEG_FAILED",
-      "FFmpeg alpha audit returned invalid UTF-8 metadata",
-      { cause: error }
-    );
-  }
-  let count = 0;
-  let minimumAlpha = 255;
-  let firstFailingFrame: number | undefined;
-  for (const match of text.matchAll(
-    /^lavfi\.signalstats\.YMIN=(\d{1,3})\r?$/gmu
-  )) {
-    const value = Number(match[1]);
-    if (
-      count >= sourceFrames.length ||
-      !Number.isInteger(value) ||
-      value < 0 ||
-      value > 255
-    ) {
-      throw new CompilerError(
-        "FFMPEG_FAILED",
-        "FFmpeg alpha audit returned malformed minimum metadata"
-      );
-    }
-    minimumAlpha = Math.min(minimumAlpha, value);
-    if (value !== 255 && firstFailingFrame === undefined) {
-      firstFailingFrame = sourceFrames[count]!;
-    }
-    count += 1;
-  }
-  if (count !== sourceFrames.length) {
-    throw new CompilerError(
-      "FFMPEG_FAILED",
-      `FFmpeg alpha audit returned ${String(count)} minima; expected ${String(sourceFrames.length)}`
-    );
-  }
-  return Object.freeze({
-    inspectedFrames: count,
-    minimumAlpha,
-    ...(firstFailingFrame === undefined ? {} : { firstFailingFrame })
-  });
 }
 
 function validateNativeDimensions(width: number, height: number): void {
@@ -611,7 +452,7 @@ function validateNativeDimensions(width: number, height: number): void {
   ) {
     throw new CompilerError(
       "SOURCE_LIMIT",
-      "Native alpha dimensions exceed the source limit"
+      "RGBA materialization dimensions exceed the source limit"
     );
   }
 }

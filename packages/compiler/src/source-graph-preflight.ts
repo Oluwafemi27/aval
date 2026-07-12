@@ -19,7 +19,10 @@ import type {
  * asset is independently checked by the format adapter after encoding; this
  * early pass keeps invalid routes from doing expensive or observable work.
  */
-export function preflightSourceGraph(project: SourceProjectV01): void {
+export function preflightSourceGraph(project: Pick<
+  SourceProjectV01,
+  "initialState" | "states" | "edges" | "units"
+>): void {
   const units = new Map(project.units.map((unit) => [unit.id, unit]));
   let definition: MotionGraphDefinition;
   try {

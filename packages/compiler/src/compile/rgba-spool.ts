@@ -14,10 +14,12 @@ import {
 import {
   DEFAULT_MEDIA_TIMEOUT_MS,
   MAX_PROCESS_STDERR_BYTES,
+  type AlphaAuditSummary,
   type MediaProbe,
   type RationalV01
 } from "../model.js";
 import { runBoundedProcess } from "../process-runner.js";
+import { createCanonicalAlphaAuditor } from "./alpha-policy.js";
 
 const MAX_SPOOL_BYTES = 1024 * 1024 * 1024;
 
@@ -26,6 +28,7 @@ export interface MaterializedRgbaSource {
   readonly frameCount: number;
   /** Exact FFmpeg invocation that produced this canonical spool. */
   readonly invocation: MaterializeRgbaInvocation;
+  readonly alphaAudit: Readonly<AlphaAuditSummary>;
   readonly cleanup: () => Promise<void>;
 }
 
@@ -39,6 +42,11 @@ export async function materializeNormalizedRgbaSource(input: {
   readonly outputWidth: number;
   readonly outputHeight: number;
   readonly sourceFrameByOutputFrame: readonly number[];
+  readonly alphaReferences?: readonly {
+    readonly source: string;
+    readonly frame: number;
+    readonly role: "unit" | "poster";
+  }[];
   readonly executable: string;
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
@@ -64,31 +72,33 @@ export async function materializeNormalizedRgbaSource(input: {
     }
   }
   const temporaryRoot = tmpdir();
-  const filesystem = await statfs(temporaryRoot);
-  const available = filesystem.bavail * filesystem.bsize;
+  const available = await availableScratchBytes(temporaryRoot);
   if (available < outputBytes + 64 * 1024 * 1024) {
     throw new CompilerError(
       "SOURCE_LIMIT",
       "Insufficient temporary disk space for normalized RGBA spool"
     );
   }
-  const directory = await mkdtemp(join(temporaryRoot, "rma-rgba-"));
+  const directory = await createScratchDirectory(temporaryRoot);
   const path = join(directory, "normalized.rgba");
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   let invocation: Readonly<MaterializeRgbaInvocation> | undefined;
+  let alphaAudit: Readonly<AlphaAuditSummary> | undefined;
   try {
     handle = await open(path, "wx", 0o600);
-    invocation = await streamSelectedCanonicalFrames(input, handle, frameBytes);
+    const streamed = await streamSelectedCanonicalFrames(input, handle, frameBytes);
+    invocation = streamed.invocation;
+    alphaAudit = streamed.alphaAudit;
     await handle.sync();
     await handle.close();
     handle = undefined;
   } catch (error) {
     await handle?.close().catch(() => undefined);
-    await rm(directory, { recursive: true, force: true });
+    await discardScratchDirectory(directory);
     throw error;
   }
-  if (invocation === undefined) {
-    await rm(directory, { recursive: true, force: true });
+  if (invocation === undefined || alphaAudit === undefined) {
+    await discardScratchDirectory(directory);
     throw new CompilerError(
       "IO_FAILED",
       "Canonical RGBA spool completed without invocation provenance"
@@ -104,15 +114,54 @@ export async function materializeNormalizedRgbaSource(input: {
     }),
     frameCount: input.sourceFrameByOutputFrame.length,
     invocation,
-    cleanup: () => rm(directory, { recursive: true, force: true })
+    alphaAudit,
+    cleanup: () => removeScratchDirectory(directory)
   });
+}
+
+async function availableScratchBytes(root: string): Promise<number> {
+  try {
+    const filesystem = await statfs(root);
+    return filesystem.bavail * filesystem.bsize;
+  } catch (error) {
+    throw new CompilerError("IO_FAILED", "Could not inspect RGBA scratch storage", {
+      cause: error
+    });
+  }
+}
+
+async function createScratchDirectory(root: string): Promise<string> {
+  try {
+    return await mkdtemp(join(root, "rma-rgba-"));
+  } catch (error) {
+    throw new CompilerError("IO_FAILED", "Could not create private RGBA spool", {
+      cause: error
+    });
+  }
+}
+
+async function removeScratchDirectory(directory: string): Promise<void> {
+  try {
+    await rm(directory, { recursive: true, force: true });
+  } catch (error) {
+    throw new CompilerError("IO_FAILED", "Could not remove private RGBA spool", {
+      cause: error
+    });
+  }
+}
+
+async function discardScratchDirectory(directory: string): Promise<void> {
+  await rm(directory, { recursive: true, force: true }).catch(() => undefined);
 }
 
 async function streamSelectedCanonicalFrames(
   input: Parameters<typeof materializeNormalizedRgbaSource>[0],
   handle: Awaited<ReturnType<typeof open>>,
   frameBytes: number
-): Promise<Readonly<MaterializeRgbaInvocation>> {
+): Promise<Readonly<{
+  readonly invocation: MaterializeRgbaInvocation;
+  readonly alphaAudit: Readonly<AlphaAuditSummary>;
+}>> {
   const uniqueSourceFrames = [...new Set(input.sourceFrameByOutputFrame)];
   if (
     uniqueSourceFrames.some((frame, index) =>
@@ -128,6 +177,20 @@ async function streamSelectedCanonicalFrames(
     );
   }
   const expectedDecodedBytes = uniqueSourceFrames.length * frameBytes;
+  const alphaReferences = input.alphaReferences ?? Object.freeze(
+    input.sourceFrameByOutputFrame.map((_frame, index) => Object.freeze({
+      source: "canonical",
+      frame: index,
+      role: "unit" as const
+    }))
+  );
+  if (alphaReferences.length !== input.sourceFrameByOutputFrame.length) {
+    throw new CompilerError(
+      "INPUT_INVALID",
+      "Canonical alpha references must match materialized output frames"
+    );
+  }
+  const alphaAuditor = createCanonicalAlphaAuditor(input.signal);
   const frame = new Uint8Array(frameBytes);
   let frameOffset = 0;
   let decodedIndex = 0;
@@ -157,8 +220,20 @@ async function streamSelectedCanonicalFrames(
       if (sourceFrame === undefined) {
         throw new CompilerError("FFMPEG_FAILED", "FFmpeg emitted extra RGBA frames");
       }
-      assertCanonicalOpaque(frame, input.outputWidth, sourceFrame);
       while (input.sourceFrameByOutputFrame[outputIndex] === sourceFrame) {
+        const reference = alphaReferences[outputIndex];
+        if (reference === undefined) {
+          throw new CompilerError(
+            "IO_FAILED",
+            "Canonical alpha reference is unavailable"
+          );
+        }
+        alphaAuditor.include({
+          ...reference,
+          width: input.outputWidth,
+          height: input.outputHeight,
+          rgba: frame
+        });
         await writeAll(handle, frame, input.signal);
         outputIndex += 1;
       }
@@ -197,25 +272,10 @@ async function streamSelectedCanonicalFrames(
       "Canonical RGBA decode did not produce the exact selected frame set"
     );
   }
-  return invocation;
-}
-
-function assertCanonicalOpaque(
-  frame: Uint8Array,
-  width: number,
-  sourceFrame: number
-): void {
-  for (let offset = 3; offset < frame.byteLength; offset += 4) {
-    if (frame[offset] !== 255) {
-      const pixel = (offset - 3) / 4;
-      throw new CompilerError(
-        "OPAQUE_ONLY_M5",
-        `Canonical frame from source ${String(sourceFrame)} contains alpha at (${String(
-          pixel % width
-        )}, ${String(Math.floor(pixel / width))})`
-      );
-    }
-  }
+  return Object.freeze({
+    invocation,
+    alphaAudit: alphaAuditor.finish()
+  });
 }
 
 /** Read exact caller-owned copies from a compiler-private canonical spool. */
@@ -245,11 +305,8 @@ export async function readCanonicalRgbaRange(input: {
   if (!Number.isSafeInteger(length) || length > MAX_SPOOL_BYTES) {
     throw new CompilerError("SOURCE_LIMIT", "Canonical RGBA read is too large");
   }
-  const handle = await open(input.source.path, "r").catch((error: unknown) => {
-    throw new CompilerError("IO_FAILED", "Could not open canonical RGBA spool", {
-      path: input.source.path,
-      cause: error
-    });
+  const handle = await open(input.source.path, "r").catch(() => {
+    throw new CompilerError("IO_FAILED", "Could not open canonical RGBA spool");
   });
   const bytes = new Uint8Array(length);
   try {

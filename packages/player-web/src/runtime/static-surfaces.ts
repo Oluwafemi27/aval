@@ -6,6 +6,28 @@ import {
   checkedByteProduct,
   checkedRgbaBytes
 } from "./checked-runtime-bytes.js";
+import {
+  StaticSurfaceStoreDisposedError,
+  StaticSurfaceUnavailableError
+} from "./static-surface-errors.js";
+
+export { BrowserStaticCanvasPlane } from "./browser-static-canvas-plane.js";
+export {
+  StaticSurfaceStoreDisposedError,
+  StaticSurfaceUnavailableError
+} from "./static-surface-errors.js";
+
+export {
+  BrowserStaticSurfaceDecoder,
+  StaticSurfaceDecodeTimeoutError
+} from "./strict-static-decoder.js";
+export type {
+  BrowserDecodedStaticSurface,
+  BrowserStaticSurfaceDecoderOptions,
+  BrowserStaticSurfaceDecoderSnapshot,
+  BrowserStaticSurfaceTimerHost,
+  StaticPngInflatePath
+} from "./strict-static-decoder.js";
 
 export interface StaticSurfaceCatalogView {
   readonly manifest: Readonly<CompiledManifestV01>;
@@ -20,6 +42,8 @@ export interface DecodedStaticSurface {
 
 export interface StaticSurfaceDecodeOptions {
   readonly signal: AbortSignal;
+  readonly expectedWidth: number;
+  readonly expectedHeight: number;
 }
 
 export interface StaticSurfaceDecoder<
@@ -29,13 +53,32 @@ export interface StaticSurfaceDecoder<
     png: Uint8Array,
     options: StaticSurfaceDecodeOptions
   ): Promise<TSurface>;
+  snapshot?(): Readonly<StaticSurfaceDecodeSnapshot>;
+}
+
+export interface StaticSurfaceDecodeSnapshot {
+  readonly nativeAttempts: number;
+  readonly nativeSuccesses: number;
+  readonly pureAttempts: number;
+  readonly pureSuccesses: number;
+  readonly errors: number;
+  readonly peakPngCopyBytes: number;
+  readonly peakZlibBytes: number;
+  readonly peakFilteredBytes: number;
+  readonly peakRgbaBytes: number;
+  readonly bitmapCloses: number;
 }
 
 /** The host owns layering; present() must draw and cover atomically. */
 export interface StaticPresentationPlane<
   TSurface extends DecodedStaticSurface = DecodedStaticSurface
 > {
-  present(surface: TSurface, width: number, height: number): void;
+  present(
+    surface: TSurface,
+    width: number,
+    height: number,
+    options?: { readonly cover?: boolean }
+  ): void;
   coverStatic(): void;
   revealAnimated(): void;
   dispose?(): void;
@@ -69,6 +112,7 @@ export interface StaticSurfaceStoreSnapshot {
   readonly closedSurfaces: number;
   readonly presentations: number;
   readonly errors: number;
+  readonly decode: Readonly<StaticSurfaceDecodeSnapshot> | null;
 }
 
 interface RetainedSurface<TSurface extends DecodedStaticSurface> {
@@ -92,6 +136,7 @@ export class StaticSurfaceStore<
   readonly #validated = new Set<string>();
   readonly #ownedSurfaces = new WeakSet<object>();
   readonly #closedSurfaces = new WeakSet<object>();
+  readonly #surfaceClosers = new WeakMap<object, () => unknown>();
   readonly #controllers = new Set<AbortController>();
 
   #current: RetainedSurface<TSurface> | null = null;
@@ -153,7 +198,10 @@ export class StaticSurfaceStore<
 
   public presentState(
     state: string,
-    options: { readonly signal?: AbortSignal } = {}
+    options: {
+      readonly signal?: AbortSignal;
+      readonly cover?: boolean;
+    } = {}
   ): Promise<Readonly<StaticSurfacePresentationReport>> {
     this.#assertActive();
     const staticFrame = this.#staticByState.get(state);
@@ -172,7 +220,13 @@ export class StaticSurfaceStore<
     const operation = this.#enqueue(
       controller,
       options.signal,
-      async () => this.#present(state, staticFrame, generation, controller.signal)
+      async () => this.#present(
+        state,
+        staticFrame,
+        generation,
+        controller.signal,
+        options.cover !== false
+      )
     );
     void operation.finally(() => {
       if (this.#activePresentController === controller) {
@@ -234,6 +288,10 @@ export class StaticSurfaceStore<
     this.#plane.revealAnimated();
   }
 
+  public currentState(): string | null {
+    return this.#currentState;
+  }
+
   public snapshot(): Readonly<StaticSurfaceStoreSnapshot> {
     const retained = Number(this.#current !== null) + Number(this.#incoming !== null);
     return Object.freeze({
@@ -260,7 +318,8 @@ export class StaticSurfaceStore<
       decodedSurfaces: this.#decodedSurfaceCount,
       closedSurfaces: this.#closedSurfaceCount,
       presentations: this.#presentationCount,
-      errors: this.#errors
+      errors: this.#errors,
+      decode: cloneStaticDecodeSnapshot(this.#decoder.snapshot?.())
     });
   }
 
@@ -304,7 +363,8 @@ export class StaticSurfaceStore<
     state: string,
     staticFrame: string,
     generation: number,
-    signal: AbortSignal
+    signal: AbortSignal,
+    cover: boolean
   ): Promise<Readonly<StaticSurfacePresentationReport>> {
     throwIfAborted(signal);
     this.#assertActive();
@@ -314,7 +374,12 @@ export class StaticSurfaceStore<
         this.#presentationCount,
         "static surface presentations"
       );
-      this.#plane.coverStatic();
+      if (cover) {
+        this.#plane.coverStatic();
+        throwIfAborted(signal);
+        this.#assertActive();
+        this.#assertLatest(generation);
+      }
       this.#currentState = state;
       this.#presentationCount = presentationCount;
       return Object.freeze({
@@ -336,8 +401,42 @@ export class StaticSurfaceStore<
         this.#presentationCount,
         "static surface presentations"
       );
-      this.#plane.present(surface, this.#width, this.#height);
+      try {
+        this.#plane.present(
+          surface,
+          this.#width,
+          this.#height,
+          Object.freeze({ cover })
+        );
+      } catch (error) {
+        if (error instanceof StaticSurfaceStoreDisposedError) this.dispose();
+        throw error;
+      }
       const previous = this.#current;
+      try {
+        throwIfAborted(signal);
+        this.#assertActive();
+        this.#assertLatest(generation);
+      } catch (error) {
+        // Disposal already closed and detached both retained slots. A hostile
+        // plane that returns after reentering disposal must not let this outer
+        // presentation resurrect terminal accounting as a provisional first
+        // surface.
+        if (this.#disposed) throw error;
+        if (previous === null) {
+          // The first successful draw is the only coherent rollback surface.
+          // Retain it provisionally while the already-queued newest request
+          // replaces it, so the plane never points at a closed image.
+          this.#current = this.#incoming;
+          this.#incoming = null;
+          this.#currentState = state;
+          this.#validated.add(staticFrame);
+          this.#presentationCount = presentationCount;
+        } else {
+          this.#restoreAfterStalePresentation(previous, cover);
+        }
+        throw error;
+      }
       this.#current = this.#incoming;
       this.#incoming = null;
       this.#currentState = state;
@@ -368,7 +467,11 @@ export class StaticSurfaceStore<
     const png = this.#catalog.copyStaticPng(staticFrame);
     let surface: TSurface;
     try {
-      surface = await this.#decoder.decode(png, { signal });
+      surface = await this.#decoder.decode(png, {
+        signal,
+        expectedWidth: this.#width,
+        expectedHeight: this.#height
+      });
     } catch (error) {
       if (signal.aborted) throw abortReason(signal);
       throw error;
@@ -381,12 +484,33 @@ export class StaticSurfaceStore<
       throw new StaticSurfaceUnavailableError("decoder reused a surface identity");
     }
     this.#ownedSurfaces.add(surface);
+    let width: unknown;
+    let height: unknown;
+    let close: unknown;
+    try {
+      // Capture the closer once before touching other hostile accessors so a
+      // malformed surface can still be retired without re-reading its shape.
+      close = Reflect.get(surface, "close");
+      width = Reflect.get(surface, "width");
+      height = Reflect.get(surface, "height");
+    } catch {
+      this.#closeUnknown(surface, close);
+      throw new StaticSurfaceUnavailableError(
+        "decoded static surface is invalid"
+      );
+    }
+    if (typeof close === "function") {
+      this.#surfaceClosers.set(
+        surface,
+        () => Reflect.apply(close as (...args: never[]) => unknown, surface, [])
+      );
+    }
     if (
-      surface.width !== this.#width ||
-      surface.height !== this.#height ||
-      typeof surface.close !== "function"
+      width !== this.#width ||
+      height !== this.#height ||
+      typeof close !== "function"
     ) {
-      this.#close(surface);
+      this.#closeUnknown(surface, close);
       throw new StaticSurfaceUnavailableError(
         "decoded static surface dimensions do not match the logical canvas"
       );
@@ -440,7 +564,30 @@ export class StaticSurfaceStore<
     }
   }
 
+  #restoreAfterStalePresentation(
+    previous: RetainedSurface<TSurface>,
+    cover: boolean
+  ): void {
+    try {
+      this.#plane.present(
+        previous.surface,
+        this.#width,
+        this.#height,
+        Object.freeze({ cover })
+      );
+    } catch {
+      this.dispose();
+      throw new StaticSurfaceUnavailableError(
+        "static presentation rollback failed"
+      );
+    }
+  }
+
   #close(surface: TSurface): void {
+    this.#closeUnknown(surface, this.#surfaceClosers.get(surface));
+  }
+
+  #closeUnknown(surface: object, capturedClose: unknown): void {
     if (this.#closedSurfaces.has(surface)) return;
     const closedSurfaceCount = checkedCounterIncrement(
       this.#closedSurfaceCount,
@@ -449,7 +596,13 @@ export class StaticSurfaceStore<
     this.#closedSurfaces.add(surface);
     this.#closedSurfaceCount = closedSurfaceCount;
     try {
-      surface.close();
+      if (typeof capturedClose === "function") {
+        Reflect.apply(
+          capturedClose as (...args: never[]) => unknown,
+          surface,
+          []
+        );
+      }
     } catch {
       this.#errors = checkedCounterIncrement(
         this.#errors,
@@ -463,176 +616,33 @@ export class StaticSurfaceStore<
   }
 }
 
-export class StaticSurfaceUnavailableError extends Error {
-  public constructor(message: string) {
-    super(message);
-    this.name = "StaticSurfaceUnavailableError";
-  }
-}
-
-export class StaticSurfaceStoreDisposedError extends Error {
-  public constructor() {
-    super("the static surface store is disposed");
-    this.name = "StaticSurfaceStoreDisposedError";
-  }
-}
-
-export interface BrowserDecodedStaticSurface extends DecodedStaticSurface {
-  readonly image: ImageBitmap;
-}
-
-export interface BrowserStaticSurfaceDecoderOptions {
-  readonly timeoutMs?: number;
-  readonly timers?: Readonly<BrowserStaticSurfaceTimerHost>;
-}
-
-export interface BrowserStaticSurfaceTimerHost {
-  setTimeout(callback: () => void, milliseconds: number): unknown;
-  clearTimeout(handle: unknown): void;
-}
-
-const DEFAULT_STATIC_DECODE_TIMEOUT_MS = 5_000;
-const DEFAULT_STATIC_DECODE_TIMERS: Readonly<BrowserStaticSurfaceTimerHost> =
-  Object.freeze({
-    setTimeout: (callback: () => void, milliseconds: number): unknown =>
-      globalThis.setTimeout(callback, milliseconds),
-    clearTimeout: (handle: unknown): void =>
-      globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>)
-  });
-
-/** Narrow browser decode adapter; successful decode is the M5.5 PNG check. */
-export class BrowserStaticSurfaceDecoder
-implements StaticSurfaceDecoder<BrowserDecodedStaticSurface> {
-  readonly #decodeImage: (blob: Blob) => Promise<ImageBitmap>;
-  readonly #timeoutMs: number;
-  readonly #timers: Readonly<BrowserStaticSurfaceTimerHost>;
-
-  public constructor(
-    decodeImage: (blob: Blob) => Promise<ImageBitmap> = (blob) =>
-      createImageBitmap(blob),
-    options: Readonly<BrowserStaticSurfaceDecoderOptions> = {}
-  ) {
-    this.#decodeImage = decodeImage;
-    this.#timeoutMs = options.timeoutMs ?? DEFAULT_STATIC_DECODE_TIMEOUT_MS;
-    this.#timers = options.timers ?? DEFAULT_STATIC_DECODE_TIMERS;
-    if (
-      !Number.isSafeInteger(this.#timeoutMs) ||
-      this.#timeoutMs <= 0 ||
-      this.#timeoutMs > 60_000
-    ) {
-      throw new RangeError(
-        "static decode timeout must be an integer from 1 through 60000 ms"
-      );
+function cloneStaticDecodeSnapshot(
+  value: Readonly<StaticSurfaceDecodeSnapshot> | undefined
+): Readonly<StaticSurfaceDecodeSnapshot> | null {
+  if (value === undefined) return null;
+  const keys = [
+    "nativeAttempts",
+    "nativeSuccesses",
+    "pureAttempts",
+    "pureSuccesses",
+    "errors",
+    "peakPngCopyBytes",
+    "peakZlibBytes",
+    "peakFilteredBytes",
+    "peakRgbaBytes",
+    "bitmapCloses"
+  ] as const;
+  const result = {} as Record<(typeof keys)[number], number>;
+  for (const key of keys) {
+    const field = value[key];
+    if (!Number.isSafeInteger(field) || field < 0) {
+      throw new RangeError(`static decoder snapshot ${key} is invalid`);
     }
-    if (
-      typeof this.#timers.setTimeout !== "function" ||
-      typeof this.#timers.clearTimeout !== "function"
-    ) {
-      throw new TypeError("static decode timers are invalid");
-    }
+    result[key] = field;
   }
-
-  public async decode(
-    png: Uint8Array,
-    options: StaticSurfaceDecodeOptions
-  ): Promise<BrowserDecodedStaticSurface> {
-    throwIfAborted(options.signal);
-    let image: ImageBitmap;
-    try {
-      image = await awaitBrowserImageDecode(
-        this.#decodeImage(new Blob([png as BlobPart], {
-          type: "image/png"
-        })),
-        options.signal,
-        this.#timeoutMs,
-        this.#timers
-      );
-    } catch (error) {
-      if (options.signal.aborted) throw abortReason(options.signal);
-      throw error;
-    }
-    if (options.signal.aborted) {
-      image.close();
-      throw abortReason(options.signal);
-    }
-    let closed = false;
-    return Object.freeze({
-      image,
-      width: image.width,
-      height: image.height,
-      close() {
-        if (closed) return;
-        closed = true;
-        image.close();
-      }
-    });
-  }
+  return Object.freeze(result);
 }
 
-export class StaticSurfaceDecodeTimeoutError extends Error {
-  public readonly timeoutMs: number;
-
-  public constructor(timeoutMs: number) {
-    super(`static image decode exceeded ${String(timeoutMs)} ms`);
-    this.name = "StaticSurfaceDecodeTimeoutError";
-    this.timeoutMs = timeoutMs;
-  }
-}
-
-/** Canvas adapter only; DOM layering remains a host-supplied callback. */
-export class BrowserStaticCanvasPlane
-implements StaticPresentationPlane<BrowserDecodedStaticSurface> {
-  readonly #canvas: HTMLCanvasElement;
-  readonly #context: CanvasRenderingContext2D;
-  readonly #setStaticVisible: (visible: boolean) => void;
-  #disposed = false;
-
-  public constructor(
-    canvas: HTMLCanvasElement,
-    setStaticVisible: (visible: boolean) => void
-  ) {
-    const context = canvas.getContext("2d", { alpha: true });
-    if (context === null) {
-      throw new StaticSurfaceUnavailableError("2D static canvas is unavailable");
-    }
-    this.#canvas = canvas;
-    this.#context = context;
-    this.#setStaticVisible = setStaticVisible;
-  }
-
-  public present(
-    surface: BrowserDecodedStaticSurface,
-    width: number,
-    height: number
-  ): void {
-    this.#assertActive();
-    this.#canvas.width = width;
-    this.#canvas.height = height;
-    this.#context.drawImage(surface.image, 0, 0, width, height);
-    this.#setStaticVisible(true);
-  }
-
-  public coverStatic(): void {
-    this.#assertActive();
-    this.#setStaticVisible(true);
-  }
-
-  public revealAnimated(): void {
-    this.#assertActive();
-    this.#setStaticVisible(false);
-  }
-
-  public dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
-    this.#context.clearRect(0, 0, this.#canvas.width, this.#canvas.height);
-    this.#setStaticVisible(false);
-  }
-
-  #assertActive(): void {
-    if (this.#disposed) throw disposedError();
-  }
-}
 
 /** Live catalog satisfies the narrow store dependency without an adapter. */
 export function asStaticSurfaceCatalog(
@@ -650,70 +660,6 @@ function forwardAbort(
   if (source.aborted) abort();
   else source.addEventListener("abort", abort, { once: true });
   return () => source.removeEventListener("abort", abort);
-}
-
-function awaitBrowserImageDecode(
-  decode: Promise<ImageBitmap>,
-  signal: AbortSignal,
-  timeoutMs: number,
-  timers: Readonly<BrowserStaticSurfaceTimerHost>
-): Promise<ImageBitmap> {
-  if (signal.aborted) return Promise.reject(abortReason(signal));
-  return new Promise<ImageBitmap>((resolve, reject) => {
-    let completed = false;
-    let timer: unknown = null;
-    const cleanup = (): void => {
-      signal.removeEventListener("abort", abort);
-      if (timer !== null) {
-        try {
-          timers.clearTimeout(timer);
-        } catch {
-          // Cleanup cannot replace the selected decode outcome.
-        }
-      }
-    };
-    const finish = (outcome: () => void): void => {
-      if (completed) return;
-      completed = true;
-      cleanup();
-      outcome();
-    };
-    const abort = (): void => finish(() => reject(abortReason(signal)));
-    signal.addEventListener("abort", abort, { once: true });
-    try {
-      const handle = timers.setTimeout(() => {
-        finish(() => reject(new StaticSurfaceDecodeTimeoutError(timeoutMs)));
-      }, timeoutMs);
-      timer = handle;
-      if (completed) {
-        try {
-          timers.clearTimeout(handle);
-        } catch {
-          // Preserve the already selected timeout/decode outcome.
-        }
-      }
-    } catch (error) {
-      finish(() => reject(error));
-    }
-    void decode.then(
-      (image) => {
-        if (completed) {
-          safeCloseImage(image);
-          return;
-        }
-        finish(() => resolve(image));
-      },
-      (error: unknown) => finish(() => reject(error))
-    );
-  });
-}
-
-function safeCloseImage(image: ImageBitmap): void {
-  try {
-    image.close();
-  } catch {
-    // A late native decode owns no player state; cleanup is best-effort.
-  }
 }
 
 function throwIfAborted(signal: AbortSignal): void {

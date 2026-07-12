@@ -10,6 +10,10 @@ export {
   maximumAvcDecoderSurfaceDimension
 } from "./decoder-surface.js";
 export { prepareAvcEncoderRendition } from "./encoder-preparation.js";
+export {
+  deriveAvcRenditionGeometry,
+  deriveAvcRenditionGeometryFromVisible
+} from "./rendition-geometry.js";
 export type {
   AvcAccessUnitInput,
   AvcAccessUnitSummary,
@@ -28,3 +32,9 @@ export type {
   AvcUnitInput,
   AvcUnitInspection
 } from "./types.js";
+export type {
+  AvcProductionRenditionProfileV01,
+  AvcRenditionGeometry,
+  AvcRenditionGeometryInput,
+  AvcVisibleRenditionGeometryInput
+} from "./rendition-geometry.js";

@@ -6,23 +6,25 @@ import { deflateSync } from "node:zlib";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { prepareAvcEncoderRendition } from "@rendered-motion/format";
+import {
+  crc32,
+  deriveAvcRenditionGeometryFromVisible,
+  prepareAvcEncoderRendition
+} from "@rendered-motion/format";
 
 import {
   encodeAvcUnit,
-  extractRgbaRange,
-  inspectNativeAlpha
+  extractRgbaRange
 } from "../src/ffmpeg/encode-unit.js";
 import { discoverFfmpeg } from "../src/ffmpeg/discovery.js";
 import { probeMedia, probePngSequence } from "../src/ffmpeg/probe.js";
-import {
-  scanNativeOpacity,
-  scanSelectedNativeOpacity
-} from "../src/compile/opaque-frames.js";
 import { compileDirectInput } from "../src/compile/direct-compiler.js";
-import { crc32 } from "../src/compile/crc32.js";
 import { encodeCanonicalRgbaPng } from "../src/compile/png.js";
 import { materializeNormalizedRgbaSource } from "../src/compile/rgba-spool.js";
+import {
+  writeYuvUnitSpool,
+  type YuvUnitSpool
+} from "../src/compile/yuv-spool.js";
 
 const HAS_FFMPEG = (() => {
   try {
@@ -37,14 +39,13 @@ const HAS_FFMPEG = (() => {
 describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
   let directory = "";
   let source = "";
-  let translucent = "";
   let alphaPattern = "";
   let indexedAlphaPattern = "";
+  let encoderSpool: Readonly<YuvUnitSpool> | undefined;
 
   beforeAll(async () => {
     directory = await mkdtemp(join(tmpdir(), "rma-ffmpeg-test-"));
     source = join(directory, "source.mp4");
-    translucent = join(directory, "translucent.png");
     const alphaDirectory = join(directory, "alpha");
     await mkdir(alphaDirectory);
     alphaPattern = join(alphaDirectory, "frame-%04d.png");
@@ -64,10 +65,6 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
     const rgba = new Uint8Array(32 * 32 * 4);
     rgba.fill(255);
     rgba[3] = 254;
-    await writeFile(
-      translucent,
-      encodeCanonicalRgbaPng({ width: 32, height: 32, rgba })
-    );
     const opaque = rgba.slice();
     opaque[3] = 255;
     await writeFile(
@@ -86,9 +83,28 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
       join(indexedAlphaDirectory, "frame-0001.png"),
       encodeIndexedAlphaPng(256, 256)
     );
+    const frames = await extractRgbaRange({
+      source: { type: "video", path: source },
+      startFrame: 0,
+      endFrame: 12,
+      width: 32,
+      height: 32
+    });
+    encoderSpool = await writeYuvUnitSpool({
+      geometry: deriveAvcRenditionGeometryFromVisible({
+        canvasWidth: 32,
+        canvasHeight: 32,
+        profile: "avc-annexb-opaque-v0",
+        visibleWidth: 32,
+        visibleHeight: 32
+      }),
+      frameRate: { numerator: 30, denominator: 1 },
+      frames
+    });
   });
 
   afterAll(async () => {
+    await encoderSpool?.cleanup();
     if (directory !== "") {
       await rm(directory, { recursive: true, force: true });
     }
@@ -109,12 +125,12 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
     });
   });
 
-  it("emits deterministic AUD-delimited low-delay units and exact RGBA", async () => {
+  it("emits deterministic AUD-delimited low-delay units from compiler-packed YUV", async () => {
+    if (encoderSpool === undefined) throw new Error("encoder spool unavailable");
     const input = {
-      source: { type: "video" as const, path: source },
+      source: encoderSpool.input,
       startFrame: 3,
       endFrame: 10,
-      frameRate: { numerator: 30, denominator: 1 },
       codedWidth: 32,
       codedHeight: 32,
       bitrate: { average: 300_000, peak: 600_000 }
@@ -129,7 +145,7 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
     expect(types.every((type) => [1, 5, 6, 7, 8, 9].includes(type))).toBe(true);
 
     const frames = await extractRgbaRange({
-      source: input.source,
+      source: { type: "video", path: source },
       startFrame: 3,
       endFrame: 4,
       width: 32,
@@ -140,9 +156,10 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
   });
 
   it("keeps SPS/PPS stable across one-frame and longer units", async () => {
+    if (encoderSpool === undefined) throw new Error("encoder spool unavailable");
+    const frameRate = { numerator: 30, denominator: 1 } as const;
     const common = {
-      source: { type: "video" as const, path: source },
-      frameRate: { numerator: 30, denominator: 1 },
+      source: encoderSpool.input,
       codedWidth: 32,
       codedHeight: 32,
       bitrate: { average: 300_000, peak: 600_000 }
@@ -161,7 +178,7 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
       profile: {
         codedWidth: 32,
         codedHeight: 32,
-        frameRate: common.frameRate,
+        frameRate,
         averageBitrate: common.bitrate.average,
         peakBitrate: common.bitrate.peak,
         cpbBufferBits: common.bitrate.peak,
@@ -181,26 +198,7 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
     ]);
   });
 
-  it("finds native alpha before any rendition scaling", async () => {
-    await expect(scanNativeOpacity(
-      {
-        type: "png-sequence",
-        path: translucent,
-        firstFileNumber: 0,
-        frameRate: { numerator: 30, denominator: 1 }
-      },
-      0,
-      1,
-      32,
-      32,
-      "ffmpeg"
-    )).rejects.toMatchObject({
-      code: "OPAQUE_ONLY_M5",
-      message: "Frame 0 contains alpha 254 at (0, 0)"
-    });
-  });
-
-  it("rejects one sparse transparent pal8 pixel before downscaling", async () => {
+  it("preserves one sparse transparent pal8 pixel through packed alpha", async () => {
     const frameRate = { numerator: 30, denominator: 1 };
     const probe = await probePngSequence(
       indexedAlphaPattern,
@@ -224,44 +222,22 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
       fps: frameRate,
       canvas: [32, 32],
       frames: { firstNumber: 0, frameCount: 2 }
-    })).rejects.toMatchObject({
-      code: "OPAQUE_ONLY_M5",
-      message: "Frame 0 contains alpha 0 at (255, 255)"
-    });
-  });
-
-  it("audits exactly the sparse selected native frame set in one pass", async () => {
-    const sourceInput = {
-      type: "png-sequence" as const,
-      path: alphaPattern,
-      firstFileNumber: 0,
-      frameRate: { numerator: 30, denominator: 1 }
-    };
-    await expect(inspectNativeAlpha({
-      source: sourceInput,
-      sourceFrames: [0, 1],
-      executable: "ffmpeg"
-    })).resolves.toEqual({
-      inspectedFrames: 2,
-      minimumAlpha: 254,
-      firstFailingFrame: 1
-    });
-    await expect(scanSelectedNativeOpacity(
-      sourceInput,
-      [0],
-      32,
-      32,
-      "ffmpeg"
-    )).resolves.toBeUndefined();
-    await expect(scanSelectedNativeOpacity(
-      sourceInput,
-      [0, 1],
-      32,
-      32,
-      "ffmpeg"
-    )).rejects.toMatchObject({
-      code: "OPAQUE_ONLY_M5",
-      message: "Frame 1 contains alpha 254 at (0, 0)"
+    })).resolves.toMatchObject({
+      buildDetails: {
+        alphaPolicy: {
+          selected: "packed",
+          audit: { allOpaque: false }
+        },
+        renditions: [{
+          profile: "avc-annexb-packed-alpha-v0",
+          alphaQuality: {
+            aggregate: {
+              meanAbsoluteError: expect.any(Number),
+              p99AbsoluteError: expect.any(Number)
+            }
+          }
+        }]
+      }
     });
   });
 
@@ -292,7 +268,7 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
     });
     await opaque.cleanup();
 
-    await expect(materializeNormalizedRgbaSource({
+    const transparent = await materializeNormalizedRgbaSource({
       source: sourceInput,
       probe,
       frameRate,
@@ -300,10 +276,14 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
       outputHeight: 32,
       sourceFrameByOutputFrame: [1],
       executable: "ffmpeg"
-    })).rejects.toMatchObject({
-      code: "OPAQUE_ONLY_M5",
-      message: expect.stringContaining("source 1")
     });
+    expect(transparent.alphaAudit).toMatchObject({
+      allOpaque: false,
+      minimumAlpha: 254,
+      uniqueReferencedFrames: 1,
+      firstNonopaque: { frame: 0, x: 0, y: 0, alpha: 254 }
+    });
+    await transparent.cleanup();
   });
 });
 

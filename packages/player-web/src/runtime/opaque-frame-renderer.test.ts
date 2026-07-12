@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { FrameRenderer } from "./frame-renderer.js";
 import {
   OPAQUE_STREAMING_SLOT_COUNT,
   OpaqueFrameRenderer,
@@ -23,9 +24,10 @@ const LAYOUT: OpaqueFrameTextureLayout = {
 };
 
 describe("opaque frame renderer", () => {
-  it("sizes the one staging surface for a logical canvas larger than the coded rendition", async () => {
+  it("keeps the one staging surface at coded size when the canvas is larger", async () => {
     const backend = new FakeBackend();
     const renderer = new OpaqueFrameRenderer(backend, LAYOUT);
+    expect(renderer).toBeInstanceOf(FrameRenderer);
     const residentSource = borrowedFrame(11);
     const streamSource = borrowedFrame(29);
     const resident = await renderer.uploadResident(1, residentSource.source);
@@ -49,7 +51,7 @@ describe("opaque frame renderer", () => {
     renderer.draw(stream);
     expect(backend.draws).toEqual([["resident", 1], ["stream", 2]]);
     expect(renderer.snapshot()).toMatchObject({
-      stagingBytes: 192,
+      stagingBytes: 48,
       allocatedLayers: 2,
       uploadedResidentLayers: 1,
       uploadedStreamingSlots: 1,
@@ -168,7 +170,7 @@ describe("opaque frame renderer", () => {
     const uploadRenderer = new OpaqueFrameRenderer(uploadBackend, LAYOUT);
     const source = borrowedFrame(3);
     await expect(uploadRenderer.uploadResident(0, source.source))
-      .rejects.toThrow("injected upload failure");
+      .rejects.toThrow("failed to upload a WebGL frame");
     expect(source.closeCalls()).toBe(1);
     expect(uploadBackend.disposeCalls).toBe(1);
   });
@@ -177,7 +179,7 @@ describe("opaque frame renderer", () => {
     const allocation = new FakeBackend();
     allocation.failAllocate = true;
     expect(() => new OpaqueFrameRenderer(allocation, LAYOUT))
-      .toThrow("injected allocation failure");
+      .toThrow("failed to allocate WebGL frame textures");
     expect(allocation.disposeCalls).toBe(1);
 
     const drawing = new FakeBackend();
@@ -189,14 +191,16 @@ describe("opaque frame renderer", () => {
     );
     if (handle === null) throw new Error("missing handle");
     drawing.failDraw = true;
-    expect(() => drawRenderer.draw(handle)).toThrow("injected draw failure");
+    expect(() => drawRenderer.draw(handle))
+      .toThrow("failed to draw a WebGL frame");
     expect(drawing.disposeCalls).toBe(1);
     expect(drawRenderer.snapshot().state).toBe("error");
 
     const reading = new FakeBackend();
     const readRenderer = new OpaqueFrameRenderer(reading, LAYOUT);
     reading.failRead = true;
-    expect(() => readRenderer.readPixels()).toThrow("injected read failure");
+    expect(() => readRenderer.readPixels())
+      .toThrow("failed to read WebGL frame pixels");
     expect(reading.disposeCalls).toBe(1);
     expect(readRenderer.snapshot().state).toBe("error");
   });

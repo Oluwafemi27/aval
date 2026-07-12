@@ -1,13 +1,14 @@
 import type { CompiledManifestV01 } from "@rendered-motion/format";
 import { describe, expect, it } from "vitest";
 
+import { strictTestPng } from "./asset-test-fixture.js";
+import { FakeCatalog, fakeBitmap } from "./static-surfaces.test-support.js";
+
 import {
-  BrowserStaticCanvasPlane,
   BrowserStaticSurfaceDecoder,
   StaticSurfaceStore,
   StaticSurfaceStoreDisposedError,
   StaticSurfaceDecodeTimeoutError,
-  type BrowserDecodedStaticSurface,
   type DecodedStaticSurface,
   type StaticPresentationPlane,
   type StaticSurfaceCatalogView,
@@ -161,6 +162,101 @@ describe("bounded static surface store", () => {
     });
   });
 
+  it("restores retained pixels when reentry supersedes a draw with an aborted successor", async () => {
+    const fixture = createFixture();
+    await fixture.store.installInitial();
+    const initial = fixture.decoder.surfaces[0]!;
+    const alreadyAborted = new AbortController();
+    alreadyAborted.abort();
+    let successor: Promise<unknown> | null = null;
+    fixture.plane.observePresent = () => {
+      fixture.plane.observePresent = null;
+      successor = fixture.store.presentState("done", {
+        signal: alreadyAborted.signal
+      });
+    };
+
+    const superseded = fixture.store.presentState("hover");
+
+    await expect(superseded).rejects.toMatchObject({ name: "AbortError" });
+    await expect(successor).rejects.toMatchObject({ name: "AbortError" });
+    expect(fixture.plane.presented).toBe("shared");
+    expect(initial.closeCalls).toBe(0);
+    expect(fixture.decoder.surfaces.at(-1)?.tag).toBe("hover");
+    expect(fixture.decoder.surfaces.at(-1)?.closeCalls).toBe(1);
+    expect(fixture.store.snapshot()).toMatchObject({
+      currentState: "idle",
+      currentStaticFrame: "shared",
+      retainedSurfaces: 1
+    });
+  });
+
+  it("lets a reentrant newest request replace the provisional first surface", async () => {
+    const fixture = createFixture();
+    let successor: Promise<unknown> | null = null;
+    fixture.plane.observePresent = () => {
+      fixture.plane.observePresent = null;
+      successor = fixture.store.presentState("done");
+    };
+
+    const initial = fixture.store.installInitial();
+
+    await expect(initial).rejects.toMatchObject({ name: "AbortError" });
+    await expect(successor).resolves.toMatchObject({
+      state: "done",
+      staticFrame: "done"
+    });
+    expect(fixture.plane.presented).toBe("done");
+    expect(fixture.decoder.surfaces[0]?.tag).toBe("shared");
+    expect(fixture.decoder.surfaces[0]?.closeCalls).toBe(1);
+    expect(fixture.decoder.surfaces[1]?.tag).toBe("done");
+    expect(fixture.decoder.surfaces[1]?.closeCalls).toBe(0);
+    expect(fixture.store.snapshot()).toMatchObject({
+      state: "active",
+      currentState: "done",
+      currentStaticFrame: "done",
+      retainedSurfaces: 1,
+      presentations: 2
+    });
+  });
+
+  it("retires a decoded surface whose dimension accessor throws", async () => {
+    let closes = 0;
+    const decoder: StaticSurfaceDecoder = {
+      async decode() {
+        return {
+          close() {
+            closes += 1;
+          },
+          get width(): number {
+            throw new RangeError("/private/decoded-surface-secret");
+          },
+          height: 3
+        } as DecodedStaticSurface;
+      }
+    };
+    const store = new StaticSurfaceStore(
+      new FakeCatalog(),
+      decoder,
+      new FakePlane()
+    );
+
+    const failure = await store.installInitial().catch(
+      (error: unknown) => error
+    );
+
+    expect(failure).toMatchObject({
+      message: "decoded static surface is invalid"
+    });
+    expect((failure as Error).message).not.toContain("private");
+    expect(closes).toBe(1);
+    expect(store.snapshot()).toMatchObject({
+      retainedSurfaces: 0,
+      decodedSurfaces: 1,
+      closedSurfaces: 1
+    });
+  });
+
   it("covers and recovers independently after animated WebGL resources fail", async () => {
     const fixture = createFixture();
     await fixture.store.installInitial();
@@ -206,12 +302,51 @@ describe("bounded static surface store", () => {
       .toThrow(StaticSurfaceStoreDisposedError);
   });
 
+  it("does not provisionally commit after a plane reenters disposal", async () => {
+    const catalog = new FakeCatalog();
+    const decoder = new FakeDecoder();
+    let store!: StaticSurfaceStore<FakeSurface>;
+    let planeDisposals = 0;
+    const plane: StaticPresentationPlane<FakeSurface> = {
+      present() {
+        store.dispose();
+      },
+      coverStatic() {},
+      revealAnimated() {},
+      dispose() {
+        planeDisposals += 1;
+      }
+    };
+    store = new StaticSurfaceStore(catalog, decoder, plane);
+
+    await expect(store.installInitial())
+      .rejects.toMatchObject({ name: "AbortError" });
+
+    expect(decoder.surfaces[0]?.closeCalls).toBe(1);
+    expect(planeDisposals).toBe(1);
+    expect(store.snapshot()).toMatchObject({
+      state: "disposed",
+      currentState: null,
+      currentStaticFrame: null,
+      retainedSurfaces: 0,
+      validatedStaticFrames: 0,
+      presentations: 0,
+      decodedSurfaces: 1,
+      closedSurfaces: 1
+    });
+  });
+
   it("browser decoder closes a bitmap when abort wins and closes success idempotently", async () => {
     const pending = deferred<ImageBitmap>();
-    const decoder = new BrowserStaticSurfaceDecoder(() => pending.promise);
+    const decoder = new BrowserStaticSurfaceDecoder({
+      nativeInflater: null,
+      createBitmap: () => pending.promise
+    });
     const controller = new AbortController();
-    const operation = decoder.decode(new Uint8Array([1]), {
-      signal: controller.signal
+    const operation = decoder.decode(strictTestPng(4, 3), {
+      signal: controller.signal,
+      expectedWidth: 4,
+      expectedHeight: 3
     });
     controller.abort();
     await expect(operation).rejects.toMatchObject({ name: "AbortError" });
@@ -221,11 +356,14 @@ describe("bounded static surface store", () => {
     expect(abortedBitmap.closeCalls()).toBe(1);
 
     const successBitmap = fakeBitmap();
-    const successDecoder = new BrowserStaticSurfaceDecoder(async () =>
-      successBitmap.bitmap
-    );
-    const surface = await successDecoder.decode(new Uint8Array([1]), {
-      signal: new AbortController().signal
+    const successDecoder = new BrowserStaticSurfaceDecoder({
+      nativeInflater: null,
+      createBitmap: async () => successBitmap.bitmap
+    });
+    const surface = await successDecoder.decode(strictTestPng(4, 3), {
+      signal: new AbortController().signal,
+      expectedWidth: 4,
+      expectedHeight: 3
     });
     surface.close();
     surface.close();
@@ -234,21 +372,22 @@ describe("bounded static surface store", () => {
 
   it("bounds a native image decode that never settles", async () => {
     const callbacks: Array<() => void> = [];
-    const decoder = new BrowserStaticSurfaceDecoder(
-      () => new Promise<ImageBitmap>(() => undefined),
-      {
-        timeoutMs: 10,
-        timers: {
-          setTimeout(callback) {
-            callbacks.push(callback);
-            return callbacks.length;
-          },
-          clearTimeout() {}
-        }
+    const decoder = new BrowserStaticSurfaceDecoder({
+      nativeInflater: null,
+      createBitmap: () => new Promise<ImageBitmap>(() => undefined),
+      timeoutMs: 10,
+      timers: {
+        setTimeout(callback) {
+          callbacks.push(callback);
+          return callbacks.length;
+        },
+        clearTimeout() {}
       }
-    );
-    const operation = decoder.decode(new Uint8Array([1]), {
-      signal: new AbortController().signal
+    });
+    const operation = decoder.decode(strictTestPng(4, 3), {
+      signal: new AbortController().signal,
+      expectedWidth: 4,
+      expectedHeight: 3
     });
     expect(callbacks).toHaveLength(1);
 
@@ -257,41 +396,6 @@ describe("bounded static surface store", () => {
     await expect(operation).rejects.toBeInstanceOf(
       StaticSurfaceDecodeTimeoutError
     );
-  });
-
-  it("browser canvas plane draws before visibility and remains a narrow host adapter", () => {
-    const events: string[] = [];
-    const context = {
-      drawImage() {
-        events.push("draw");
-      },
-      clearRect() {
-        events.push("clear");
-      }
-    } as unknown as CanvasRenderingContext2D;
-    const canvas = {
-      width: 0,
-      height: 0,
-      getContext() {
-        return context;
-      }
-    } as unknown as HTMLCanvasElement;
-    const plane = new BrowserStaticCanvasPlane(canvas, (visible) => {
-      events.push(visible ? "show" : "hide");
-    });
-    const surface = {
-      image: fakeBitmap().bitmap,
-      width: 4,
-      height: 3,
-      close() {}
-    } satisfies BrowserDecodedStaticSurface;
-
-    plane.present(surface, 4, 3);
-    plane.revealAnimated();
-    plane.coverStatic();
-    plane.dispose();
-    plane.dispose();
-    expect(events).toEqual(["draw", "show", "hide", "show", "clear", "hide"]);
   });
 
   it("rejects unsafe aggregate static byte counters before decoding", () => {
@@ -323,17 +427,6 @@ function createFixture() {
   const store = new StaticSurfaceStore(catalog, decoder, plane);
   return { catalog, decoder, plane, store };
 }
-
-class FakeCatalog implements StaticSurfaceCatalogView {
-  public readonly manifest = staticManifest();
-  public readonly copies: string[] = [];
-
-  public copyStaticPng(staticFrame: string): Uint8Array {
-    this.copies.push(staticFrame);
-    return new TextEncoder().encode(staticFrame);
-  }
-}
-
 class FakeSurface implements DecodedStaticSurface {
   public closeCalls = 0;
 
@@ -415,74 +508,6 @@ class FakePlane implements StaticPresentationPlane<FakeSurface> {
     this.disposeCalls += 1;
     this.visible = false;
   }
-}
-
-function staticManifest(): CompiledManifestV01 {
-  const staticFrames = ["done", "hover", "shared"].map((id, index) => ({
-    id,
-    offset: 100 + index,
-    length: 1,
-    width: 4,
-    height: 3,
-    sha256: "0".repeat(64)
-  }));
-  return {
-    formatVersion: "0.1",
-    generator: "static-test",
-    canvas: {
-      width: 4,
-      height: 3,
-      fit: "contain",
-      pixelAspect: [1, 1],
-      colorSpace: "srgb"
-    },
-    frameRate: { numerator: 30, denominator: 1 },
-    renditions: [],
-    units: [],
-    staticFrames,
-    initialState: "idle",
-    states: [
-      { id: "alt", bodyUnit: "body-alt", staticFrame: "shared" },
-      { id: "done", bodyUnit: "body-done", staticFrame: "done" },
-      { id: "hover", bodyUnit: "body-hover", staticFrame: "hover" },
-      { id: "idle", bodyUnit: "body-idle", staticFrame: "shared" }
-    ],
-    edges: [],
-    bindings: [],
-    readiness: {
-      policy: "all-routes",
-      bootstrapUnits: [],
-      immediateEdges: []
-    },
-    fallback: {
-      unsupported: "per-state-static",
-      reducedMotion: "per-state-static"
-    },
-    limits: {
-      maxCompiledBytes: 1,
-      maxRuntimeBytes: 1,
-      decodedPixelBytes: 0,
-      persistentCacheBytes: 0,
-      runtimeWorkingSetBytes: 0
-    }
-  };
-}
-
-function fakeBitmap(): {
-  readonly bitmap: ImageBitmap;
-  closeCalls(): number;
-} {
-  let closes = 0;
-  return {
-    bitmap: {
-      width: 4,
-      height: 3,
-      close() {
-        closes += 1;
-      }
-    } as ImageBitmap,
-    closeCalls: () => closes
-  };
 }
 
 function deferred<T>(): {

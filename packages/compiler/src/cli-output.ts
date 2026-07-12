@@ -68,6 +68,8 @@ export function exitStatusForCode(code: CompilerErrorCode): number {
     case "PATH_OUTSIDE_ROOT":
       return 3;
     case "AVC_PROFILE_INVALID":
+    case "ALPHA_POLICY_REJECTED":
+    case "ALPHA_QUALITY_REJECTED":
     case "FFMPEG_FAILED":
     case "OPAQUE_ONLY_M5":
       return 4;

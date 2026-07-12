@@ -306,9 +306,20 @@ export interface ParsedFrontIndex {
   readonly staticBlobs: readonly StaticBlobRange[];
 }
 
+export interface ValidatedStaticPngProfile {
+  readonly width: number;
+  readonly height: number;
+  readonly byteRange: ByteRange;
+  readonly zlibByteLength: number;
+  readonly expectedFilteredBytes: number;
+  readonly expectedRgbaBytes: number;
+}
+
 export interface ValidatedAssetLayout {
   readonly frontIndex: ParsedFrontIndex;
   readonly fileRange: ByteRange;
+  /** Strict PNG facts aligned one-for-one with frontIndex.staticBlobs. */
+  readonly staticPngProfiles: readonly Readonly<ValidatedStaticPngProfile>[];
 }
 
 export interface ReferenceFrameHeader {

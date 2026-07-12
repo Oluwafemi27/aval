@@ -1,5 +1,13 @@
+import {
+  FormatError,
+  adler32,
+  crc32,
+  decodePngRgba,
+  validatePngProfile
+} from "@rendered-motion/format";
+
 import { CompilerError } from "../diagnostics.js";
-import { crc32 } from "./crc32.js";
+import type { CompileStaticValidationDetails } from "../model.js";
 
 const PNG_SIGNATURE = Uint8Array.of(
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
@@ -9,6 +17,12 @@ export interface RgbaPngInput {
   readonly width: number;
   readonly height: number;
   readonly rgba: Uint8Array;
+}
+
+export interface CanonicalPngInspectionInput {
+  readonly png: Uint8Array;
+  readonly expectedWidth: number;
+  readonly expectedHeight: number;
 }
 
 /** Emit the deterministic restricted RGBA PNG profile consumed by M6. */
@@ -50,13 +64,22 @@ export function encodeCanonicalRgbaPng(input: RgbaPngInput): Uint8Array {
   writeUint32BE(ihdr, 4, height);
   ihdr.set([8, 6, 0, 0, 0], 8);
   const compressed = storedZlib(filtered);
-  return concatenate([
+  const png = concatenate([
     PNG_SIGNATURE,
     chunk("IHDR", ihdr),
     chunk("sRGB", Uint8Array.of(0)),
     chunk("IDAT", compressed),
     chunk("IEND", new Uint8Array())
   ]);
+  selfValidateCanonicalPng(png, width, height, rgba);
+  return png;
+}
+
+/** Strictly decode compiler PNG bytes and return deterministic report facts. */
+export function inspectCanonicalRgbaPng(
+  input: Readonly<CanonicalPngInspectionInput>
+): Readonly<CompileStaticValidationDetails> {
+  return decodeCanonicalPng(input).facts;
 }
 
 /** RFC 1950 zlib wrapper containing only deterministic RFC 1951 stored blocks. */
@@ -89,23 +112,6 @@ function storedZlib(bytes: Uint8Array): Uint8Array {
   return output;
 }
 
-function adler32(bytes: Uint8Array): number {
-  const modulus = 65_521;
-  let a = 1;
-  let b = 0;
-  // 5,552 bytes is the standard overflow-safe batching interval.
-  for (let offset = 0; offset < bytes.byteLength; offset += 5_552) {
-    const end = Math.min(bytes.byteLength, offset + 5_552);
-    for (let index = offset; index < end; index += 1) {
-      a += bytes[index]!;
-      b += a;
-    }
-    a %= modulus;
-    b %= modulus;
-  }
-  return ((b << 16) | a) >>> 0;
-}
-
 function chunk(type: string, data: Uint8Array): Uint8Array {
   const typeBytes = new TextEncoder().encode(type);
   if (typeBytes.byteLength !== 4) {
@@ -121,6 +127,68 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
     crc32(result.subarray(4, 8 + data.byteLength))
   );
   return result;
+}
+
+function selfValidateCanonicalPng(
+  png: Uint8Array,
+  width: number,
+  height: number,
+  expectedRgba: Uint8Array
+): void {
+  const decoded = decodeCanonicalPng({
+    png,
+    expectedWidth: width,
+    expectedHeight: height
+  });
+  if (!equalBytes(decoded.rgba, expectedRgba)) {
+    throw new CompilerError(
+      "ASSET_INVALID",
+      "Generated static PNG does not decode to the source RGBA bytes"
+    );
+  }
+}
+
+function decodeCanonicalPng(
+  input: Readonly<CanonicalPngInspectionInput>
+): Readonly<{
+  readonly facts: Readonly<CompileStaticValidationDetails>;
+  readonly rgba: Uint8Array;
+}> {
+  try {
+    const plan = validatePngProfile({
+      png: input.png,
+      expectedWidth: input.expectedWidth,
+      expectedHeight: input.expectedHeight
+    });
+    const decoded = decodePngRgba(plan);
+    return Object.freeze({
+      facts: Object.freeze({
+        profile: "strict-rgba-png-v0" as const,
+        decoder: "format-pure-rfc1950-1951-v0" as const,
+        width: plan.width,
+        height: plan.height,
+        pngBytes: input.png.byteLength,
+        zlibBytes: plan.zlibByteLength,
+        filteredBytes: plan.expectedFilteredBytes,
+        rgbaBytes: plan.expectedRgbaBytes
+      }),
+      rgba: decoded.rgba
+    });
+  } catch (error) {
+    if (error instanceof FormatError) {
+      throw new CompilerError(
+        "ASSET_INVALID",
+        "Static PNG failed strict compiler validation",
+        { cause: error }
+      );
+    }
+    throw error;
+  }
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength &&
+    left.every((value, index) => value === right[index]);
 }
 
 function concatenate(parts: readonly Uint8Array[]): Uint8Array {

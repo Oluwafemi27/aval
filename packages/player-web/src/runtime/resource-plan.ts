@@ -9,7 +9,6 @@ import type {
   RuntimeCatalogAccessUnit
 } from "./asset-catalog.js";
 import {
-  MAX_PLAYER_RUNTIME_BYTES,
   STREAMING_TEXTURE_LAYER_COUNT,
   checkedByteNumber,
   checkedByteSum,
@@ -18,14 +17,33 @@ import {
   validatePositiveSafeInteger
 } from "./checked-runtime-bytes.js";
 import type { InteractionCachePlan } from "./interaction-cache-plan.js";
+import {
+  createStaticRuntimeResourcePlan,
+  type RuntimeCanvasBackingSize,
+  type RuntimeStaticResourceCatalogView,
+  type StaticRuntimeResourcePlan
+} from "./static-resource-plan.js";
+
+export {
+  createStaticRuntimeResourcePlan
+} from "./static-resource-plan.js";
+export type {
+  RuntimeCanvasBackingSize,
+  RuntimeCanvasResourceHost,
+  RuntimeCanvasResourceLease,
+  RuntimeCanvasResourcePlan,
+  RuntimeStaticResourceCatalogView,
+  StaticRuntimeResourceAllocationSnapshot,
+  StaticRuntimeResourcePlan,
+  StaticRuntimeResourcePlanInput
+} from "./static-resource-plan.js";
 
 export const RESOURCE_DECODE_SURFACE_COUNT = 12;
 export const MIN_RESOURCE_RING_CAPACITY = 6;
 export const MAX_RESOURCE_RING_CAPACITY = 12;
 
-export interface RuntimeResourceCatalogView {
-  readonly ownedByteLength: number;
-  readonly manifest: Readonly<CompiledManifestV01>;
+export interface RuntimeResourceCatalogView
+extends RuntimeStaticResourceCatalogView {
   readonly records: Pick<RuntimeAssetCatalog["records"], "require">;
 }
 
@@ -35,9 +53,31 @@ export interface RuntimeResourcePlanInput {
   readonly interactionCache: Readonly<InteractionCachePlan>;
   readonly ringCapacity: number;
   readonly hostMaxRuntimeBytes?: number;
+  /** Current shared animated/static plane backing; defaults to logical size. */
+  readonly canvasBacking?: Readonly<RuntimeCanvasBackingSize>;
 }
 
-export interface RuntimeResourcePlan {
+/** Every simultaneously live additive allocation in the selected peak. */
+export interface RuntimeResourceAllocationSnapshot {
+  readonly ownedAssetBytes: number;
+  readonly maximumEncodedWindowBytes: number;
+  readonly decoderEncodedWindowBytes: number;
+  readonly decodedSurfaceBytes: number;
+  readonly persistentAllocationBytes: number;
+  readonly streamingAllocationBytes: number;
+  readonly frameStagingBytes: number;
+  readonly staticDecodePngCopyBytes: number;
+  readonly staticDecodeOwnedZlibBytes: number;
+  readonly staticDecodeWorkingPeakBytes: number;
+  readonly currentStaticSurfaceAllocationBytes: number;
+  readonly incomingStaticSurfaceAllocationBytes: number;
+  readonly animatedCanvasBackingAllocationBytes: number;
+  readonly staticCanvasBackingAllocationBytes: number;
+  readonly totalBytes: number;
+}
+
+export interface RuntimeResourcePlan
+extends Omit<StaticRuntimeResourcePlan, "allocationSnapshot"> {
   readonly rendition: string;
   readonly ringCapacity: number;
   readonly outstandingFrameLimit: typeof RESOURCE_DECODE_SURFACE_COUNT;
@@ -46,17 +86,19 @@ export interface RuntimeResourcePlan {
   readonly hostCapBytes: number;
   readonly ownedAssetBytes: number;
   readonly maximumEncodedWindowBytes: number;
+  /** Decoder-owned copies may coexist with transferred sample buffers. */
+  readonly decoderEncodedWindowBytes: number;
   readonly decodedBytesPerSurface: number;
   readonly decodedSurfaceBytes: number;
   readonly persistentLayerBytes: number;
   readonly persistentAllocationBytes: number;
   readonly streamingLayerBytes: number;
   readonly streamingAllocationBytes: number;
-  readonly stagingBytes: number;
-  readonly staticSwapBytes: number;
-  readonly staticSwapAllocationBytes: number;
+  /** Persistent CPU staging owned by FrameRenderer. */
+  readonly frameStagingBytes: number;
   /** The ring leases the twelve decoded surfaces already charged above. */
   readonly ringAdditionalBytes: 0;
+  readonly allocationSnapshot: Readonly<RuntimeResourceAllocationSnapshot>;
   readonly totalBytes: number;
 }
 
@@ -76,7 +118,7 @@ export function createRuntimeResourcePlan(
   }
 
   const manifest = input.catalog.manifest;
-  const rendition = requireOpaqueRendition(manifest, input.rendition);
+  const rendition = requireProductionAvcRendition(manifest, input.rendition);
   if (
     input.interactionCache.rendition !== rendition.id ||
     input.interactionCache.width !== rendition.codedWidth ||
@@ -97,23 +139,15 @@ export function createRuntimeResourcePlan(
     throw new RangeError("interaction cache byte accounting is inconsistent");
   }
 
-  validatePositiveSafeInteger(
-    input.catalog.ownedByteLength,
-    "owned complete asset bytes"
-  );
-  validatePositiveSafeInteger(
-    manifest.limits.maxRuntimeBytes,
-    "manifest maxRuntimeBytes"
-  );
-  const hostCap = input.hostMaxRuntimeBytes ?? MAX_PLAYER_RUNTIME_BYTES;
-  validatePositiveSafeInteger(hostCap, "host runtime byte cap");
-  const effectiveCap = Math.min(
-    MAX_PLAYER_RUNTIME_BYTES,
-    manifest.limits.maxRuntimeBytes,
-    hostCap
-  );
-
-  const ownedAssetBytes = BigInt(input.catalog.ownedByteLength);
+  const staticPlan = createStaticRuntimeResourcePlan({
+    catalog: input.catalog,
+    ...(input.hostMaxRuntimeBytes === undefined
+      ? {}
+      : { hostMaxRuntimeBytes: input.hostMaxRuntimeBytes }),
+    ...(input.canvasBacking === undefined
+      ? {}
+      : { canvasBacking: input.canvasBacking })
+  });
   const maximumEncodedWindow = BigInt(maximumActualEncodedWindowBytes(
     input.catalog,
     rendition.id,
@@ -135,41 +169,61 @@ export function createRuntimeResourcePlan(
   );
   const streaming = codedRgba * BigInt(STREAMING_TEXTURE_LAYER_COUNT);
   const streamingAllocation = roundedGpuAllocationBytes(streaming);
-  const logicalRgba = checkedRgbaBytes(
-    manifest.canvas.width,
-    manifest.canvas.height,
-    1,
-    "logical static RGBA bytes"
+  // Static recovery can run while FrameRenderer still owns this coded staging.
+  const frameStaging = codedRgba;
+  const snapshotTerms = Object.freeze({
+    ownedAssetBytes: BigInt(staticPlan.allocationSnapshot.ownedAssetBytes),
+    maximumEncodedWindowBytes: maximumEncodedWindow,
+    decoderEncodedWindowBytes: maximumEncodedWindow,
+    decodedSurfaceBytes: decodedSurfaces,
+    persistentAllocationBytes: persistentAllocation,
+    streamingAllocationBytes: streamingAllocation,
+    frameStagingBytes: frameStaging,
+    staticDecodePngCopyBytes: BigInt(
+      staticPlan.allocationSnapshot.staticDecodePngCopyBytes
+    ),
+    staticDecodeOwnedZlibBytes: BigInt(
+      staticPlan.allocationSnapshot.staticDecodeOwnedZlibBytes
+    ),
+    staticDecodeWorkingPeakBytes: BigInt(
+      staticPlan.allocationSnapshot.staticDecodeWorkingPeakBytes
+    ),
+    currentStaticSurfaceAllocationBytes: BigInt(
+      staticPlan.currentStaticSurfaceAllocationBytes
+    ),
+    incomingStaticSurfaceAllocationBytes: BigInt(
+      staticPlan.incomingStaticSurfaceAllocationBytes
+    ),
+    animatedCanvasBackingAllocationBytes: BigInt(
+      staticPlan.animatedCanvasBackingAllocationBytes
+    ),
+    staticCanvasBackingAllocationBytes: BigInt(
+      staticPlan.staticCanvasBackingAllocationBytes
+    )
+  });
+  const total = checkedByteSum(
+    Object.values(snapshotTerms),
+    "runtime resource total"
   );
-  const staging = codedRgba > logicalRgba ? codedRgba : logicalRgba;
-  const staticSwap = logicalRgba * 2n;
-  const staticSwapAllocation = roundedGpuAllocationBytes(staticSwap);
-  const total = checkedByteSum([
-    ownedAssetBytes,
-    maximumEncodedWindow,
-    decodedSurfaces,
-    persistentAllocation,
-    streamingAllocation,
-    staging,
-    staticSwapAllocation
-  ], "runtime resource total");
-  if (total > BigInt(effectiveCap)) {
+  if (total > BigInt(staticPlan.effectiveCapBytes)) {
     throw new RangeError(
-      `runtime resource total ${total.toString()} exceeds effective cap ${String(effectiveCap)}`
+      `runtime resource total ${total.toString()} exceeds effective cap ${String(staticPlan.effectiveCapBytes)}`
     );
   }
 
-  return Object.freeze({
+  const allocationSnapshot = freezeAllocationSnapshot(snapshotTerms, total);
+  const plan = Object.freeze({
     rendition: rendition.id,
     ringCapacity: input.ringCapacity,
     outstandingFrameLimit: RESOURCE_DECODE_SURFACE_COUNT,
-    effectiveCapBytes: effectiveCap,
-    manifestCapBytes: manifest.limits.maxRuntimeBytes,
-    hostCapBytes: hostCap,
-    ownedAssetBytes: input.catalog.ownedByteLength,
+    ...staticPlan,
     maximumEncodedWindowBytes: checkedByteNumber(
       maximumEncodedWindow,
       "maximum encoded window bytes"
+    ),
+    decoderEncodedWindowBytes: checkedByteNumber(
+      maximumEncodedWindow,
+      "decoder encoded window bytes"
     ),
     decodedBytesPerSurface: checkedByteNumber(
       decodedPerSurface,
@@ -189,15 +243,35 @@ export function createRuntimeResourcePlan(
       streamingAllocation,
       "streaming allocation bytes"
     ),
-    stagingBytes: checkedByteNumber(staging, "staging bytes"),
-    staticSwapBytes: checkedByteNumber(staticSwap, "static swap bytes"),
-    staticSwapAllocationBytes: checkedByteNumber(
-      staticSwapAllocation,
-      "static swap allocation bytes"
+    frameStagingBytes: checkedByteNumber(
+      frameStaging,
+      "frame staging bytes"
     ),
     ringAdditionalBytes: 0,
+    allocationSnapshot,
     totalBytes: checkedByteNumber(total, "runtime resource total")
   });
+  if (plan.totalBytes !== allocationSnapshot.totalBytes) {
+    throw new RangeError("runtime resource snapshot does not reconcile");
+  }
+  return plan;
+}
+
+/** Ring capacity leases the already charged decoded surfaces; only metadata changes. */
+export function withRuntimeResourceRingCapacity(
+  plan: Readonly<RuntimeResourcePlan>,
+  ringCapacity: number
+): Readonly<RuntimeResourcePlan> {
+  validateObject(plan, "runtime resource plan");
+  validatePositiveSafeInteger(ringCapacity, "presentation ring capacity");
+  if (
+    ringCapacity < MIN_RESOURCE_RING_CAPACITY ||
+    ringCapacity > MAX_RESOURCE_RING_CAPACITY
+  ) {
+    throw new RangeError("presentation ring capacity must be from 6 to 12");
+  }
+  if (plan.ringCapacity === ringCapacity) return plan;
+  return Object.freeze({ ...plan, ringCapacity });
 }
 
 /**
@@ -214,7 +288,7 @@ export function maximumActualEncodedWindowBytes(
 ): number {
   validatePositiveSafeInteger(frameLimit, "encoded window frame limit");
   const manifest = catalog.manifest;
-  requireOpaqueRendition(manifest, rendition);
+  requireProductionAvcRendition(manifest, rendition);
   const nodes: {
     readonly record: Readonly<RuntimeCatalogAccessUnit>;
     readonly next: number | null;
@@ -265,15 +339,129 @@ export function maximumActualEncodedWindowBytes(
   return checkedByteNumber(maximum, "maximum encoded window bytes");
 }
 
-function requireOpaqueRendition(
+type ProductionAvcRendition = Extract<
+  RenditionV01,
+  {
+    readonly profile:
+      | "avc-annexb-opaque-v0"
+      | "avc-annexb-packed-alpha-v0";
+  }
+>;
+
+function requireProductionAvcRendition(
   manifest: Readonly<CompiledManifestV01>,
   rendition: string
-): Extract<RenditionV01, { readonly profile: "avc-annexb-opaque-v0" }> {
+): Readonly<ProductionAvcRendition> {
   const selected = manifest.renditions.find(({ id }) => id === rendition);
-  if (selected?.profile !== "avc-annexb-opaque-v0") {
-    throw new RangeError("selected resource rendition must be opaque AVC");
+  if (
+    selected?.profile !== "avc-annexb-opaque-v0" &&
+    selected?.profile !== "avc-annexb-packed-alpha-v0"
+  ) {
+    throw new RangeError("selected resource rendition must be production AVC");
   }
   return selected;
+}
+
+interface BigIntAllocationSnapshotTerms {
+  readonly ownedAssetBytes: bigint;
+  readonly maximumEncodedWindowBytes: bigint;
+  readonly decoderEncodedWindowBytes: bigint;
+  readonly decodedSurfaceBytes: bigint;
+  readonly persistentAllocationBytes: bigint;
+  readonly streamingAllocationBytes: bigint;
+  readonly frameStagingBytes: bigint;
+  readonly staticDecodePngCopyBytes: bigint;
+  readonly staticDecodeOwnedZlibBytes: bigint;
+  readonly staticDecodeWorkingPeakBytes: bigint;
+  readonly currentStaticSurfaceAllocationBytes: bigint;
+  readonly incomingStaticSurfaceAllocationBytes: bigint;
+  readonly animatedCanvasBackingAllocationBytes: bigint;
+  readonly staticCanvasBackingAllocationBytes: bigint;
+}
+
+function freezeAllocationSnapshot(
+  terms: Readonly<BigIntAllocationSnapshotTerms>,
+  total: bigint
+): Readonly<RuntimeResourceAllocationSnapshot> {
+  const snapshot = Object.freeze({
+    ownedAssetBytes: checkedByteNumber(
+      terms.ownedAssetBytes,
+      "snapshot owned asset bytes"
+    ),
+    maximumEncodedWindowBytes: checkedByteNumber(
+      terms.maximumEncodedWindowBytes,
+      "snapshot maximum encoded window bytes"
+    ),
+    decoderEncodedWindowBytes: checkedByteNumber(
+      terms.decoderEncodedWindowBytes,
+      "snapshot decoder encoded window bytes"
+    ),
+    decodedSurfaceBytes: checkedByteNumber(
+      terms.decodedSurfaceBytes,
+      "snapshot decoded surface bytes"
+    ),
+    persistentAllocationBytes: checkedByteNumber(
+      terms.persistentAllocationBytes,
+      "snapshot persistent allocation bytes"
+    ),
+    streamingAllocationBytes: checkedByteNumber(
+      terms.streamingAllocationBytes,
+      "snapshot streaming allocation bytes"
+    ),
+    frameStagingBytes: checkedByteNumber(
+      terms.frameStagingBytes,
+      "snapshot frame staging bytes"
+    ),
+    staticDecodePngCopyBytes: checkedByteNumber(
+      terms.staticDecodePngCopyBytes,
+      "snapshot static PNG copy bytes"
+    ),
+    staticDecodeOwnedZlibBytes: checkedByteNumber(
+      terms.staticDecodeOwnedZlibBytes,
+      "snapshot static zlib bytes"
+    ),
+    staticDecodeWorkingPeakBytes: checkedByteNumber(
+      terms.staticDecodeWorkingPeakBytes,
+      "snapshot static decode working bytes"
+    ),
+    currentStaticSurfaceAllocationBytes: checkedByteNumber(
+      terms.currentStaticSurfaceAllocationBytes,
+      "snapshot current static allocation bytes"
+    ),
+    incomingStaticSurfaceAllocationBytes: checkedByteNumber(
+      terms.incomingStaticSurfaceAllocationBytes,
+      "snapshot incoming static allocation bytes"
+    ),
+    animatedCanvasBackingAllocationBytes: checkedByteNumber(
+      terms.animatedCanvasBackingAllocationBytes,
+      "snapshot animated canvas allocation bytes"
+    ),
+    staticCanvasBackingAllocationBytes: checkedByteNumber(
+      terms.staticCanvasBackingAllocationBytes,
+      "snapshot static canvas allocation bytes"
+    ),
+    totalBytes: checkedByteNumber(total, "snapshot total bytes")
+  });
+  const reconciled = checkedByteSum([
+    snapshot.ownedAssetBytes,
+    snapshot.maximumEncodedWindowBytes,
+    snapshot.decoderEncodedWindowBytes,
+    snapshot.decodedSurfaceBytes,
+    snapshot.persistentAllocationBytes,
+    snapshot.streamingAllocationBytes,
+    snapshot.frameStagingBytes,
+    snapshot.staticDecodePngCopyBytes,
+    snapshot.staticDecodeOwnedZlibBytes,
+    snapshot.staticDecodeWorkingPeakBytes,
+    snapshot.currentStaticSurfaceAllocationBytes,
+    snapshot.incomingStaticSurfaceAllocationBytes,
+    snapshot.animatedCanvasBackingAllocationBytes,
+    snapshot.staticCanvasBackingAllocationBytes
+  ], "runtime resource snapshot total");
+  if (reconciled !== total) {
+    throw new RangeError("runtime resource snapshot does not reconcile");
+  }
+  return snapshot;
 }
 
 function validateObject(value: unknown, label: string): void {

@@ -12,6 +12,7 @@ describe("CLI argument grammar", () => {
       "--fps", "30000/1001",
       "--canvas", "320x176",
       "--bitrate", "2000000:3000000",
+      "--alpha", "packed",
       "--out", "clip.rma",
       "--report", "clip.report.json",
       "--ffmpeg", "/tools/ffmpeg",
@@ -28,6 +29,7 @@ describe("CLI argument grammar", () => {
       fps: { numerator: 30000, denominator: 1001 },
       canvas: [320, 176],
       bitrate: { average: 2_000_000, peak: 3_000_000 },
+      alpha: "packed",
       ffmpegPath: "/tools/ffmpeg",
       ffprobePath: "/tools/ffprobe",
       normalizeVfr: true,
@@ -62,6 +64,25 @@ describe("CLI argument grammar", () => {
     });
     expectUsage([
       "compile", "motion.json", "--out", "motion.rma", "--fps", "30/1"
+    ]);
+    expectUsage([
+      "compile", "motion.json", "--out", "motion.rma", "--alpha", "auto"
+    ]);
+  });
+
+  it("defaults direct input to auto and accepts only the closed alpha policy", () => {
+    expect(parseCliArguments([
+      "compile", "clip.mp4", "--loop", "0:2", "--out", "clip.rma"
+    ])).toMatchObject({ alpha: "auto" });
+    for (const policy of ["auto", "opaque", "packed"] as const) {
+      expect(parseCliArguments([
+        "compile", "clip.mp4", "--loop", "0:2", "--alpha", policy,
+        "--out", "clip.rma"
+      ])).toMatchObject({ alpha: policy });
+    }
+    expectUsage([
+      "compile", "clip.mp4", "--loop", "0:2", "--alpha", "stacked",
+      "--out", "clip.rma"
     ]);
   });
 

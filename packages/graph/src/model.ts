@@ -224,6 +224,7 @@ export interface MotionGraphSnapshot {
 export type MotionGraphOperation =
   | "install"
   | "begin-animated"
+  | "resume-animated"
   | "begin-static"
   | "recover-static"
   | "fail-static"

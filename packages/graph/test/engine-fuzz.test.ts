@@ -81,6 +81,27 @@ function replayTape(tape: readonly TapeOperation[], seed: number): Replay {
   results.push(animated);
   previous = animated.snapshot;
 
+  const reduced = engine.recoverStatic("seeded-resume-model");
+  assertResultProperties(reduced, previous, seed, -0.75);
+  results.push(reduced);
+  previous = reduced.snapshot;
+
+  const resumed = engine.resumeAnimated();
+  assertResultProperties(resumed, previous, seed, -0.5);
+  invariant(
+    resumed.operation === "resume-animated" &&
+      resumed.effects.length === 1 &&
+      resumed.effects[0]?.type === "readinesschange" &&
+      resumed.presentation?.kind === "body" &&
+      resumed.presentation.state === resumed.snapshot.visualState &&
+      resumed.presentation.frameIndex === 0,
+    seed,
+    -0.5,
+    "static resume did not re-enter current body frame zero exactly"
+  );
+  results.push(resumed);
+  previous = resumed.snapshot;
+
   for (let index = 0; index < tape.length; index += 1) {
     const operation = tape[index]!;
     let result: Readonly<MotionGraphResult>;

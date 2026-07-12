@@ -1,0 +1,374 @@
+{
+  "provenanceVersion": "0.1",
+  "generatedAt": "2026-07-12",
+  "fixture": "m6-web-packed-alpha",
+  "license": {
+    "path": "fixtures/compiler/m6/source/ASSET-LICENSE.md",
+    "bytes": 414,
+    "sha256": "e4158d55b4d5af7012f2c2534f368e97c94e76ae6835c841dbfa68faddc4d183"
+  },
+  "generator": {
+    "path": "fixtures/compiler/m6/source/generate.mjs",
+    "bytes": 18566,
+    "sha256": "8b2d9bf103c7f55e484c55d484b4ab313080aaa68b2ac541bed29693068eaf99"
+  },
+  "generatorModules": [
+    {
+      "path": "fixtures/compiler/m6/source/frame-fixtures.mjs",
+      "bytes": 2472,
+      "sha256": "787035e0cebc92cb1cc5fdedddd150926efaa0f244e11d700a0d99fb31d30c5e"
+    },
+    {
+      "path": "fixtures/compiler/m6/source/png-fixture-helpers.mjs",
+      "bytes": 12608,
+      "sha256": "a1d1315dd956bec7a78ff84b6b9dc15a58b1f857a9d9d4d1aba8c8f92f3d346d"
+    }
+  ],
+  "runtime": {
+    "node": "v25.8.1",
+    "zlib": "1.2.12",
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "projects": [
+    {
+      "path": "fixtures/compiler/m6/source/opaque-odd.json",
+      "bytes": 1001,
+      "sha256": "6a7965c9674a47009c456b385b088c45b7c8ec8b5f3ca05ebff6f0dd47292fd3"
+    },
+    {
+      "path": "fixtures/compiler/m6/source/packed-loop.json",
+      "bytes": 1003,
+      "sha256": "9d3d2d74cce19601e030708ac2621d7690601de0231ba5e1950ba11000b0dc22"
+    },
+    {
+      "path": "fixtures/compiler/m6/source/packed-all-routes.json",
+      "bytes": 5080,
+      "sha256": "5d82ef90b04be6c52e06fc8fc0eb7fb215e16706d44dda11034f838bab17346f"
+    }
+  ],
+  "sequences": [
+    {
+      "directory": "opaque-frames",
+      "width": 45,
+      "height": 27,
+      "frameCount": 30,
+      "frames": [
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0000.png",
+          "bytes": 4968,
+          "sha256": "0e9e7504acdeb94406dc7177d89ea53035f173dc2ba3cbe58f501d979673dc84"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0001.png",
+          "bytes": 4968,
+          "sha256": "71963d2df21d95c45866a0de54e8c2d11f56c3337595d91db3f7b2c5a7b2ae0a"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0002.png",
+          "bytes": 4968,
+          "sha256": "194dbb8858180766eb3b427c0439cd239c596fc282b1e503d5c7a998d4ab1b97"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0003.png",
+          "bytes": 4968,
+          "sha256": "bba4c68a10a87314ff9a5af3c70bc9763de3fe222468d7c6bb5a3d67d4f4eefd"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0004.png",
+          "bytes": 4968,
+          "sha256": "b1705b62077fd6d5695fc3061b7f013198b120e40d71f9e65fd1b47e976442c3"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0005.png",
+          "bytes": 4968,
+          "sha256": "a7709938a8c69907dd04cead600cc6b110f6ec4d9b789db68138802f0af05fdc"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0006.png",
+          "bytes": 4968,
+          "sha256": "b8debb78f311a5f5a492da28c28c7869292ee1a4569501e6ef55b94146307a42"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0007.png",
+          "bytes": 4968,
+          "sha256": "8c4088c7fe348a333a42ff4dcb1637374ba6d5f1837b6e4a6581a482b23960a1"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0008.png",
+          "bytes": 4968,
+          "sha256": "fda0b359caf115de8e678f081f8af7bb8284c3fc6cb0001648f5d0c9f085cb4c"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0009.png",
+          "bytes": 4968,
+          "sha256": "9541a98f4028834ecea2c5cee1229053e24b9d9d0dc8a0d057439df242e9672f"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0010.png",
+          "bytes": 4968,
+          "sha256": "5108cf077c0ab9f8f1ef3fb8d558d683f595fe110126dc97045b0df4f1424ed5"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0011.png",
+          "bytes": 4968,
+          "sha256": "b01255e1ffcb871fdc496a49f87bc7335a60c083aec37a1345aa001349e29f7f"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0012.png",
+          "bytes": 4968,
+          "sha256": "ebb40c416a6a09e6792da657f1e9fceb06218ee06f27008d29dc030df730eab0"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0013.png",
+          "bytes": 4968,
+          "sha256": "3c93ed9542917f879b56cba19c4f287089ed9495bc7e908222a58ff2ab030ad7"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0014.png",
+          "bytes": 4968,
+          "sha256": "6fe76dad58c904d9d7197502f7e180630dd2bb60ba54be29d15900c0d7462a8c"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0015.png",
+          "bytes": 4968,
+          "sha256": "7b2f3eb44f38573245bacaf63fd9398f122ff3eecc96315ce775b3b0d87a4d22"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0016.png",
+          "bytes": 4968,
+          "sha256": "f7d86465e1aaa624ee6bcb0aaab8f135519b24f18502cffd1e58c25fe3aeb512"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0017.png",
+          "bytes": 4968,
+          "sha256": "533a4d3af7fcfc83c16e651deddeed7ad172e17b9dde9e7bf8c8ef4be77e18d6"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0018.png",
+          "bytes": 4968,
+          "sha256": "df537040406e5df9e147506369ca70c25fae592adf27fc83013e7c6ab358284e"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0019.png",
+          "bytes": 4968,
+          "sha256": "e0a893de591ef85c97c838244a461693452c99062a165ee76d0f3ab0a421e083"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0020.png",
+          "bytes": 4968,
+          "sha256": "4152f4d7261ef0726ac55b0ddb81bd6d83a1f70a8cc3d6fef23a2f190cb632df"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0021.png",
+          "bytes": 4968,
+          "sha256": "d19cb933748cf30de93dc34756bd6aad5518ac0d2538a76da096f26a781c7e48"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0022.png",
+          "bytes": 4968,
+          "sha256": "4254e749b22a289e2a9d90b9793bdf94f3db9c4b2e17e569e40a488f740311f6"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0023.png",
+          "bytes": 4968,
+          "sha256": "16071a88dad16f5716bf16d969fe089127f127044a512100e37eb0ef0935104b"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0024.png",
+          "bytes": 4968,
+          "sha256": "582927ae0918d7a1c09ad72ac9e093cc896ef3876d567ddb03efe779251eda89"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0025.png",
+          "bytes": 4968,
+          "sha256": "ac2b7f4b664d07d5caeafe8216b8fa2bd600e6c7daa535c8d2f7c4df236f1ea0"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0026.png",
+          "bytes": 4968,
+          "sha256": "999758dbd9a0dd7e7240151384ea38cd86bd3d81bef557a9a616a64d705daf9c"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0027.png",
+          "bytes": 4968,
+          "sha256": "05413a9b253562d154b4e818b30926d3b479bc40f4d11ab721b30549357b4bfd"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0028.png",
+          "bytes": 4968,
+          "sha256": "a695db8c3c4a1e55aaf9c74a69b1f8d548016573661c174d87efe80ff08c0bcb"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/opaque-frames/frame-0029.png",
+          "bytes": 4968,
+          "sha256": "6a6f7f998bfd12459d891839c5fba856e952e10bae3d2e22221f8e7608c28633"
+        }
+      ]
+    },
+    {
+      "directory": "packed-frames",
+      "width": 45,
+      "height": 27,
+      "frameCount": 30,
+      "frames": [
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0000.png",
+          "bytes": 4968,
+          "sha256": "3a74fe71c50660ee30b05cda016efb2bf25441899c34e3d7c2df693eb514d27b"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0001.png",
+          "bytes": 4968,
+          "sha256": "3a5bd5064789777d052ec0b7a25ee247473f628401b6005646907732888bc357"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0002.png",
+          "bytes": 4968,
+          "sha256": "00f9ffdfd47ba41bce24636c56413e200837c00f8a9f48fa866dc1fce7ebaeeb"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0003.png",
+          "bytes": 4968,
+          "sha256": "1381cf8252fa191bdaeaedbb65bb8f29ca2a186359d090599d34698589f9a0d3"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0004.png",
+          "bytes": 4968,
+          "sha256": "84bacf9180b0ab4794f983e96c70d7435c32eb288bb59d1228a6b649f21058d1"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0005.png",
+          "bytes": 4968,
+          "sha256": "9c1bc0d58bdabfce56ceb9a8a5b67d940ddc39219eabf37ecba399585fe91c00"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0006.png",
+          "bytes": 4968,
+          "sha256": "b9f380515d198bf0b9b013b818b1e80978bc3c5c5603b61b0a07b90d4fd64a05"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0007.png",
+          "bytes": 4968,
+          "sha256": "ebaad5502f86479c339cb52bb0e3a57862cbdf710d810cb8661fc97b247965fe"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0008.png",
+          "bytes": 4968,
+          "sha256": "19151155c156b645b2f864c4c5e4b03e84e10f6338d34b6a1759aa59f3759a58"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0009.png",
+          "bytes": 4968,
+          "sha256": "94e246fbb07e9da4e3c038d23c68e609b8ef7b6be7c51df32df90538b8e7a339"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0010.png",
+          "bytes": 4968,
+          "sha256": "d8eab2a05db3a03a983faeefe6797bf0ee720f1509c342cce34f7743c1d28300"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0011.png",
+          "bytes": 4968,
+          "sha256": "b9820214b86484e7346a278a7d0187839ae1e891acf8dd4367a0f7548316669a"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0012.png",
+          "bytes": 4968,
+          "sha256": "0d57cd2ae6bbf688376aa8afea33a21974cae7f74f3794181613be3e738ac3ea"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0013.png",
+          "bytes": 4968,
+          "sha256": "14d0aeb6b3128365a5e0da8dbd9bf345acb06ac41e8dd74a25629d57d184da9b"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0014.png",
+          "bytes": 4968,
+          "sha256": "eb380582c2158478f0ad0d145552b4d01aa83dd2626d915cd6ee577f65f0e81b"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0015.png",
+          "bytes": 4968,
+          "sha256": "c7324082dcb327609493213aec85cbc71c7dcabb15faed5bd4379901ed4d2ccf"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0016.png",
+          "bytes": 4968,
+          "sha256": "6250d1e87825cb10bf3416c893d442d8047306c0c88a23f47c704456588eb237"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0017.png",
+          "bytes": 4968,
+          "sha256": "399db4bc9fa1d5508555a46bc4b60bc7d7272d447e91a15411de6e6553b9b75b"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0018.png",
+          "bytes": 4968,
+          "sha256": "2ade8141c32d39af7b852c1e9a49f8dc431871ba02acb35275af729f001f8465"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0019.png",
+          "bytes": 4968,
+          "sha256": "fab47b05a85f844369218e7576824d2e60163f9ef19c5906a88d9cecbe76b69d"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0020.png",
+          "bytes": 4968,
+          "sha256": "8aa18fcdbf06293e1358b21b03a7bc498c2f00d270904aaf33e130792a6226c1"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0021.png",
+          "bytes": 4968,
+          "sha256": "2ca9d59b09ed53cad03f1977d0dc2288010c2b0949c230d62ab57914c4f207a6"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0022.png",
+          "bytes": 4968,
+          "sha256": "d136b67043bf2beee53c8b838b94682edf15f32599b6f7353297b6ee1a5b0225"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0023.png",
+          "bytes": 4968,
+          "sha256": "f71fd28bd55ea6305c67f71807be13d46941a0d5f58b66b56651c34802875e04"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0024.png",
+          "bytes": 4968,
+          "sha256": "ec56e13745267dd0078241c8aee254c15eb2de11bbc788558f49b55013d0f662"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0025.png",
+          "bytes": 4968,
+          "sha256": "8de4a4693974b48738eb9681f07b1f461669545c014705a013e0cc45f81a3ecc"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0026.png",
+          "bytes": 4968,
+          "sha256": "7f2f68a761a24d9177a2970a69ba8a69c6009578e017bbba22b7a04e7a6c5a8f"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0027.png",
+          "bytes": 4968,
+          "sha256": "1968d85c9d282d944b3552851c9aa081afefda0d78d3335ddd79fdd2fb36e02c"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0028.png",
+          "bytes": 4968,
+          "sha256": "bc16f520b722a6ef8ba4649adba5b6857e3f6fde8cf37f591e79a7a52ce70ac9"
+        },
+        {
+          "path": "fixtures/compiler/m6/source/packed-frames/frame-0029.png",
+          "bytes": 4968,
+          "sha256": "f8d496a27f5f64b8e3d09a00fd232488ce4bfedf6c2b5a08249df44431378803"
+        }
+      ]
+    }
+  ],
+  "tag": {
+    "encoding": "six-bit-gray-derived-distance-three",
+    "fullResolutionReadback": true,
+    "downscaledReadback": false,
+    "note": "The 15x9 rendition is a geometry and alpha-quality fixture, not an exact tag-readback oracle."
+  }
+}

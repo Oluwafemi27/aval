@@ -16,16 +16,19 @@ import {
 describe("lowerable operation timeouts", () => {
   let directory = "";
   let hangingTool = "";
+  let yuvPath = "";
 
   beforeAll(async () => {
     directory = await mkdtemp(join(tmpdir(), "rma-timeout-tool-"));
     hangingTool = join(directory, "hang");
+    yuvPath = join(directory, "frame.yuv");
     await writeFile(
       hangingTool,
       "#!/usr/bin/env node\nsetInterval(() => {}, 1000);\n",
       { mode: 0o700 }
     );
     await chmod(hangingTool, 0o700);
+    await writeFile(yuvPath, new Uint8Array(32 * 32 * 3 / 2));
   });
 
   afterAll(async () => {
@@ -43,10 +46,16 @@ describe("lowerable operation timeouts", () => {
 
   it("lowers the 120-second media default", async () => {
     await expect(encodeAvcUnit({
-      source: { type: "video", path: "/input/clip.mov" },
+      source: {
+        type: "raw-yuv420p",
+        path: yuvPath,
+        width: 32,
+        height: 32,
+        frameRate: { numerator: 30, denominator: 1 },
+        frameBytes: 1_536
+      },
       startFrame: 0,
       endFrame: 1,
-      frameRate: { numerator: 30, denominator: 1 },
       codedWidth: 32,
       codedHeight: 32,
       bitrate: { average: 100_000, peak: 200_000 },

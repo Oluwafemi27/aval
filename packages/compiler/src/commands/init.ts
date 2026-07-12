@@ -16,7 +16,7 @@ export interface InitCommandResult {
 
 const PROJECT_FILE = "motion.json";
 
-/** Create the deterministic, procedurally drawn M5 starter without bundled art. */
+/** Create the deterministic, procedurally drawn M6 starter without bundled art. */
 export async function runInitCommand(
   arguments_: InitCliArguments,
   cwd: string
@@ -98,8 +98,8 @@ async function cleanupClaimedInit(
 
 function starterProject(): Record<string, unknown> {
   return {
-    projectVersion: "0.1",
-    profile: "avc-annexb-opaque-v0",
+    projectVersion: "0.2",
+    profile: "avc-annexb-auto-v0",
     canvas: {
       width: 32,
       height: 32,
@@ -119,9 +119,9 @@ function starterProject(): Record<string, unknown> {
       frameCount: 2
     }],
     renditions: [{
-      id: "opaque.1x",
-      codedWidth: 32,
-      codedHeight: 32,
+      id: "avc.1x",
+      width: 32,
+      height: 32,
       bitrate: { average: 300_000, peak: 600_000 }
     }],
     units: [{

@@ -15,6 +15,7 @@ import type {
   FormatHeader
 } from "../src/model.js";
 import { validManifest } from "./manifest-fixture.js";
+import { makeSizedTestPng } from "./png-test-fixture.js";
 
 export interface AssetFixture {
   readonly bytes: Uint8Array;
@@ -44,32 +45,6 @@ type MutableManifest = CompiledManifestV01 & {
   }>;
 };
 
-const PNG_SIGNATURE = [
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
-] as const;
-
-function writeUint32BE(bytes: Uint8Array, offset: number, value: number): void {
-  bytes[offset] = Math.floor(value / 0x100_0000) & 0xff;
-  bytes[offset + 1] = Math.floor(value / 0x1_0000) & 0xff;
-  bytes[offset + 2] = Math.floor(value / 0x100) & 0xff;
-  bytes[offset + 3] = value & 0xff;
-}
-
-function shallowPng(length: number): Uint8Array {
-  if (!Number.isSafeInteger(length) || length < 33) {
-    throw new Error("test PNG length must be at least 33");
-  }
-  const bytes = new Uint8Array(length);
-  bytes.set(PNG_SIGNATURE, 0);
-  writeUint32BE(bytes, 8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  writeUint32BE(bytes, 16, 2);
-  writeUint32BE(bytes, 20, 2);
-  bytes[24] = 8;
-  bytes[25] = 6;
-  return bytes;
-}
-
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   if (left.byteLength !== right.byteLength) return false;
   return left.every((value, index) => value === right[index]);
@@ -88,18 +63,24 @@ export function canonicalAssetFixture(
       id: "reference",
       profile: "avc-annexb-opaque-v0",
       codec: "avc1.42E020",
-      codedWidth: 2,
-      codedHeight: 2,
+      codedWidth: 16,
+      codedHeight: 16,
       alphaLayout: { type: "opaque-v0", colorRect: [0, 0, 2, 2] },
       bitrate: { average: 1_000, peak: 2_000 },
       capabilities: ["webcodecs", "webgl2"]
     };
+    const limits = manifest.limits as {
+      decodedPixelBytes: number;
+      runtimeWorkingSetBytes: number;
+    };
+    limits.decodedPixelBytes = 1_024;
+    limits.runtimeWorkingSetBytes = 1_024;
   }
 
   const staticLength = options.staticLength ?? 68;
-  const staticPayload = shallowPng(staticLength);
+  const staticPayload = makeSizedTestPng(2, 2, staticLength);
   for (const frame of manifest.staticFrames) {
-    frame.length = staticLength;
+    frame.length = staticPayload.byteLength;
     frame.offset = 0;
   }
 

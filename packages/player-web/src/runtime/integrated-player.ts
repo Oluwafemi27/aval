@@ -5,8 +5,7 @@ import {
 } from "@rendered-motion/graph";
 
 import {
-  RuntimeAssetCatalog,
-  installRuntimeAssetCatalog
+  RuntimeAssetCatalog
 } from "./asset-catalog.js";
 import {
   EffectHost
@@ -38,8 +37,6 @@ import {
   defaultIntegratedNow,
   integratedAbortError as abortError,
   integratedDisposedError as disposedError,
-  sameGraphPresentation,
-  throwIfIntegratedAborted as throwIfAborted,
   validateIntegratedContentTickContext as validateContentTickContext,
   validateIntegratedPlayerOptions as validateOptions,
   validateIntegratedPlaybackTraceState as validatePlaybackTraceState,
@@ -47,19 +44,32 @@ import {
   validateIntegratedStaticStore as validateStaticStore
 } from "./integrated-player-support.js";
 import {
-  IntegratedAnimatedPreparation,
-  type IntegratedAnimatedActivationCommit
+  IntegratedAnimatedPreparation
 } from "./integrated-animated-preparation.js";
+import {
+  IntegratedPlayerActivationCoordinator
+} from "./integrated-player-activation-coordinator.js";
 import { IntegratedTraceHarness } from "./integrated-trace-harness.js";
 import { IntegratedRecoveryCoordinator } from "./integrated-player-recovery.js";
 import { IntegratedOperationGate } from "./integrated-operation-gate.js";
 import { IntegratedStaticPreparation } from "./integrated-player-static-preparation.js";
-import type { RuntimeReadinessResult } from "./model.js";
+import { IntegratedPlayerMotion } from "./integrated-player-motion.js";
+import {
+  type RuntimeReadinessResult
+} from "./model.js";
+import type {
+  MotionPolicy,
+  MotionPolicySnapshot
+} from "./motion-policy.js";
 import {
   RealtimeDriver,
   type RealtimeDriverSnapshot
 } from "./realtime-driver.js";
 import { RequestPromises } from "./request-promises.js";
+import {
+  admitIntegratedPlayerResources
+} from "./integrated-player-resource-admission.js";
+import type { RuntimeCanvasResourceLease } from "./static-resource-plan.js";
 
 export {
   IntegratedPlaybackInvariantError,
@@ -106,24 +116,60 @@ export class IntegratedPlayer {
   readonly #lifecycleController = new AbortController();
   readonly #recovery: IntegratedRecoveryCoordinator;
   readonly #staticPreparation: IntegratedStaticPreparation;
+  readonly #activation: IntegratedPlayerActivationCoordinator;
   readonly #animatedPreparation: IntegratedAnimatedPreparation;
+  readonly #motion: IntegratedPlayerMotion;
   readonly #realtime: RealtimeDriver | null;
   readonly #operationGate = new IntegratedOperationGate();
+  readonly #staticResourceLease: RuntimeCanvasResourceLease | null;
 
   #selectedRendition: string | null = null;
   #activeCandidate: IntegratedCandidateAttempt | null = null;
   #preparePromise: Promise<RuntimeReadinessResult> | null = null;
+  #initialPreparationGeneration = 0n;
   #readyResult: Readonly<RuntimeReadinessResult> | null = null;
   #disposePromise: Promise<void> | null = null;
+  #terminalOwnerCallbackDepth = 0;
   #lastPresentationOrdinal = 0n;
   #disposed = false;
 
   public constructor(options: IntegratedPlayerOptions) {
     validateOptions(options);
-    this.#catalog = installRuntimeAssetCatalog(options.bytes);
+    // Host option objects are capability boundaries. Snapshot every value the
+    // constructor will need before acquiring catalog, canvas, or static-store
+    // ownership so a hostile or time-varying getter cannot strand them.
+    const bytes = options.bytes;
+    const createStaticStore = options.createStaticStore;
+    const candidateFactory = options.candidateFactory;
+    const candidateAvailability = candidateFactory.availability;
+    const availability = Object.freeze({
+      workerAvailable: candidateAvailability.workerAvailable,
+      rendererAvailable: candidateAvailability.rendererAvailable
+    });
+    const eventSink = options.eventSink;
+    const diagnosticsSink = options.diagnosticsSink;
+    const hostMaxRuntimeBytesOption = options.hostMaxRuntimeBytes;
+    const motionPolicy = options.motionPolicy;
+    const hostReducedMotion = options.hostReducedMotion;
+    const now = options.now;
+    const timers = options.timers;
+    const realtimeSource = options.realtime;
+    const realtime = realtimeSource === undefined
+      ? undefined
+      : snapshotIntegratedRealtimeOptions(realtimeSource);
+    const admission = admitIntegratedPlayerResources({
+      bytes,
+      candidateFactory,
+      ...(hostMaxRuntimeBytesOption === undefined
+        ? {}
+        : { hostMaxRuntimeBytes: hostMaxRuntimeBytesOption })
+    });
+    this.#catalog = admission.catalog;
+    const hostMaxRuntimeBytes = admission.hostMaxRuntimeBytes;
+    const staticResourceLease = admission.staticResourceLease;
+    let staticStoreCandidate: unknown = null;
     try {
       this.#installResult = this.#graph.install(this.#catalog.graph);
-      const eventSink = options.eventSink;
       this.#effects = new EffectHost({
         requestPromises: this.#requests,
         initialGraphSnapshot: this.#installResult.snapshot,
@@ -135,78 +181,124 @@ export class IntegratedPlayer {
               })
             })
       });
-      this.#staticStore = options.createStaticStore(this.#catalog);
+      staticStoreCandidate = createStaticStore.call(options, this.#catalog);
+      this.#staticStore = staticStoreCandidate as IntegratedStaticSurfaceStore;
       validateStaticStore(this.#staticStore);
+      this.#staticResourceLease = staticResourceLease;
+      this.#diagnostics = diagnosticsSink ?? (() => undefined);
+      this.#now = now ?? defaultIntegratedNow;
+      this.#timers = timers ?? DEFAULT_INTEGRATED_TIMERS;
+      this.#staticPreparation = new IntegratedStaticPreparation({
+        catalog: this.#catalog,
+        graph: this.#graph,
+        effects: this.#effects,
+        staticStore: this.#staticStore,
+        installResult: this.#installResult,
+        lifecycleSignal: this.#lifecycleController.signal,
+        now: this.#now,
+        timers: this.#timers,
+        stageReadyResult: (result) => this.#stageStaticReadyResult(result)
+      });
+      this.#recovery = new IntegratedRecoveryCoordinator({
+        catalog: this.#catalog,
+        graph: this.#graph,
+        effects: this.#effects,
+        staticStore: this.#staticStore,
+        trace: this.#trace,
+        getActiveCandidate: () => this.#activeCandidate,
+        detachActiveCandidate: (candidate) => {
+          if (this.#activeCandidate === candidate) this.#activeCandidate = null;
+        },
+        getReadyResult: () => this.#readyResult,
+        registerRequest: (requestId) => this.#requests.register(requestId),
+        stageReadyResult: (result) => this.#stageStaticReadyResult(result),
+        reportFailure: (failure) => this.#reportFailure(failure)
+      });
+      this.#activation = new IntegratedPlayerActivationCoordinator({
+        graph: this.#graph,
+        effects: this.#effects,
+        staticStore: this.#staticStore,
+        trace: this.#trace,
+        operationGate: this.#operationGate,
+        state: {
+          isDisposed: () => this.#disposed,
+          getActiveCandidate: () => this.#activeCandidate,
+          setActiveCandidate: (candidate) => {
+            this.#activeCandidate = candidate;
+          },
+          getReadyResult: () => this.#readyResult,
+          setReadyResult: (result) => {
+            this.#readyResult = result;
+          },
+          setSelectedRendition: (renditionId) => {
+            this.#selectedRendition = renditionId;
+          }
+        },
+        getMotion: () => this.#motion,
+        getRealtime: () => this.#realtime,
+        startRecovery: (failure) => this.#startRecovery(failure),
+        settleRecovery: () => this.#recovery.settled(),
+        reportFailure: (failure) => this.#reportFailure(failure)
+      });
+      this.#animatedPreparation = new IntegratedAnimatedPreparation({
+        catalog: this.#catalog,
+        graph: this.#graph,
+        staticPreparation: this.#staticPreparation,
+        candidateFactory,
+        availability,
+        hostMaxRuntimeBytes,
+        isDisposed: () => this.#disposed,
+        commitActivation: (commit) =>
+          this.#activation.commitAnimatedActivation(commit),
+        commitReentryActivation: (commit) =>
+          this.#activation.commitAnimatedReentry(commit),
+        rollbackActivation: (attempt) =>
+          this.#activation.rollbackAnimatedActivation(attempt),
+        recoverActivation: (failure) =>
+          this.#activation.recoverAnimatedActivation(failure),
+        reportFailure: (failure) => this.#reportFailure(failure)
+      });
+      this.#motion = new IntegratedPlayerMotion({
+        policy: motionPolicy ?? "auto",
+        hostReducedMotion: hostReducedMotion ?? false,
+        staticPreparation: this.#staticPreparation,
+        isDisposed: () => this.#disposed,
+        invalidateInitialPreparation: () =>
+          this.#invalidateInitialPreparation(),
+        pauseForPolicy: () => this.#activation.pauseForMotionPolicy(),
+        resumeAfterCancelledReduction: (wasRunning) =>
+          this.#activation.resumeAfterCancelledReduction(wasRunning),
+        resumeAfterReentry: (wasRunning) =>
+          this.#activation.resumeRealtimeAfterReentry(wasRunning),
+        coverReducedSurface: (state) =>
+          this.#activation.coverReducedSurface(state),
+        commitReducedState: (state) =>
+          this.#activation.commitReducedState(state),
+        failReduction: (error) => this.#activation.failReduction(error),
+        prepareFull: (signal) => this.#animatedPreparation.reenter({ signal }),
+        rejectReentry: (error, result) =>
+          this.#activation.rejectAnimatedReentry(error, result),
+        reportTransitionFailure: (error, transition) =>
+          this.#reportFailure(normalizeRuntimeFailure(
+            "readiness-failure",
+            error,
+            { operation: `motion-policy-${transition}` }
+          ))
+      });
+      this.#realtime = realtime === undefined
+        ? null
+        : this.#createRealtimeDriver(realtime);
+      this.#effects.publishMetadataReady();
     } catch (error) {
+      disposeInvalidIntegratedStaticStore(staticStoreCandidate);
+      try {
+        staticResourceLease?.release();
+      } catch {
+        // Resource-host cleanup cannot replace the constructor failure.
+      }
       this.#catalog.dispose();
       throw error;
     }
-    const availability = Object.freeze({
-      workerAvailable: options.candidateFactory.availability.workerAvailable,
-      rendererAvailable: options.candidateFactory.availability.rendererAvailable
-    });
-    this.#diagnostics = options.diagnosticsSink ?? (() => undefined);
-    const hostMaxRuntimeBytes = options.hostMaxRuntimeBytes ?? null;
-    if (
-      hostMaxRuntimeBytes !== null &&
-      (!Number.isSafeInteger(hostMaxRuntimeBytes) ||
-        hostMaxRuntimeBytes <= 0)
-    ) {
-      this.#staticStore.dispose();
-      this.#catalog.dispose();
-      throw new RangeError("host runtime byte policy must be a positive integer");
-    }
-    this.#now = options.now ?? defaultIntegratedNow;
-    this.#timers = options.timers ?? DEFAULT_INTEGRATED_TIMERS;
-    this.#staticPreparation = new IntegratedStaticPreparation({
-      catalog: this.#catalog,
-      graph: this.#graph,
-      effects: this.#effects,
-      staticStore: this.#staticStore,
-      installResult: this.#installResult,
-      lifecycleSignal: this.#lifecycleController.signal,
-      now: this.#now,
-      timers: this.#timers,
-      stageReadyResult: (result) => {
-        this.#selectedRendition = null;
-        this.#readyResult = result;
-      }
-    });
-    this.#recovery = new IntegratedRecoveryCoordinator({
-      catalog: this.#catalog,
-      graph: this.#graph,
-      effects: this.#effects,
-      staticStore: this.#staticStore,
-      trace: this.#trace,
-      getActiveCandidate: () => this.#activeCandidate,
-      detachActiveCandidate: (candidate) => {
-        if (this.#activeCandidate === candidate) this.#activeCandidate = null;
-      },
-      getReadyResult: () => this.#readyResult,
-      registerRequest: (requestId) => this.#requests.register(requestId),
-      stageReadyResult: (result) => {
-        this.#selectedRendition = null;
-        this.#readyResult = result;
-      },
-      reportFailure: (failure) => this.#reportFailure(failure)
-    });
-    this.#animatedPreparation = new IntegratedAnimatedPreparation({
-      catalog: this.#catalog,
-      graph: this.#graph,
-      staticPreparation: this.#staticPreparation,
-      candidateFactory: options.candidateFactory,
-      availability,
-      hostMaxRuntimeBytes,
-      isDisposed: () => this.#disposed,
-      commitActivation: (commit) => this.#commitAnimatedActivation(commit),
-      rollbackActivation: (attempt) => this.#rollbackAnimatedActivation(attempt),
-      recoverActivation: (failure) => this.#recoverAnimatedActivation(failure),
-      reportFailure: (failure) => this.#reportFailure(failure)
-    });
-    this.#realtime = options.realtime === undefined
-      ? null
-      : this.#createRealtimeDriver(options.realtime);
-    this.#effects.publishMetadataReady();
   }
 
   public get catalog(): RuntimeAssetCatalog {
@@ -228,6 +320,52 @@ export class IntegratedPlayer {
 
   public getTrace(): IntegratedPlayerTrace {
     return this.#trace.getTrace();
+  }
+
+  public motionSnapshot(): Readonly<MotionPolicySnapshot> {
+    return this.#motion.snapshot();
+  }
+
+  public setMotionPolicy(
+    policy: MotionPolicy
+  ): Promise<Readonly<MotionPolicySnapshot>> {
+    if (this.#disposed) return Promise.reject(disposedError());
+    if (this.#recovery.active) {
+      return this.#recovery.settled().then(() => {
+        if (this.#disposed) throw disposedError();
+        return this.#operationGate.active
+          ? this.#operationGate.enqueue(() =>
+              this.#setMotionPolicyNow(policy)
+            )
+          : this.#setMotionPolicyNow(policy);
+      });
+    }
+    if (this.#operationGate.active) {
+      return this.#operationGate.enqueue(() => this.setMotionPolicy(policy));
+    }
+    return this.#setMotionPolicyNow(policy);
+  }
+
+  public setHostReducedMotion(
+    reduced: boolean
+  ): Promise<Readonly<MotionPolicySnapshot>> {
+    if (this.#disposed) return Promise.reject(disposedError());
+    if (this.#recovery.active) {
+      return this.#recovery.settled().then(() => {
+        if (this.#disposed) throw disposedError();
+        return this.#operationGate.active
+          ? this.#operationGate.enqueue(() =>
+              this.#setHostReducedMotionNow(reduced)
+            )
+          : this.#setHostReducedMotionNow(reduced);
+      });
+    }
+    if (this.#operationGate.active) {
+      return this.#operationGate.enqueue(() =>
+        this.setHostReducedMotion(reduced)
+      );
+    }
+    return this.#setHostReducedMotionNow(reduced);
   }
 
   /** Starts the player-owned M5.5 presentation clock after animated readiness. */
@@ -392,8 +530,8 @@ export class IntegratedPlayer {
     }
     if (this.#preparePromise !== null) return this.#preparePromise;
 
-    const operation = Promise.resolve().then(async () =>
-      this.#animatedPreparation.run(options)
+    const operation = Promise.resolve().then(() =>
+      this.#prepareLatestMotionMode(options)
     );
     this.#preparePromise = operation;
     void operation.finally(() => {
@@ -402,6 +540,61 @@ export class IntegratedPlayer {
       }
     }).catch(() => undefined);
     return operation;
+  }
+
+  async #prepareLatestMotionMode(
+    options: IntegratedPrepareOptions
+  ): Promise<Readonly<RuntimeReadinessResult>> {
+    for (;;) {
+      if (this.#disposed) throw disposedError();
+      const generation = this.#initialPreparationGeneration;
+      try {
+        return this.#motion.shouldPrepareReduced()
+          ? await this.#motion.prepareReduced(options)
+          : await this.#animatedPreparation.run(options);
+      } catch (error) {
+        if (
+          this.#disposed ||
+          options.signal?.aborted === true ||
+          generation === this.#initialPreparationGeneration
+        ) {
+          throw error;
+        }
+        // A policy change aborted this generation. Candidate/static owners
+        // settle their exact resources before the same public prepare promise
+        // starts the newest effective mode.
+      }
+    }
+  }
+
+  #invalidateInitialPreparation(): void {
+    if (this.#readyResult !== null || this.#preparePromise === null) return;
+    this.#initialPreparationGeneration += 1n;
+    this.#animatedPreparation.abort();
+  }
+
+  #setMotionPolicyNow(
+    policy: MotionPolicy
+  ): Promise<Readonly<MotionPolicySnapshot>> {
+    const initialPreparation = this.#readyResult === null
+      ? this.#preparePromise
+      : null;
+    return this.#motion.setPolicy(policy).then(async () => {
+      if (initialPreparation !== null) await initialPreparation;
+      return this.#motion.snapshot();
+    });
+  }
+
+  #setHostReducedMotionNow(
+    reduced: boolean
+  ): Promise<Readonly<MotionPolicySnapshot>> {
+    const initialPreparation = this.#readyResult === null
+      ? this.#preparePromise
+      : null;
+    return this.#motion.setHostReducedMotion(reduced).then(async () => {
+      if (initialPreparation !== null) await initialPreparation;
+      return this.#motion.snapshot();
+    });
   }
 
   public requestState(target: string): Promise<void> {
@@ -471,75 +664,21 @@ export class IntegratedPlayer {
   /** Await all recovery/static presentation work currently owned by the player. */
   public async settled(): Promise<void> {
     await this.#recovery.settled();
+    await this.#motion.settled();
   }
 
   public dispose(): Promise<void> {
+    if (this.#terminalOwnerCallbackDepth > 0) {
+      // This owner is already being retired by the active player transaction.
+      // Joining that transaction from inside its callback would self-await.
+      return Promise.resolve();
+    }
     if (this.#disposePromise !== null) return this.#disposePromise;
     const operation = this.#operationGate.active
       ? Promise.resolve().then(() => this.#disposeInternal())
       : this.#disposeInternal();
     this.#disposePromise = operation;
     return operation;
-  }
-
-  #commitAnimatedActivation(
-    commit: Readonly<IntegratedAnimatedActivationCommit>
-  ): Readonly<RuntimeReadinessResult> {
-    return this.#operationGate.run(() => {
-      // Visibility is the last fallible host step before graph activation.
-      this.#staticStore.revealAnimated();
-      throwIfAborted(commit.signal);
-
-      // Listener-visible readiness state is staged before graph effects.
-      this.#activeCandidate = commit.attempt;
-      this.#selectedRendition = commit.renditionId;
-      this.#readyResult = commit.result;
-      const animated = this.#graph.beginAnimated();
-      if (!sameGraphPresentation(
-        animated.presentation,
-        commit.expectedPresentation
-      )) {
-        throw new IntegratedPlaybackInvariantError(
-          "committed activation diverged from its prepared presentation"
-        );
-      }
-      commit.attempt.playback.synchronizeGraph(animated);
-      this.#effects.apply(animated, (presentation) => {
-        if (!sameGraphPresentation(
-          presentation,
-          commit.expectedPresentation
-        )) {
-          throw new IntegratedPlaybackInvariantError(
-            "activation draw diverged from its prepared presentation"
-          );
-        }
-        commit.attempt.drawInitial(commit.activation, presentation);
-      });
-      const traceState = commit.attempt.playback.traceState();
-      validatePlaybackTraceState(traceState);
-      this.#trace.recordOperation({
-        result: animated,
-        playback: traceState,
-        readiness: this.#effects.readiness
-      });
-      return commit.result;
-    });
-  }
-
-  #rollbackAnimatedActivation(attempt: IntegratedCandidateAttempt): void {
-    if (this.#activeCandidate !== attempt) return;
-    this.#activeCandidate = null;
-    this.#selectedRendition = null;
-    this.#readyResult = null;
-    this.#staticStore.coverCurrent();
-  }
-
-  async #recoverAnimatedActivation(
-    failure: Readonly<RuntimeFailure>
-  ): Promise<Readonly<RuntimeReadinessResult> | null> {
-    this.#startRecovery(failure);
-    await this.#recovery.settled();
-    return this.#readyResult;
   }
 
   #reportFailure(failure: Readonly<RuntimeFailure>): void {
@@ -553,6 +692,10 @@ export class IntegratedPlayer {
   async #disposeInternal(): Promise<void> {
     if (this.#disposed) return;
     this.#disposed = true;
+    // Capture the serialized motion tail after invalidating its transition.
+    // Await it only after aborting the media/recovery producers below: a
+    // reduced-to-full re-entry can otherwise be waiting on their work.
+    const motionDisposal = this.#motion.dispose();
     try {
       this.#realtime?.dispose();
     } catch (error) {
@@ -567,6 +710,7 @@ export class IntegratedPlayer {
     const recoveryDisposal = this.#recovery.dispose();
     await this.#preparePromise?.catch(() => undefined);
     await recoveryDisposal;
+    await motionDisposal;
 
     let traceState: Readonly<IntegratedPlaybackTraceState> | null = null;
     if (this.#activeCandidate !== null) {
@@ -588,7 +732,7 @@ export class IntegratedPlayer {
     this.#activeCandidate = null;
     for (const candidate of candidates) {
       try {
-        await candidate.dispose();
+        await this.#invokeTerminalOwner(() => candidate.dispose());
       } catch (error) {
         this.#reportFailure(normalizeRuntimeFailure(
           "readiness-failure",
@@ -631,12 +775,21 @@ export class IntegratedPlayer {
         ));
       }
       try {
-        await this.#staticStore.settled();
+        await this.#invokeTerminalOwner(() => this.#staticStore.settled());
       } catch (error) {
         this.#reportFailure(normalizeRuntimeFailure(
           "disposed",
           error,
           { operation: "static-store-settlement" }
+        ));
+      }
+      try {
+        this.#staticResourceLease?.release();
+      } catch {
+        this.#reportFailure(normalizeRuntimeFailure(
+          "disposed",
+          undefined,
+          { operation: "static-resource-release" }
         ));
       }
       try {
@@ -648,6 +801,15 @@ export class IntegratedPlayer {
           { operation: "catalog-disposal" }
         ));
       }
+    }
+  }
+
+  #invokeTerminalOwner(operation: () => unknown): unknown {
+    this.#terminalOwnerCallbackDepth += 1;
+    try {
+      return operation();
+    } finally {
+      this.#terminalOwnerCallbackDepth -= 1;
     }
   }
 
@@ -684,6 +846,39 @@ export class IntegratedPlayer {
     this.#recovery.start(failure);
   }
 
+  #stageStaticReadyResult(
+    result: Readonly<RuntimeReadinessResult> | null
+  ): void {
+    this.#selectedRendition = null;
+    this.#readyResult = result;
+    if (result !== null) this.#motion.stageReadyResult(result);
+  }
+
+}
+
+function disposeInvalidIntegratedStaticStore(value: unknown): void {
+  if (value === null || typeof value !== "object") return;
+  try {
+    const dispose = Reflect.get(value, "dispose");
+    if (typeof dispose === "function") dispose.call(value);
+  } catch {
+    // The original constructor validation/factory failure remains stable.
+  }
+}
+
+function snapshotIntegratedRealtimeOptions(
+  source: Readonly<IntegratedRealtimeDriverOptions>
+): Readonly<IntegratedRealtimeDriverOptions> {
+  const requestFrame = source.requestFrame;
+  const cancelFrame = source.cancelFrame;
+  const now = source.now;
+  const onUnderflow = source.onUnderflow;
+  return Object.freeze({
+    requestFrame,
+    cancelFrame,
+    ...(now === undefined ? {} : { now }),
+    ...(onUnderflow === undefined ? {} : { onUnderflow })
+  });
 }
 
 function normalizeAnimatedFailure(

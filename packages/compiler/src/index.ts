@@ -21,6 +21,15 @@ export {
 } from "./model.js";
 export type {
   CompileArtifact,
+  AlphaAuditSummary,
+  AlphaErrorStatistics,
+  AlphaFrameQualitySummary,
+  AlphaPixelLocation,
+  AlphaPolicyDecision,
+  AlphaQualitySummary,
+  CompositeBackground,
+  CompositeBackgroundQualitySummary,
+  CompositeQualitySummary,
   CompileBuildDetails,
   CompileContinuityDetails,
   CompileInvocationDetails,
@@ -28,17 +37,23 @@ export type {
   CompileResult,
   CompileSourceDetails,
   CompileStaticDetails,
+  CompileStaticValidationDetails,
   DirectArtifactOptions,
   DirectCompileOptions,
   MediaProbe,
   MediaProbeFrame,
+  NormalizedSourceProject,
   OpaqueRenditionTargetV01,
   ProcessLimits,
   ProjectArtifactOptions,
   ProjectCompileOptions,
   SourceDescriptorV01,
+  SourceAlphaPolicy,
+  SourceAvcProfileV02,
   SourceProjectV01,
+  SourceProjectV02,
   SourceRangeV01,
+  SourceRenditionTargetV02,
   SourceStateV01,
   SourceUnitV01,
   ToolProvenance
@@ -59,6 +74,24 @@ export type {
 export { compileDirectInput } from "./compile/direct-compiler.js";
 export { compileProjectFile } from "./compile/project-compiler.js";
 export {
+  bt709LimitedAlphaLuma,
+  bt709LimitedChroma2x2,
+  bt709LimitedLuma,
+  roundSignedRatio
+} from "./compile/bt709-limited.js";
+export type { Bt709LimitedChroma } from "./compile/bt709-limited.js";
+export {
+  packRgbaToPlanarYuv420
+} from "./compile/packed-yuv420.js";
+export type {
+  PackedPlanarYuv420Frame,
+  PackRgbaToPlanarYuv420Input,
+  PlanarYuv420Plane,
+  PlanarYuv420Planes
+} from "./compile/packed-yuv420.js";
+export { dilateTransparentRgba } from "./compile/rgba-dilation.js";
+export type { RgbaDilationInput } from "./compile/rgba-dilation.js";
+export {
   inspectAssetFile,
   unpackAssetFile,
   validateAssetFile,
@@ -67,6 +100,7 @@ export {
 export type {
   AssetInspection,
   AssetValidationReport,
+  AvcRenditionSummary,
   InspectedAccessUnitRange,
   OpaqueRenditionSummary,
   UnpackReport

@@ -221,10 +221,10 @@ function assertPathPayloadDigests(
   if (!exactReviewedToolPair) return;
   const front = parseFrontIndex(assetBytes);
   expect(front.unitBlobs.map(({ unit, sha256 }) => ({ unit, sha256 }))).toEqual([
-    { unit: "active-body", sha256: "c2fd5174e2f9c47c2cf11a1b0c12a5de5347a3913fdaa76d157c140e5dbc6bd1" },
-    { unit: "bridge", sha256: "ee2defcf835d5056d1df586da236d9d7eda3eb01c45a2e34a907bcecc1d86997" },
-    { unit: "idle-body", sha256: "6ebe837196c2720077e4bc5cb52ffeb949bb3ddf630b51283a3d0e5571a575ff" },
-    { unit: "intro", sha256: "53d088250bc22021f7d0f37694aa45e2ebaca42f5272c22bb3b80afcddf2b161" }
+    { unit: "active-body", sha256: "b5d0e3b4b7e58bee05219132c10f2b6f943077756b9dd3957df56a6bac715d00" },
+    { unit: "bridge", sha256: "6c3818115385f4f3564e86f1ecce673ab70caab83271a3c3ae8b17003378b698" },
+    { unit: "idle-body", sha256: "0ef19b31deb6d0414f51a0889ad1f4682aaa13a82123f26f9b3b4766fd9d6401" },
+    { unit: "intro", sha256: "939dccd46c88c96b1c5aa094d53e6f8b30fa3837ddd2b380a08c387d2e26e775" }
   ]);
   expect(front.staticBlobs.map(({ staticFrame, sha256 }) => ({
     staticFrame,

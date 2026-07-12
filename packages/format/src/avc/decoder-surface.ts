@@ -1,6 +1,13 @@
 import { FormatError } from "../errors.js";
 
-export const AVC_DECODER_SURFACE_PADDING = 16;
+/**
+ * Browser-owned decoded-frame allocation may extend the exact SPS coded
+ * surface by two macroblocks. Chromium 140 has been observed to expose a
+ * 16x16 SPS as a 32x34 coded frame while retaining the exact 16x16 visible rectangle.
+ * Reserve two complete macroblocks per axis so those implementation pixels
+ * remain bounded without becoming part of the wire/profile geometry.
+ */
+export const AVC_DECODER_SURFACE_PADDING = 32;
 
 /** Conservative browser-decoder coded-surface bound for one AVC dimension. */
 export function maximumAvcDecoderSurfaceDimension(dimension: number): number {

@@ -8,8 +8,8 @@ media or static-frame digests at runtime.
 
 | Fixture | Size | Whole-file SHA-256 | Coverage |
 | --- | ---: | --- | --- |
-| `reference-loop.rma` | 1593 bytes | `d2741ca678232bbd30e0c10d0572d83ed147222604b074a21e05a3440ef642f8` | One state and a three-frame `reference-rgba-v0` loop. |
-| `reference-graph.rma` | 5713 bytes | `91cd7336c518caba4ce5df07a13203fccaebb48ef756c7d41d6fd6441be68d95` | Loop, finite, and held bodies; portal, finish, and cut starts; locked and reversible transitions. |
+| `reference-loop.rma` | 1659 bytes | `6779e0bf79bc5645561ba7f64392abfe1abde73a1a562d29005c4eb8b566ac57` | One state, a three-frame `reference-rgba-v0` loop, and a strict stored-DEFLATE PNG fallback. |
+| `reference-graph.rma` | 5907 bytes | `a071fced2060668f09e356f70e8050a4160ef27bc964ff3739a6a2fdbc688270` | Loop, finite, and held bodies; all transition starts; and strict stored-DEFLATE PNG fallbacks. |
 
 Regenerate the binary fixtures from the repository root with:
 
@@ -32,14 +32,15 @@ files. `conformance.test.ts` covers:
 - false index lengths, record ordering, zero/huge sample sizes, and false key
   flags;
 - nonzero padding, gaps, overlaps, aliases, and trailing bytes;
-- profile mismatches, malformed reference-frame headers, and shallow PNG
-  envelope mismatches.
+- profile mismatches, malformed reference-frame headers, and strict PNG
+  chunk, CRC, zlib-envelope, and terminal-layout mismatches.
 
 `mutation-fuzz.test.ts` adds fixed-seed single-byte, slice, insertion, deletion,
 and structured header/index/padding/profile mutations. Every mutation must
 either return a recursively frozen valid layout or throw `FormatError`; a
 built-in exception is always a failure.
 
-M4 intentionally performs only structural checks. It does not claim H.264
-decodability, full PNG/CRC conformance, digest integrity, network integrity, or
-successful media decode.
+Complete-asset validation now enforces the restricted PNG chunk, CRC, and zlib
+envelope. It does not claim H.264 decodability, digest integrity, network
+integrity, or successful media decode; DEFLATE and scanline decoding are
+verified by the dedicated M6 format suites.

@@ -48,12 +48,7 @@ export async function runBoundedProcess(
     return await runSpawnedProcess(input, privateDirectory);
   } finally {
     if (privateDirectory !== undefined) {
-      await rm(privateDirectory, {
-        recursive: true,
-        force: true,
-        maxRetries: 3,
-        retryDelay: 50
-      });
+      await removePrivateWorkingDirectory(privateDirectory);
     }
   }
 }
@@ -276,19 +271,17 @@ function runSpawnedProcess(
           ));
         }
       });
-      inputStream.once("error", (error) => {
+      inputStream.once("error", () => {
         stop(new CompilerError(
           "IO_FAILED",
-          "Could not read compiler input spool",
-          { path, cause: error }
+          "Could not read compiler input spool"
         ));
       });
       inputStream.once("end", () => {
         if (streamedInputBytes !== length) {
           stop(new CompilerError(
             "IO_FAILED",
-            "Compiler input spool ended before the requested byte range",
-            { path }
+            "Compiler input spool ended before the requested byte range"
           ));
         }
       });
@@ -310,15 +303,39 @@ async function createPrivateWorkingDirectory(
     : input.privateWorkingDirectory;
   const root = configuration.root ?? tmpdir();
   const prefix = configuration.prefix ?? "rma-process-";
+  let directory: string | undefined;
   try {
-    const directory = await mkdtemp(join(root, prefix));
+    directory = await mkdtemp(join(root, prefix));
     await chmod(directory, 0o700);
     return directory;
-  } catch (error) {
+  } catch {
+    if (directory !== undefined) {
+      try {
+        await removePrivateWorkingDirectory(directory);
+      } catch {
+        // The stable creation failure below remains the public owner. Both
+        // failure paths deliberately omit compiler-private filesystem names.
+      }
+    }
     throw new CompilerError(
       "IO_FAILED",
-      "Could not create a private process working directory",
-      { path: root, cause: error }
+      "Could not create a private process working directory"
+    );
+  }
+}
+
+async function removePrivateWorkingDirectory(directory: string): Promise<void> {
+  try {
+    await rm(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 50
+    });
+  } catch {
+    throw new CompilerError(
+      "IO_FAILED",
+      "Could not remove a private process working directory"
     );
   }
 }

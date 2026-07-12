@@ -6,6 +6,7 @@ import {
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import type { EffectHost } from "./effect-host.js";
 import {
+  IntegratedPlaybackInvariantError,
   PlaybackFallbackError,
   type IntegratedStaticSurfaceStore,
   type IntegratedTimerHost
@@ -92,6 +93,11 @@ export class IntegratedStaticPreparation {
         this.#staticStore.installInitial({ state: initial, signal }),
         signal
       );
+      if (this.#staticStore.currentState() !== initial) {
+        throw new IntegratedPlaybackInvariantError(
+          "initial static store committed the wrong state"
+        );
+      }
       if (!this.#installApplied) {
         const snapshot = this.#graph.snapshot();
         const stagedInstall = Object.freeze({
@@ -121,6 +127,32 @@ export class IntegratedStaticPreparation {
     reports: readonly Readonly<RuntimeCandidateReport>[],
     signal: AbortSignal
   ): Promise<Readonly<RuntimeReadinessResult>> {
+    const requested = await this.#presentLatest(signal, true);
+    const ready = Object.freeze({
+      mode: "static" as const,
+      reason,
+      report: createRuntimeReadinessReport({
+        readiness: "staticReady",
+        selectedRendition: null,
+        candidates: reports
+      })
+    });
+    this.#stageReadyResult(ready);
+    const result = this.#graph.beginStatic(reason);
+    this.#effects.apply(result, (presentation) => {
+      assertIntegratedStaticPresentation(presentation, requested);
+      // #presentLatest(..., true) already atomically drew and covered these
+      // pixels. The effect-host callback is the ordering barrier only.
+    });
+    return ready;
+  }
+
+  /** Stage the newest accepted state's pixels without covering animation. */
+  public stageLatest(signal: AbortSignal): Promise<string> {
+    return this.#presentLatest(signal, false);
+  }
+
+  async #presentLatest(signal: AbortSignal, cover: boolean): Promise<string> {
     let requested: string;
     for (;;) {
       const latest = this.#graph.snapshot().requestedState;
@@ -139,10 +171,16 @@ export class IntegratedStaticPreparation {
       try {
         await raceIntegratedAbort(
           this.#staticStore.presentState(requested, {
-            signal: controller.signal
+            signal: controller.signal,
+            cover
           }),
           controller.signal
         );
+        if (this.#staticStore.currentState() !== requested) {
+          throw new IntegratedPlaybackInvariantError(
+            "static preparation store committed the wrong state"
+          );
+        }
       } catch (error) {
         if (signal.aborted) throw integratedAbortReason(signal);
         if (controller.signal.aborted) continue;
@@ -154,22 +192,7 @@ export class IntegratedStaticPreparation {
       if (controller.signal.aborted) continue;
       if (this.#graph.snapshot().requestedState === requested) break;
     }
-    const ready = Object.freeze({
-      mode: "static" as const,
-      reason,
-      report: createRuntimeReadinessReport({
-        readiness: "staticReady",
-        selectedRendition: null,
-        candidates: reports
-      })
-    });
-    this.#stageReadyResult(ready);
-    const result = this.#graph.beginStatic(reason);
-    this.#effects.apply(result, (presentation) => {
-      assertIntegratedStaticPresentation(presentation, requested);
-      this.#staticStore.coverCurrent();
-    });
-    return ready;
+    return requested;
   }
 
   /** Prevent an obsolete fallback surface from committing after newer intent. */

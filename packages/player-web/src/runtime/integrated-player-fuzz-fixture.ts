@@ -22,6 +22,7 @@ import {
   type IntegratedStaticSurfaceStore
 } from "./integrated-player.js";
 import { createIntegratedActivationPresentation } from "./integrated-player-support.js";
+import { createIntegratedResumePresentation } from "./integrated-player-support.js";
 import {
   assertFuzzMirrorResult,
   assertFuzzMirrorSnapshot,
@@ -75,6 +76,7 @@ export class FuzzCandidateFactory implements IntegratedCandidateFactory {
     const rendition = context.candidate.rendition.id;
     const session = new FuzzPlaybackSession({
       graph: context.catalog.graph,
+      graphSnapshot: context.graphSnapshot,
       rendition,
       preparationTargets: this.#preparationTargets,
       recorder: this.#recorder
@@ -93,7 +95,7 @@ export class FuzzCandidateFactory implements IntegratedCandidateFactory {
       playback: session,
       prepare: async () => {
         this.#recorder.push(`candidate:prepare:${rendition}`);
-        if (this.#failHigh && rendition === "opaque-high") {
+        if (this.#failHigh && context.candidate.rank === 0) {
           throw new RuntimePlaybackError(normalizeRuntimeFailure(
             "readiness-failure",
             "seeded high-candidate readiness failure",
@@ -102,10 +104,15 @@ export class FuzzCandidateFactory implements IntegratedCandidateFactory {
         }
       },
       prepareActivation: async (options) => {
-        const expected = createIntegratedActivationPresentation(
-          context.catalog.graph,
-          options.graphSnapshot
-        );
+        const expected = options.graphSnapshot.phase === "static"
+          ? createIntegratedResumePresentation(
+              context.catalog.graph,
+              options.graphSnapshot
+            )
+          : createIntegratedActivationPresentation(
+              context.catalog.graph,
+              options.graphSnapshot
+            );
         fuzzInvariant(
           fuzzPresentationTag(expected) ===
             fuzzPresentationTag(options.expectedPresentation),
@@ -148,8 +155,10 @@ export class FuzzCandidateFactory implements IntegratedCandidateFactory {
 
 export class FuzzPlaybackSession implements IntegratedPlaybackSession {
   public disposed = false;
+  public maximumGeneration = 1;
 
   readonly #mirror = new MotionGraphEngine();
+  readonly #mirrorEnabled: boolean;
   readonly #rendition: string;
   readonly #recorder: FuzzRecorder;
   readonly #requestTargets: string[] = [];
@@ -164,6 +173,7 @@ export class FuzzPlaybackSession implements IntegratedPlaybackSession {
 
   public constructor(options: {
     readonly graph: Readonly<ValidatedMotionGraph>;
+    readonly graphSnapshot: Readonly<MotionGraphSnapshot>;
     readonly rendition: string;
     readonly preparationTargets: readonly string[];
     readonly recorder: FuzzRecorder;
@@ -171,6 +181,7 @@ export class FuzzPlaybackSession implements IntegratedPlaybackSession {
     this.#rendition = options.rendition;
     this.#recorder = options.recorder;
     this.#mirror.install(options.graph);
+    this.#mirrorEnabled = options.graphSnapshot.phase !== "static";
     for (const target of options.preparationTargets) this.#mirror.request(target);
   }
 
@@ -191,6 +202,22 @@ export class FuzzPlaybackSession implements IntegratedPlaybackSession {
   }
 
   public assertSnapshot(snapshot: Readonly<MotionGraphSnapshot>): void {
+    if (!this.#mirrorEnabled) {
+      fuzzInvariant(
+        snapshot.requestedState !== null &&
+          snapshot.visualState !== null &&
+          (
+            (
+              snapshot.phase === "static" &&
+              snapshot.readiness === "static" &&
+              snapshot.requestedState === snapshot.visualState
+            ) || snapshot.readiness === "animated"
+          ),
+        this.#recorder,
+        "re-entry session lost its sole static/animated graph authority"
+      );
+      return;
+    }
     assertFuzzMirrorSnapshot(snapshot, this.#mirror.snapshot(), this.#recorder);
   }
 
@@ -199,6 +226,18 @@ export class FuzzPlaybackSession implements IntegratedPlaybackSession {
   }
 
   public synchronizeGraph(result: Readonly<MotionGraphResult>): void {
+    if (!this.#mirrorEnabled) {
+      if (result.operation === "tick") {
+        fuzzInvariant(
+          this.#predicted !== null,
+          this.#recorder,
+          "re-entry tick was not predicted by the sole graph"
+        );
+        assertFuzzMirrorResult(result, this.#predicted, this.#recorder);
+        this.#predicted = null;
+      }
+      return;
+    }
     let mirrored: Readonly<MotionGraphResult>;
     switch (result.operation) {
       case "begin-animated":
@@ -249,10 +288,13 @@ export class FuzzPlaybackSession implements IntegratedPlaybackSession {
       this.#recorder,
       "prediction leaked across ticks"
     );
-    const predicted = this.#mirror.tick({
+    const tickInput = Object.freeze({
       contentOrdinal: input.presentationOrdinal - 1n,
       routeReady: this.#routeReady
     });
+    const predicted = this.#mirrorEnabled
+      ? this.#mirror.tick(tickInput)
+      : input.previewTick(tickInput);
     const presentation = predicted.presentation;
     fuzzInvariant(
       presentation !== null && presentation.kind !== "static",
@@ -260,7 +302,13 @@ export class FuzzPlaybackSession implements IntegratedPlaybackSession {
       "animated tick predicted no animated presentation"
     );
     const path = pathFor(presentation);
-    if (this.#path !== null && path !== this.#path) this.#generation += 1;
+    if (this.#path !== null && path !== this.#path) {
+      this.#generation += 1;
+      this.maximumGeneration = Math.max(
+        this.maximumGeneration,
+        this.#generation
+      );
+    }
     this.#path = path;
     const media = mediaFor(
       presentation,
@@ -334,10 +382,15 @@ export class FuzzStaticStore implements IntegratedStaticSurfaceStore {
   public maximumActivePresentations = 0;
 
   readonly #recorder: FuzzRecorder;
+  readonly #inflatePath: "native" | "pure";
   #lastPresented = "idle";
 
-  public constructor(recorder: FuzzRecorder) {
+  public constructor(
+    recorder: FuzzRecorder,
+    inflatePath: "native" | "pure" = "pure"
+  ) {
     this.#recorder = recorder;
+    this.#inflatePath = inflatePath;
   }
 
   public async installInitial(options: {
@@ -346,17 +399,19 @@ export class FuzzStaticStore implements IntegratedStaticSurfaceStore {
   }): Promise<void> {
     throwIfAborted(options.signal);
     this.#lastPresented = options.state;
+    this.#recorder.push(`static:decode-model:${this.#inflatePath}:${options.state}`);
     this.#recorder.push(`static:install:${options.state}`);
   }
 
   public async validateAll(options: { readonly signal: AbortSignal }): Promise<void> {
     throwIfAborted(options.signal);
+    this.#recorder.push(`static:validate-model:${this.#inflatePath}`);
     this.#recorder.push("static:validate-all");
   }
 
   public async presentState(
     state: string,
-    options: { readonly signal: AbortSignal }
+    options: { readonly signal: AbortSignal; readonly cover?: boolean }
   ): Promise<void> {
     throwIfAborted(options.signal);
     this.activePresentations += 1;
@@ -366,6 +421,7 @@ export class FuzzStaticStore implements IntegratedStaticSurfaceStore {
     );
     try {
       this.#recorder.push(`static:present:${state}`);
+      this.#recorder.push(`static:decode-model:${this.#inflatePath}:${state}`);
       await Promise.resolve();
       throwIfAborted(options.signal);
       this.#lastPresented = state;
@@ -376,11 +432,15 @@ export class FuzzStaticStore implements IntegratedStaticSurfaceStore {
   }
 
   public coverCurrent(): void {
-    this.#recorder.recordDraw(`static:${this.#lastPresented}`);
+    this.#recorder.coverStatic(this.#lastPresented);
+  }
+
+  public currentState(): string | null {
+    return this.#lastPresented;
   }
 
   public revealAnimated(): void {
-    this.#recorder.push("static:reveal-animated");
+    this.#recorder.revealAnimated();
   }
 
   public async settled(): Promise<void> {}
@@ -388,6 +448,7 @@ export class FuzzStaticStore implements IntegratedStaticSurfaceStore {
   public dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.#recorder.disposePlane();
     this.#recorder.push("static:dispose");
   }
 }

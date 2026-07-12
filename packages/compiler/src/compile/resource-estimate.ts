@@ -1,26 +1,27 @@
 import type {
   AccessUnitInputV01,
+  AvcRenditionGeometry,
   DeclaredLimitsV01
 } from "@rendered-motion/format";
-import { maximumAvcDecodedRgbaBytes } from "@rendered-motion/format";
 
 import { CompilerError } from "../diagnostics.js";
-import type { SourceProjectV01 } from "../model.js";
+import type { NormalizedSourceProject } from "../model.js";
 
 const MAX_COMPILED_BYTES = 32 * 1024 * 1024;
 const MAX_RUNTIME_BYTES = 64 * 1024 * 1024;
 
 /** Compute the conservative M5 one-rendition runtime budget from real bytes. */
 export function estimateRuntimeLimits(
-  project: SourceProjectV01,
-  accessUnits: readonly AccessUnitInputV01[]
+  project: NormalizedSourceProject,
+  accessUnits: readonly AccessUnitInputV01[],
+  geometries: readonly Readonly<AvcRenditionGeometry>[]
 ): DeclaredLimitsV01 {
-  const decodedPixelBytes = Math.max(...project.renditions.map((rendition) =>
-    maximumAvcDecodedRgbaBytes(
-      rendition.codedWidth,
-      rendition.codedHeight
-    )
-  ));
+  if (geometries.length !== project.renditions.length || geometries.length < 1) {
+    throw new CompilerError("INPUT_INVALID", "Rendition geometry set is incomplete");
+  }
+  const decodedPixelBytes = Math.max(
+    ...geometries.map(({ codedRgbaBytes }) => codedRgbaBytes)
+  );
   const reversibleFrames = project.units.reduce((total, unit) =>
     checkedSum(
       total,

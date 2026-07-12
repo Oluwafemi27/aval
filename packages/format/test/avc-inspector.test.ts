@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { FormatError } from "../src/errors.js";
 import {
+  deriveAvcRenditionGeometry,
   inspectAvcAnnexBEncoderCandidateRendition,
   inspectAvcAnnexBRendition
 } from "../src/avc/index.js";
@@ -95,6 +96,46 @@ describe("AVC Annex B Constrained Baseline inspector", () => {
     expectProfileError(() => inspectAvcAnnexBRendition(
       validInspectionInput({ spsOptions: { bt709Limited: false } })
     ));
+  });
+
+  it("accepts only the exact expected decoded-storage SPS crop", () => {
+    const geometry = deriveAvcRenditionGeometry({
+      canvasWidth: 61,
+      canvasHeight: 59,
+      profile: "avc-annexb-opaque-v0",
+      codedWidth: 64,
+      codedHeight: 64,
+      colorRect: [0, 0, 61, 59]
+    });
+    expect(geometry.decodedStorageRect).toEqual([0, 0, 62, 60]);
+    const exact = validInspectionInput({
+      spsOptions: { crop: [0, 1, 0, 2] }
+    });
+    Object.assign(exact.profile, {
+      expectedDecodedStorageRect: geometry.decodedStorageRect
+    });
+    expect(inspectAvcAnnexBRendition(exact).parameterSet.crop).toEqual({
+      left: 0,
+      right: 2,
+      top: 0,
+      bottom: 4,
+      visibleWidth: 62,
+      visibleHeight: 60
+    });
+
+    const mismatch = validInspectionInput({
+      spsOptions: { crop: [0, 1, 0, 2] }
+    });
+    Object.assign(mismatch.profile, {
+      expectedDecodedStorageRect: [0, 0, 62, 62]
+    });
+    expectProfileError(() => inspectAvcAnnexBRendition(mismatch));
+
+    const nonzeroOrigin = validInspectionInput();
+    Object.assign(nonzeroOrigin.profile, {
+      expectedDecodedStorageRect: [2, 0, 62, 64]
+    });
+    expectProfileError(() => inspectAvcAnnexBRendition(nonzeroOrigin));
   });
 
   it("rejects NAL HRD declarations", () => {

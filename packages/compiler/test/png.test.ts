@@ -2,7 +2,10 @@ import { inflateSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
-import { encodeCanonicalRgbaPng } from "../src/compile/png.js";
+import {
+  encodeCanonicalRgbaPng,
+  inspectCanonicalRgbaPng
+} from "../src/compile/png.js";
 import { CompilerError } from "../src/diagnostics.js";
 
 function readUint32BE(bytes: Uint8Array, offset: number): number {
@@ -85,5 +88,24 @@ describe("canonical RGBA PNG", () => {
       offset += 12 + length;
     }
     throw new Error("IDAT not found");
+  });
+
+  it("reports strict format-owned decode facts", () => {
+    const rgba = Uint8Array.of(1, 2, 3, 4);
+    const png = encodeCanonicalRgbaPng({ width: 1, height: 1, rgba });
+    expect(inspectCanonicalRgbaPng({
+      png,
+      expectedWidth: 1,
+      expectedHeight: 1
+    })).toEqual({
+      profile: "strict-rgba-png-v0",
+      decoder: "format-pure-rfc1950-1951-v0",
+      width: 1,
+      height: 1,
+      pngBytes: png.byteLength,
+      zlibBytes: 16,
+      filteredBytes: 5,
+      rgbaBytes: 4
+    });
   });
 });

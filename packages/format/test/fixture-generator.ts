@@ -12,6 +12,7 @@ import type {
   UnitV01
 } from "../src/model.js";
 import { validManifest } from "./manifest-fixture.js";
+import { makeSizedTestPng } from "./png-test-fixture.js";
 
 const DECLARED_DIGEST = "0".repeat(64);
 
@@ -22,31 +23,9 @@ export interface GeneratedConformanceFixture {
   readonly sha256: string;
 }
 
-function writeUint32BE(
-  bytes: Uint8Array,
-  offset: number,
-  value: number
-): void {
-  bytes[offset] = Math.floor(value / 0x100_0000) & 0xff;
-  bytes[offset + 1] = Math.floor(value / 0x1_0000) & 0xff;
-  bytes[offset + 2] = Math.floor(value / 0x100) & 0xff;
-  bytes[offset + 3] = value & 0xff;
-}
-
-/** A deterministic, shallow-M4 PNG envelope with deliberately unchecked CRC. */
+/** A deterministic strict stored-DEFLATE PNG fallback. */
 function staticPng(marker: number): Uint8Array {
-  const bytes = new Uint8Array(33);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-  writeUint32BE(bytes, 8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  writeUint32BE(bytes, 16, 2);
-  writeUint32BE(bytes, 20, 2);
-  bytes[24] = 8;
-  bytes[25] = 6;
-  // Bytes 29..32 are the IHDR CRC in a complete PNG. M4 intentionally does
-  // not validate it, so the marker also makes that scope boundary explicit.
-  bytes[32] = marker & 0xff;
-  return bytes;
+  return makeSizedTestPng(2, 2, 0, marker);
 }
 
 function referenceRgba(ordinal: number): Uint8Array {

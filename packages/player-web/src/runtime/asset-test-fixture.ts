@@ -1,4 +1,6 @@
 import {
+  adler32,
+  crc32,
   encodeReferenceFrame,
   writeCanonicalAsset,
   type CanonicalAssetInputV01,
@@ -18,6 +20,7 @@ const DELTA_ACCESS_UNIT = Object.freeze([
 
 export interface OpaqueTestAssetOptions {
   readonly corruptIntroDelta?: boolean;
+  readonly pixelAspect?: readonly [number, number];
 }
 
 export function opaqueTestRendition(
@@ -55,7 +58,7 @@ export function createOpaqueTestAsset(
         width: 64,
         height: 64,
         fit: "contain",
-        pixelAspect: [1, 1],
+        pixelAspect: options.pixelAspect ?? [1, 1],
         colorSpace: "srgb"
       },
       frameRate: { numerator: 30, denominator: 1 },
@@ -121,7 +124,7 @@ export function createOpaqueTestAsset(
       )
     ],
     staticPayloads: [
-      { staticFrame: "idle", bytes: shallowPng(64, 64) }
+      { staticFrame: "idle", bytes: strictTestPng(64, 64) }
     ]
   };
 
@@ -262,8 +265,8 @@ export function createIntegratedOpaqueTestAsset(
     },
     accessUnits,
     staticPayloads: [
-      { staticFrame: "hover-static", bytes: shallowPng(64, 64) },
-      { staticFrame: "idle-static", bytes: shallowPng(64, 64) }
+      { staticFrame: "hover-static", bytes: strictTestPng(64, 64) },
+      { staticFrame: "idle-static", bytes: strictTestPng(64, 64) }
     ]
   });
 }
@@ -399,7 +402,7 @@ export function createIntegratedPathTestAsset(): Uint8Array {
     accessUnits,
     staticPayloads: staticFrames.map(({ id }) => ({
       staticFrame: id,
-      bytes: shallowPng(64, 64)
+      bytes: strictTestPng(64, 64)
     }))
   });
 }
@@ -473,7 +476,7 @@ export function createReferenceOnlyTestAsset(): Uint8Array {
       bytes: encodeReferenceFrame({ width: 2, height: 2, frameIndex, rgba })
     })),
     staticPayloads: [
-      { staticFrame: "idle-static", bytes: shallowPng(2, 2) }
+      { staticFrame: "idle-static", bytes: strictTestPng(2, 2) }
     ]
   });
 }
@@ -581,16 +584,76 @@ function deltaAccessUnit(frameNum: number): readonly number[] {
   return [0, 0, 0, 1, 9, 48, 0, 0, 1, 97, ...slice];
 }
 
-function shallowPng(width: number, height: number): Uint8Array {
-  const bytes = new Uint8Array(33);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-  writeUint32Be(bytes, 8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  writeUint32Be(bytes, 16, width);
-  writeUint32Be(bytes, 20, height);
-  bytes.set([8, 6, 0, 0, 0], 24);
-  bytes.set([0xde, 0xad, 0xbe, 0xef], 29);
-  return bytes;
+export function strictTestPng(width: number, height: number): Uint8Array {
+  const stride = width * 4;
+  const filtered = new Uint8Array(height * (stride + 1));
+  for (let row = 0; row < height; row += 1) {
+    const rowStart = row * (stride + 1) + 1;
+    for (let pixel = 0; pixel < width; pixel += 1) {
+      filtered[rowStart + pixel * 4 + 3] = 0xff;
+    }
+  }
+  const zlib = storedZlib(filtered);
+  const ihdr = new Uint8Array(13);
+  writeUint32Be(ihdr, 0, width);
+  writeUint32Be(ihdr, 4, height);
+  ihdr.set([8, 6, 0, 0, 0], 8);
+  return concatenate([
+    Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a),
+    pngChunk("IHDR", ihdr),
+    pngChunk("sRGB", Uint8Array.of(0)),
+    pngChunk("IDAT", zlib),
+    pngChunk("IEND", new Uint8Array())
+  ]);
+}
+
+function storedZlib(bytes: Uint8Array): Uint8Array {
+  const blockCount = Math.max(1, Math.ceil(bytes.byteLength / 65_535));
+  const result = new Uint8Array(2 + blockCount * 5 + bytes.byteLength + 4);
+  result.set([0x78, 0x01], 0);
+  let source = 0;
+  let target = 2;
+  for (let block = 0; block < blockCount; block += 1) {
+    const length = Math.min(65_535, bytes.byteLength - source);
+    result[target] = block === blockCount - 1 ? 1 : 0;
+    result[target + 1] = length & 0xff;
+    result[target + 2] = (length >>> 8) & 0xff;
+    const complement = (~length) & 0xffff;
+    result[target + 3] = complement & 0xff;
+    result[target + 4] = (complement >>> 8) & 0xff;
+    target += 5;
+    result.set(bytes.subarray(source, source + length), target);
+    source += length;
+    target += length;
+  }
+  writeUint32Be(result, target, adler32(bytes));
+  return result;
+}
+
+function pngChunk(type: string, payload: Uint8Array): Uint8Array {
+  const result = new Uint8Array(payload.byteLength + 12);
+  writeUint32Be(result, 0, payload.byteLength);
+  for (let index = 0; index < 4; index += 1) {
+    result[4 + index] = type.charCodeAt(index);
+  }
+  result.set(payload, 8);
+  writeUint32Be(
+    result,
+    8 + payload.byteLength,
+    crc32(result.subarray(4, 8 + payload.byteLength))
+  );
+  return result;
+}
+
+function concatenate(parts: readonly Uint8Array[]): Uint8Array {
+  const length = parts.reduce((total, part) => total + part.byteLength, 0);
+  const result = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.byteLength;
+  }
+  return result;
 }
 
 function writeUint32Be(bytes: Uint8Array, offset: number, value: number): void {

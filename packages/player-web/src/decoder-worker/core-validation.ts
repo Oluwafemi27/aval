@@ -272,9 +272,7 @@ export function normalizeCoreError(
   if (error instanceof DecoderWorkerCoreError) {
     return error;
   }
-  if (error instanceof Error && error.message.length > 0) {
-    return new DecoderWorkerCoreError(code, `${message}: ${error.message}`, fatal);
-  }
+  // Browser codec exceptions and driver text are intentionally not exposed.
   return new DecoderWorkerCoreError(code, message, fatal);
 }
 

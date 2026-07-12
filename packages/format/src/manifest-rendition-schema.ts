@@ -1,3 +1,5 @@
+import { deriveAvcRenditionGeometryAtPath } from "./avc/rendition-geometry.js";
+import { FormatError } from "./errors.js";
 import {
   boundedArray,
   digest,
@@ -23,8 +25,6 @@ import type {
 } from "./model.js";
 
 const MAX_CANVAS_DIMENSION = 512;
-const MAX_CODED_DIMENSION = 2_048;
-const MAX_CODED_PIXELS = 1_100_000;
 const MAX_PIXEL_ASPECT_TERM = 10_000;
 const MAX_FRAME_RATE = 60;
 const MAX_FRAME_RATE_DENOMINATOR = 1_001;
@@ -90,6 +90,40 @@ export function cloneRenditions(
     cloneRendition(entry, canvas, `${path}[${String(index)}]`)
   );
   requireIdOrder(renditions, path);
+  let productionProfile:
+    | "avc-annexb-opaque-v0"
+    | "avc-annexb-packed-alpha-v0"
+    | undefined;
+  for (let index = 0; index < renditions.length; index += 1) {
+    const rendition = renditions[index]!;
+    if (rendition.profile === "reference-rgba-v0") continue;
+    const common = {
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      codedWidth: rendition.codedWidth,
+      codedHeight: rendition.codedHeight,
+      colorRect: rendition.alphaLayout.colorRect
+    } as const;
+    deriveAvcRenditionGeometryAtPath(
+      rendition.profile === "avc-annexb-packed-alpha-v0"
+        ? {
+            ...common,
+            profile: rendition.profile,
+            alphaRect: rendition.alphaLayout.alphaRect
+          }
+        : { ...common, profile: rendition.profile },
+      `${path}[${String(index)}]`
+    );
+    if (productionProfile === undefined) {
+      productionProfile = rendition.profile;
+    } else if (productionProfile !== rendition.profile) {
+      throw new FormatError(
+        "PROFILE_INVALID",
+        "all production AVC renditions must use one alpha class",
+        { path }
+      );
+    }
+  }
   return Object.freeze(renditions);
 }
 
@@ -227,17 +261,12 @@ function cloneRenditionCommon(
   const id = identifier(input.id, `${path}.id`);
   const codedWidth = positiveInteger(
     input.codedWidth,
-    `${path}.codedWidth`,
-    MAX_CODED_DIMENSION
+    `${path}.codedWidth`
   );
   const codedHeight = positiveInteger(
     input.codedHeight,
-    `${path}.codedHeight`,
-    MAX_CODED_DIMENSION
+    `${path}.codedHeight`
   );
-  if (codedWidth * codedHeight > MAX_CODED_PIXELS) {
-    invalid(path, `coded pixel count must be at most ${String(MAX_CODED_PIXELS)}`);
-  }
   return { id, codedWidth, codedHeight };
 }
 

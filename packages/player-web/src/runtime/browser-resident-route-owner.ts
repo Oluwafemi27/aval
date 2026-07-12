@@ -13,7 +13,7 @@ import type {
   IntegratedPlaybackTickContext,
   IntegratedPreparedContentTick
 } from "./integrated-player-contracts.js";
-import type { OpaqueCandidateReadinessSessionInput } from "./opaque-candidate-factory.js";
+import type { AvcCandidateReadinessSessionInput } from "./avc-candidate-factory.js";
 import type { PathScheduler } from "./path-scheduler.js";
 import {
   ReversiblePresentationCoordinator,
@@ -44,7 +44,7 @@ interface BrowserStagedEndpoint {
 
 /** Owns every resident cut and reversible presentation state machine. */
 export class BrowserResidentRouteOwner {
-  readonly #candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
+  readonly #candidate: Readonly<AvcCandidateReadinessSessionInput>;
   readonly #lane: BrowserMediaOperationLane;
   readonly #scheduler: () => PathScheduler;
   readonly #protectedStreamingSlot: () => number | null;
@@ -62,7 +62,7 @@ export class BrowserResidentRouteOwner {
   #disposed = false;
 
   public constructor(options: {
-    readonly candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
+    readonly candidate: Readonly<AvcCandidateReadinessSessionInput>;
     readonly lane: BrowserMediaOperationLane;
     readonly scheduler: () => PathScheduler;
     readonly protectedStreamingSlot: () => number | null;

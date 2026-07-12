@@ -80,6 +80,7 @@ export function validateCompiledManifestV01(
     const limits = cloneDeclaredLimits(
       input.limits,
       renditions,
+      canvas,
       budgets,
       "limits"
     );

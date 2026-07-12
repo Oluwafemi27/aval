@@ -63,7 +63,10 @@ interface PendingSample {
   readonly sample: DecoderWorkerSample;
 }
 
-interface SubmittedSample extends PendingSample {}
+interface SubmittedSample {
+  readonly generation: number;
+  readonly sample: Omit<DecoderWorkerSample, "data">;
+}
 
 interface MutableMetrics {
   configureCalls: number;
@@ -280,7 +283,10 @@ export class DecoderWorkerCore {
         );
       }
       validateSupportResultConfiguration(support.config, command.config);
-      this.#inspector = this.#inspectorFactory(command.avcProfile);
+      this.#inspector = this.#inspectorFactory(
+        command.avcProfile,
+        command.expectedOutput
+      );
       decoder = this.#decoderFactory({
         output: (frame) => {
           this.#handleOutput(frame);
@@ -486,7 +492,10 @@ export class DecoderWorkerCore {
         return;
       }
 
-      this.#submittedByTimestamp.set(sample.timestamp, pending);
+      this.#submittedByTimestamp.set(sample.timestamp, Object.freeze({
+        generation: pending.generation,
+        sample: submittedSampleMetadata(sample)
+      }));
       this.#metrics.submittedChunks += 1;
       try {
         this.#decoder.decode(chunk);
@@ -805,6 +814,21 @@ export class DecoderWorkerCore {
     }
   }
 
+}
+
+function submittedSampleMetadata(
+  sample: DecoderWorkerSample
+): Readonly<Omit<DecoderWorkerSample, "data">> {
+  return Object.freeze({
+    ordinal: sample.ordinal,
+    unitId: sample.unitId,
+    unitInstance: sample.unitInstance,
+    unitFrame: sample.unitFrame,
+    unitFrameCount: sample.unitFrameCount,
+    type: sample.type,
+    timestamp: sample.timestamp,
+    duration: sample.duration
+  });
 }
 
 function defaultDecoderFactory(init: VideoDecoderInit): WorkerVideoDecoderAdapter {

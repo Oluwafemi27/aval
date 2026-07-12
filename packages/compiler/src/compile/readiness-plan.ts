@@ -4,7 +4,10 @@ import { CompilerError } from "../diagnostics.js";
 import type { SourceProjectV01 } from "../model.js";
 
 /** Derive the minimal route set required before animated initial readiness. */
-export function deriveReadiness(project: SourceProjectV01): ReadinessV01 {
+export function deriveReadiness(project: Pick<
+  SourceProjectV01,
+  "initialState" | "states" | "edges"
+>): ReadinessV01 {
   const states = new Map(project.states.map((state) => [state.id, state]));
   const initial = states.get(project.initialState);
   if (initial === undefined) {

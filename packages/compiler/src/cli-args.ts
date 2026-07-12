@@ -1,7 +1,7 @@
 import { isAbsolute } from "node:path";
 
 import { CompilerError } from "./diagnostics.js";
-import type { RationalV01 } from "./model.js";
+import type { RationalV01, SourceAlphaPolicy } from "./model.js";
 
 interface CliBaseArguments {
   readonly json: boolean;
@@ -16,6 +16,7 @@ export interface CompileCliArguments extends CliBaseArguments {
   readonly fps?: RationalV01;
   readonly canvas?: readonly [number, number];
   readonly bitrate?: { readonly average: number; readonly peak: number };
+  readonly alpha?: SourceAlphaPolicy;
   readonly frames?: { readonly firstNumber: number; readonly frameCount: number };
   readonly ffmpegPath?: string;
   readonly ffprobePath?: string;
@@ -73,6 +74,7 @@ const VALUE_FLAGS = new Set([
   "--fps",
   "--canvas",
   "--bitrate",
+  "--alpha",
   "--frames",
   "--ffmpeg",
   "--ffprobe"
@@ -170,7 +172,7 @@ function parseRaw(tokens: readonly string[]): RawCommand {
 function parseCompile(raw: RawCommand): CompileCliArguments {
   allowFlags(raw, [
     "--out", "--report", "--loop", "--fps", "--canvas", "--bitrate",
-    "--frames", "--ffmpeg", "--ffprobe", "--json", "--force",
+    "--alpha", "--frames", "--ffmpeg", "--ffprobe", "--json", "--force",
     "--normalize-vfr"
   ]);
   const input = onePositional(raw, "compile");
@@ -182,7 +184,7 @@ function parseCompile(raw: RawCommand): CompileCliArguments {
   }
   if (!direct) {
     for (const flag of [
-      "--loop", "--fps", "--canvas", "--bitrate", "--frames",
+      "--loop", "--fps", "--canvas", "--bitrate", "--alpha", "--frames",
       "--normalize-vfr"
     ]) {
       if (raw.values.has(flag) || raw.booleans.has(flag)) {
@@ -234,6 +236,9 @@ function parseCompile(raw: RawCommand): CompileCliArguments {
     ...(raw.values.has("--bitrate")
       ? { bitrate: parseBitrate(raw.values.get("--bitrate")!) }
       : {}),
+    ...(direct
+      ? { alpha: parseAlphaPolicy(raw.values.get("--alpha") ?? "auto") }
+      : {}),
     ...(frames === undefined ? {} : { frames }),
     ...(ffmpegPath === undefined ? {} : { ffmpegPath }),
     ...(ffprobePath === undefined ? {} : { ffprobePath }),
@@ -241,6 +246,13 @@ function parseCompile(raw: RawCommand): CompileCliArguments {
     force: raw.booleans.has("--force"),
     json: raw.booleans.has("--json")
   });
+}
+
+function parseAlphaPolicy(value: string): SourceAlphaPolicy {
+  if (value !== "auto" && value !== "opaque" && value !== "packed") {
+    usage("--alpha must be auto, opaque, or packed");
+  }
+  return value;
 }
 
 function parseOneInput(

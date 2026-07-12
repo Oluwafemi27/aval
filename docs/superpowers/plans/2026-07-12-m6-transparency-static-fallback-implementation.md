@@ -652,11 +652,14 @@ Extend deterministic fake-backend tests and browser-context tests for:
 - context loss and allocation failure; and
 - exact frame close on every path.
 
-Update `resource-plan.ts` with checked static PNG copy, IDAT/zlib, filtered
-scanline, current/incoming static, and two canvas backing allocations. Use the
-larger native/pure decode peak and avoid double-charging transferred RGBA.
-Retain coded dimensions for decoder/texture/staging terms. Add a snapshot that
-reconciles every live allocation with the plan.
+Update `resource-plan.ts` with checked static PNG copy, validator-owned and
+native-copied zlib, native output/chunk, pure filtered output, unfiltered RGBA,
+current/incoming bitmap, and two rounded canvas backing allocations. Use the
+larger native/pure simultaneous working peak. Charge coded renderer staging
+alongside recovery decode and charge transferred-sample plus decoder-owned
+encoded windows separately. Retain coded dimensions for decoder/texture/
+staging terms. Admit a static-only baseline before decode and add a snapshot
+that reconciles every live allocation with the plan.
 
 Run:
 

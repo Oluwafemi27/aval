@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execPath } from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -12,6 +13,7 @@ import {
 } from "../src/cli-output.js";
 import { CompilerError, type CompilerErrorCode } from "../src/diagnostics.js";
 import type { CompileArtifact } from "../src/model.js";
+import { runBoundedProcess } from "../src/process-runner.js";
 
 const roots: string[] = [];
 
@@ -104,6 +106,55 @@ describe("programmatic CLI", () => {
     expect(capture.stdout()).toBe("");
   });
 
+  it.each([false, true])(
+    "omits private stdin spool paths from %s CLI diagnostics",
+    async (json) => {
+      const root = await temporaryRoot();
+      const capture = capturedIo();
+      const privatePath = join(root, "customer-project-secret.yuv");
+      const status = await runCli([
+        "compile", "source.mp4", "--loop", "0:2", "--out", "asset.rma",
+        ...(json ? ["--json"] : [])
+      ], {
+        cwd: root,
+        io: capture.io,
+        compileDependencies: {
+          buildDirectArtifact: async () => {
+            await runBoundedProcess({
+              executable: execPath,
+              arguments: ["-e", "setInterval(() => {}, 1000)"],
+              cwd: root,
+              limits: {
+                timeoutMs: 2_000,
+                maxStdoutBytes: 1_024,
+                maxStderrBytes: 1_024
+              },
+              stdinFile: { path: privatePath, offset: 0, length: 1 }
+            });
+            throw new Error("unreachable after a missing private spool");
+          },
+          buildProjectArtifact: async () => {
+            throw new Error("wrong compiler");
+          }
+        }
+      });
+      expect(status).toBe(6);
+      expect(capture.stdout()).toBe("");
+      expect(capture.stderr()).toContain("IO_FAILED");
+      expect(capture.stderr()).not.toContain(root);
+      expect(capture.stderr()).not.toContain("customer-project-secret");
+      if (json) {
+        expect(JSON.parse(capture.stderr())).toEqual({
+          severity: "error",
+          code: "IO_FAILED",
+          message: "Could not read compiler input spool"
+        });
+      } else {
+        expect(capture.stderr()).toContain("Could not read compiler input spool");
+      }
+    }
+  );
+
   it("bounds multibyte diagnostic fields before canonical serialization", async () => {
     const root = await temporaryRoot();
     const capture = capturedIo();
@@ -163,6 +214,8 @@ describe("programmatic CLI", () => {
       ["FFMPEG_NOT_FOUND", 3],
       ["PROCESS_TIMEOUT", 3],
       ["FFMPEG_FAILED", 4],
+      ["ALPHA_POLICY_REJECTED", 4],
+      ["ALPHA_QUALITY_REJECTED", 4],
       ["OPAQUE_ONLY_M5", 4],
       ["ASSET_INVALID", 5],
       ["OUTPUT_LIMIT", 5],

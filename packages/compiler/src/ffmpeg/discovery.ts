@@ -8,6 +8,8 @@ import {
 } from "node:path";
 import { cwd } from "node:process";
 
+import { deriveAvcRenditionGeometryFromVisible } from "@rendered-motion/format";
+
 import { CompilerError } from "../diagnostics.js";
 import {
   fingerprintRegularFile,
@@ -20,6 +22,7 @@ import {
 } from "../model.js";
 import { runBoundedProcess } from "../process-runner.js";
 import { sha256Hex } from "../compile/hash.js";
+import { packRgbaToPlanarYuv420 } from "../compile/packed-yuv420.js";
 import { createEncodeAvcUnitInvocation } from "./encode-unit.js";
 
 const VERSION_OUTPUT_LIMIT = 256 * 1024;
@@ -175,22 +178,12 @@ async function runCalibration(
   executable: string,
   signal?: AbortSignal
 ): Promise<string> {
-  const rgba = new Uint8Array(16 * 16 * 4 * 2);
-  for (let frame = 0; frame < 2; frame += 1) {
-    for (let pixel = 0; pixel < 16 * 16; pixel += 1) {
-      const offset = (frame * 16 * 16 + pixel) * 4;
-      rgba[offset] = (pixel * 17 + frame * 31) & 0xff;
-      rgba[offset + 1] = (pixel * 7 + frame * 47) & 0xff;
-      rgba[offset + 2] = (pixel * 3 + frame * 59) & 0xff;
-      rgba[offset + 3] = 255;
-    }
-  }
-  const invocation = createCalibrationInvocation(executable);
+  const calibration = createCalibrationPayload(executable);
   const result = await runBoundedProcess({
     executable,
-    arguments: invocation.arguments,
-    cwd: cwd(),
-    stdin: rgba,
+    arguments: calibration.invocation.arguments,
+    cwd: calibration.invocation.cwd,
+    stdin: calibration.bytes,
     limits: {
       timeoutMs: Math.min(DEFAULT_PROBE_TIMEOUT_MS, 5_000),
       maxStdoutBytes: 1024 * 1024,
@@ -203,22 +196,50 @@ async function runCalibration(
 }
 
 export function createCalibrationInvocation(executable = "ffmpeg") {
-  return createEncodeAvcUnitInvocation({
+  return createCalibrationPayload(executable).invocation;
+}
+
+/** Build deterministic compiler-packed bytes for the exact production encoder. */
+function createCalibrationPayload(executable: string) {
+  const geometry = deriveAvcRenditionGeometryFromVisible({
+    canvasWidth: 15,
+    canvasHeight: 17,
+    profile: "avc-annexb-packed-alpha-v0",
+    visibleWidth: 15,
+    visibleHeight: 17
+  });
+  const packed = Array.from({ length: 2 }, (_, frame) => {
+    const rgba = new Uint8Array(15 * 17 * 4);
+    for (let pixel = 0; pixel < 15 * 17; pixel += 1) {
+      const offset = pixel * 4;
+      rgba[offset] = (pixel * 17 + frame * 31) & 0xff;
+      rgba[offset + 1] = (pixel * 7 + frame * 47) & 0xff;
+      rgba[offset + 2] = (pixel * 3 + frame * 59) & 0xff;
+      rgba[offset + 3] = (pixel * 11 + frame * 73) & 0xff;
+    }
+    return packRgbaToPlanarYuv420({ geometry, rgba }).data;
+  });
+  const frameBytes = packed[0]!.byteLength;
+  const bytes = new Uint8Array(frameBytes * packed.length);
+  packed.forEach((frame, index) => bytes.set(frame, index * frameBytes));
+  const invocation = createEncodeAvcUnitInvocation({
     source: {
-      type: "raw-rgba",
-      path: "/calibration/canonical.rgba",
-      width: 16,
-      height: 16,
-      frameRate: { numerator: 30, denominator: 1 }
+      type: "raw-yuv420p",
+      path: join(cwd(), "rma-compiler-packed-calibration.yuv"),
+      width: geometry.codedWidth,
+      height: geometry.codedHeight,
+      frameRate: { numerator: 30, denominator: 1 },
+      frameBytes
     },
     startFrame: 0,
     endFrame: 2,
-    frameRate: { numerator: 30, denominator: 1 },
-    codedWidth: 16,
-    codedHeight: 16,
+    codedWidth: geometry.codedWidth,
+    codedHeight: geometry.codedHeight,
+    decodedStorageRect: geometry.decodedStorageRect,
     bitrate: { average: 300_000, peak: 600_000 },
     executable
   });
+  return Object.freeze({ invocation, bytes });
 }
 
 function requireSameTool(

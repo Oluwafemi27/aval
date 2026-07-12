@@ -34,7 +34,11 @@ export interface RuntimeFailureContext {
   readonly operation?: string;
   readonly sourceCode?: string;
   readonly sourcePath?: string;
+  readonly alphaStatistic?: string;
+  readonly policyPhase?: string;
   readonly offset?: number;
+  readonly width?: number;
+  readonly height?: number;
   readonly generation?: number;
   readonly ordinal?: number;
   readonly localFrame?: number;
@@ -50,7 +54,7 @@ export interface RuntimeFailure {
 const DEFAULT_FAILURE_MESSAGES: Readonly<Record<RuntimeFailureCode, string>> =
   Object.freeze({
     "invalid-asset": "installed animation asset is invalid",
-    "unsupported-profile": "opaque animation profile is unsupported",
+    "unsupported-profile": "AVC animation profile is unsupported",
     "resource-rejection": "animation resource budget was rejected",
     "readiness-failure": "animation readiness failed",
     "worker-decode-failure": "animation decoder worker failed",
@@ -167,7 +171,11 @@ function normalizeContext(
       operation?: string;
       sourceCode?: string;
       sourcePath?: string;
+      alphaStatistic?: string;
+      policyPhase?: string;
       offset?: number;
+      width?: number;
+      height?: number;
       generation?: number;
       ordinal?: number;
       localFrame?: number;
@@ -185,7 +193,11 @@ function normalizeContext(
     copyText(context, normalized, "operation");
     copyText(context, normalized, "sourceCode");
     copyText(context, normalized, "sourcePath");
+    copyText(context, normalized, "alphaStatistic");
+    copyText(context, normalized, "policyPhase");
     copyInteger(context, normalized, "offset");
+    copyInteger(context, normalized, "width");
+    copyInteger(context, normalized, "height");
     copyInteger(context, normalized, "generation");
     copyInteger(context, normalized, "ordinal");
     copyInteger(context, normalized, "localFrame");
@@ -211,6 +223,8 @@ type TextContextKey = {
 
 type IntegerContextKey =
   | "offset"
+  | "width"
+  | "height"
   | "generation"
   | "ordinal"
   | "localFrame"

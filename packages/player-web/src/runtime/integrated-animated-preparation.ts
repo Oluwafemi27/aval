@@ -21,6 +21,8 @@ import {
 } from "./errors.js";
 import {
   createIntegratedActivationPresentation,
+  createIntegratedResumePresentation,
+  DEFAULT_INTEGRATED_PREPARATION_TIMEOUT_MS,
   integratedAbortError,
   integratedAbortReason,
   integratedDisposedError,
@@ -45,11 +47,9 @@ import {
   type RuntimeReadinessResult
 } from "./model.js";
 import {
-  createOpaqueRenditionCandidates,
-  inspectOpaqueRenditionCandidate
-} from "./rendition-selection.js";
-
-const DEFAULT_PREPARATION_TIMEOUT_MS = 5_000;
+  createAvcRenditionCandidates,
+  inspectAvcRenditionCandidate
+} from "./avc-rendition-selection.js";
 
 export interface IntegratedAnimatedActivationCommit {
   readonly attempt: IntegratedCandidateAttempt;
@@ -69,6 +69,9 @@ interface IntegratedAnimatedPreparationOptions {
   readonly hostMaxRuntimeBytes: number | null;
   readonly isDisposed: () => boolean;
   readonly commitActivation: (
+    commit: Readonly<IntegratedAnimatedActivationCommit>
+  ) => Readonly<RuntimeReadinessResult>;
+  readonly commitReentryActivation: (
     commit: Readonly<IntegratedAnimatedActivationCommit>
   ) => Readonly<RuntimeReadinessResult>;
   readonly rollbackActivation: (attempt: IntegratedCandidateAttempt) => void;
@@ -93,6 +96,9 @@ export class IntegratedAnimatedPreparation {
   readonly #commitActivation: (
     commit: Readonly<IntegratedAnimatedActivationCommit>
   ) => Readonly<RuntimeReadinessResult>;
+  readonly #commitReentryActivation: (
+    commit: Readonly<IntegratedAnimatedActivationCommit>
+  ) => Readonly<RuntimeReadinessResult>;
   readonly #rollbackActivation: (
     attempt: IntegratedCandidateAttempt
   ) => void;
@@ -113,6 +119,7 @@ export class IntegratedAnimatedPreparation {
     this.#hostMaxRuntimeBytes = options.hostMaxRuntimeBytes;
     this.#isDisposed = options.isDisposed;
     this.#commitActivation = options.commitActivation;
+    this.#commitReentryActivation = options.commitReentryActivation;
     this.#rollbackActivation = options.rollbackActivation;
     this.#recoverActivation = options.recoverActivation;
     this.#reportFailure = options.reportFailure;
@@ -129,8 +136,28 @@ export class IntegratedAnimatedPreparation {
   public async run(
     options: IntegratedPrepareOptions
   ): Promise<Readonly<RuntimeReadinessResult>> {
+    const result = await this.#run(options, "initial");
+    if (result === null) {
+      throw new IntegratedPlaybackInvariantError(
+        "initial animated preparation produced no readiness result"
+      );
+    }
+    return result;
+  }
+
+  /** Prepare a fresh candidate while a settled static plane remains visible. */
+  public reenter(
+    options: IntegratedPrepareOptions
+  ): Promise<Readonly<RuntimeReadinessResult> | null> {
+    return this.#run(options, "reentry");
+  }
+
+  async #run(
+    options: IntegratedPrepareOptions,
+    purpose: "initial" | "reentry"
+  ): Promise<Readonly<RuntimeReadinessResult> | null> {
     const timeoutMs = validatePreparationTimeout(
-      options.timeoutMs ?? DEFAULT_PREPARATION_TIMEOUT_MS
+      options.timeoutMs ?? DEFAULT_INTEGRATED_PREPARATION_TIMEOUT_MS
     );
     const control = this.#staticPreparation.createControl(
       options.signal,
@@ -145,18 +172,19 @@ export class IntegratedAnimatedPreparation {
     this.#control = control;
     const reports: RuntimeCandidateReport[] = [];
     const failures: RuntimeFailure[] = [];
-    let hasOpaqueRendition = false;
+    let hasAvcRendition = false;
 
     try {
       await this.#staticPreparation.ensure(control.controller.signal);
-      const candidates = createOpaqueRenditionCandidates(
-        this.#catalog.renditions.values()
+      const candidates = createAvcRenditionCandidates(
+        this.#catalog.renditions.values(),
+        this.#catalog.manifest.canvas
       );
-      hasOpaqueRendition = candidates.length > 0;
+      hasAvcRendition = candidates.length > 0;
 
       for (const candidate of candidates) {
         throwIfIntegratedAborted(control.controller.signal);
-        const inspected = inspectOpaqueRenditionCandidate(
+        const inspected = inspectAvcRenditionCandidate(
           this.#catalog,
           candidate
         );
@@ -195,10 +223,15 @@ export class IntegratedAnimatedPreparation {
             throwIfIntegratedAborted(control.controller.signal);
 
             const activationSnapshot = this.#graph.snapshot();
-            expectedPresentation = createIntegratedActivationPresentation(
-              this.#catalog.graph,
-              activationSnapshot
-            );
+            expectedPresentation = purpose === "initial"
+              ? createIntegratedActivationPresentation(
+                  this.#catalog.graph,
+                  activationSnapshot
+                )
+              : createIntegratedResumePresentation(
+                  this.#catalog.graph,
+                  activationSnapshot
+                );
             activation = await raceIntegratedAbort(
               attempt.prepareActivation({
                 signal: control.controller.signal,
@@ -245,14 +278,17 @@ export class IntegratedAnimatedPreparation {
             );
           }
 
-          const committed = this.#commitActivation(Object.freeze({
+          const commit = Object.freeze({
             attempt,
             activation,
             expectedPresentation,
             renditionId: candidate.rendition.id,
             result,
             signal: control.controller.signal
-          }));
+          });
+          const committed = purpose === "initial"
+            ? this.#commitActivation(commit)
+            : this.#commitReentryActivation(commit);
           if (this.#attempt === attempt) this.#attempt = null;
           return committed;
         } catch (error) {
@@ -309,12 +345,26 @@ export class IntegratedAnimatedPreparation {
         }
       }
 
+      if (purpose === "reentry") {
+        return createReentryFailureResult(
+          summarizeStaticReason({
+            phase: "preparation",
+            staticReady: this.#staticPreparation.staticReady,
+            deadlineExpired: false,
+            hasAvcRendition,
+            workerAvailable: this.#availability.workerAvailable,
+            rendererAvailable: this.#availability.rendererAvailable,
+            candidateFailures: failures
+          }) ?? "readiness-failed",
+          reports
+        );
+      }
       return await this.#staticPreparation.finish(
         summarizeStaticReason({
           phase: "preparation",
           staticReady: this.#staticPreparation.staticReady,
           deadlineExpired: false,
-          hasOpaqueRendition,
+          hasAvcRendition,
           workerAvailable: this.#availability.workerAvailable,
           rendererAvailable: this.#availability.rendererAvailable,
           candidateFailures: failures
@@ -329,6 +379,9 @@ export class IntegratedAnimatedPreparation {
         throw integratedAbortReason(control.externalSignal);
       }
       if (control.timedOut) {
+        if (purpose === "reentry") {
+          return createReentryFailureResult("preparation-timeout", reports);
+        }
         if (this.#staticPreparation.staticReady) {
           return await this.#staticPreparation.finishBounded(
             "preparation-timeout",
@@ -344,6 +397,15 @@ export class IntegratedAnimatedPreparation {
         );
       }
       if (isIntegratedAbortError(error)) throw error;
+      if (purpose === "reentry") {
+        const failure = normalizeIntegratedCandidateFailure(
+          error,
+          "unknown",
+          reports.length
+        );
+        this.#reportFailure(failure);
+        return createReentryFailureResult("readiness-failed", reports);
+      }
       if (!this.#staticPreparation.staticReady) {
         this.#staticPreparation.fail("static readiness failed");
         throw new PlaybackFallbackError("static readiness failed");
@@ -365,6 +427,21 @@ export class IntegratedAnimatedPreparation {
       if (this.#control === control) this.#control = null;
     }
   }
+}
+
+function createReentryFailureResult(
+  reason: Exclude<RuntimeReadinessResult, { readonly mode: "animated" }>["reason"],
+  reports: readonly Readonly<RuntimeCandidateReport>[]
+): Readonly<RuntimeReadinessResult> {
+  return Object.freeze({
+    mode: "static" as const,
+    reason,
+    report: createRuntimeReadinessReport({
+      readiness: "staticReady",
+      selectedRendition: null,
+      candidates: reports
+    })
+  });
 }
 
 function sameActivationState(

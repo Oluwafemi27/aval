@@ -9,7 +9,7 @@ import type { RuntimeFrameKey } from "./model.js";
 import type {
   RenderFrameHandle,
   ResidentFrameHandle
-} from "./opaque-frame-renderer.js";
+} from "./frame-renderer.js";
 
 type ReversibleGraphPresentation = Extract<
   GraphPresentation,

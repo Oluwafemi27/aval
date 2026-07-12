@@ -3,12 +3,12 @@ import type {
   GraphEdgeDefinition
 } from "@rendered-motion/graph";
 
-import type { BorrowedVideoFrame } from "./opaque-frame-renderer.js";
+import type { BorrowedVideoFrame } from "./frame-renderer.js";
 import type {
   RenderFrameHandle,
   ResidentFrameHandle,
   StreamingFrameHandle
-} from "./opaque-frame-renderer.js";
+} from "./frame-renderer.js";
 import type { RuntimeFailure } from "./errors.js";
 import type { RuntimeMediaPresentation } from "./model.js";
 import type {
@@ -48,7 +48,7 @@ export interface CutPresentationScheduler {
   snapshot(): Readonly<PathSchedulerSnapshot>;
 }
 
-/** The concrete OpaqueFrameRenderer satisfies this boundary directly. */
+/** The concrete FrameRenderer satisfies this boundary directly. */
 export interface CutPresentationRenderer {
   readonly resourceGeneration: number;
   residentHandle(layer: number): ResidentFrameHandle;

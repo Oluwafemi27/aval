@@ -6,8 +6,8 @@ import type {
 
 import type { ManagedDecoderWorkerFrame } from "../decoder-worker/client.js";
 import type { RuntimeMediaPresentation } from "./model.js";
-import type { OpaqueCandidateReadinessSessionInput } from "./opaque-candidate-factory.js";
-import type { RenderFrameHandle } from "./opaque-frame-renderer.js";
+import type { AvcCandidateReadinessSessionInput } from "./avc-candidate-factory.js";
+import type { RenderFrameHandle } from "./frame-renderer.js";
 import type { PathScheduler } from "./path-scheduler.js";
 
 export const BROWSER_RUNTIME_MEDIA_TIMEOUT_MS = 2_000 as const;
@@ -28,7 +28,7 @@ export interface BrowserNormalReady {
 }
 
 export function requireBrowserState(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   id: string
 ): Readonly<GraphStateDefinition> {
   const state = input.context.catalog.graph.definition.states.find(
@@ -39,7 +39,7 @@ export function requireBrowserState(
 }
 
 export function requireBrowserEdge(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   id: string
 ): Readonly<GraphEdgeDefinition> {
   const edge = input.context.catalog.graph.definition.edges.find(
@@ -50,7 +50,7 @@ export function requireBrowserEdge(
 }
 
 export function browserOutgoingStarts(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   state: string
 ) {
   return input.context.catalog.graph.definition.edges
@@ -59,7 +59,7 @@ export function browserOutgoingStarts(
 }
 
 export function browserCompletionEdge(
-  input: Readonly<OpaqueCandidateReadinessSessionInput>,
+  input: Readonly<AvcCandidateReadinessSessionInput>,
   state: string
 ): Readonly<GraphEdgeDefinition> | null {
   return input.context.catalog.graph.definition.edges.find((edge) =>

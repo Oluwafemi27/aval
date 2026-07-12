@@ -22,6 +22,7 @@ import {
   type IntegratedTimerHost
 } from "./integrated-player-contracts.js";
 import type { RuntimeMediaPresentation } from "./model.js";
+import { MOTION_POLICIES } from "./motion-policy.js";
 
 export const DEFAULT_INTEGRATED_TIMERS: IntegratedTimerHost = Object.freeze({
   setTimeout(callback: () => void, milliseconds: number): number {
@@ -31,6 +32,7 @@ export const DEFAULT_INTEGRATED_TIMERS: IntegratedTimerHost = Object.freeze({
     globalThis.clearTimeout(handle);
   }
 });
+export const DEFAULT_INTEGRATED_PREPARATION_TIMEOUT_MS = 5_000 as const;
 
 export function validateIntegratedPlayerOptions(
   options: IntegratedPlayerOptions
@@ -55,8 +57,31 @@ export function validateIntegratedPlayerOptions(
   ) {
     throw new TypeError("integrated player requires a candidate factory");
   }
+  if (
+    options.candidateFactory.resourceHost !== undefined &&
+    (
+      options.candidateFactory.resourceHost === null ||
+      typeof options.candidateFactory.resourceHost !== "object" ||
+      typeof options.candidateFactory.resourceHost.currentCanvasBacking !== "function" ||
+      typeof options.candidateFactory.resourceHost.reserveCanvasResources !== "function"
+    )
+  ) {
+    throw new TypeError("integrated player resource host is malformed");
+  }
   if (options.now !== undefined && typeof options.now !== "function") {
     throw new TypeError("integrated player clock must be a function");
+  }
+  if (
+    options.motionPolicy !== undefined &&
+    !MOTION_POLICIES.includes(options.motionPolicy)
+  ) {
+    throw new TypeError("integrated player motion policy is invalid");
+  }
+  if (
+    options.hostReducedMotion !== undefined &&
+    typeof options.hostReducedMotion !== "boolean"
+  ) {
+    throw new TypeError("integrated host reduced-motion value must be boolean");
   }
   if (
     options.eventSink !== undefined &&
@@ -108,6 +133,7 @@ export function validateIntegratedStaticStore(
     "installInitial",
     "validateAll",
     "presentState",
+    "currentState",
     "coverCurrent",
     "revealAnimated",
     "settled",
@@ -191,6 +217,49 @@ export function createIntegratedActivationPresentation(
     unitId: state.body.unitId,
     frameIndex: 0
   });
+}
+
+/** Body-frame-zero activation used only when leaving settled static mode. */
+export function createIntegratedResumePresentation(
+  graph: Readonly<ValidatedMotionGraph>,
+  snapshot: Readonly<MotionGraphSnapshot>
+): Readonly<GraphPresentation> {
+  if (
+    snapshot.readiness !== "static" ||
+    snapshot.phase !== "static" ||
+    snapshot.visualState === null ||
+    snapshot.requestedState !== snapshot.visualState ||
+    snapshot.presentation?.kind !== "static" ||
+    snapshot.presentation.state !== snapshot.visualState ||
+    snapshot.isTransitioning
+  ) {
+    throw new IntegratedPlaybackInvariantError(
+      "animated re-entry requires one settled static graph state"
+    );
+  }
+  const state = graph.definition.states.find(
+    ({ id }) => id === snapshot.visualState
+  );
+  if (state === undefined) {
+    throw new IntegratedPlaybackInvariantError(
+      "animated re-entry state is absent from the graph"
+    );
+  }
+  return Object.freeze({
+    kind: "body" as const,
+    state: state.id,
+    unitId: state.body.unitId,
+    frameIndex: 0
+  });
+}
+
+/** Ordinal assigned to the hidden activation draw for one graph snapshot. */
+export function integratedActivationPresentationOrdinal(
+  snapshot: Readonly<MotionGraphSnapshot>
+): bigint {
+  return snapshot.contentOrdinal === null
+    ? 0n
+    : snapshot.contentOrdinal + 1n;
 }
 
 export function assertIntegratedPresentationIdentity(

@@ -68,6 +68,7 @@ describe("compiler commands", () => {
       loop: [2, 8],
       fps: { numerator: 24, denominator: 1 },
       normalizeVfr: true,
+      alpha: "auto",
       bitrate: { average: 100_000, peak: 200_000 },
       ffmpegPath: "/tool/ffmpeg",
       ffprobePath: "/tool/ffprobe"
@@ -355,6 +356,8 @@ describe("compiler commands", () => {
     }
     const projectBytes = new Uint8Array(await readFile(first.project));
     expect(parseSourceProject(projectBytes)).toMatchObject({
+      sourceProjectVersion: "0.2",
+      alphaPolicy: "auto",
       initialState: "default",
       sources: [{ type: "png-sequence", frameCount: 2 }],
       units: [{ kind: "body", range: [0, 2] }]
@@ -374,7 +377,7 @@ describe("compiler commands", () => {
       formatVersion: "0.1",
       digestClaim: "all-internal-and-whole-file",
       avcClaim: "not-applicable",
-      staticPngClaim: "generated-profile-envelope"
+      staticPngClaim: "strict-profile-fully-decoded"
     });
     expect(inspection.units[0]?.startTime).toMatch(/^\d+\/\d+$/u);
     await expect(validateAssetReport(fixture)).resolves.toMatchObject({
@@ -550,7 +553,7 @@ async function validReferenceAsset(root: string): Promise<string> {
   const input: CanonicalAssetInputV01 = {
     manifest: {
       formatVersion: "0.1",
-      generator: "rendered-motion-compiler/0.1 test-reference",
+      generator: "third-party-strict-png-fixture/1.0",
       canvas: {
         width: 2,
         height: 2,

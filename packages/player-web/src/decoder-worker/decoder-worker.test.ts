@@ -140,6 +140,25 @@ describe("dedicated decoder worker boundary", () => {
       .toHaveLength(disposePosts);
   });
 
+  it("does not expose browser worker error text through transport failures", async () => {
+    const { clientPort } = createPortPair();
+    const client = new DecoderWorkerClient(clientPort, {
+      requestTimeoutMs: 100,
+      disposeTimeoutMs: 20
+    });
+    const pending = client.snapshotMetrics();
+    const hostile = "failed at /Users/private/project/decoder-worker.js";
+
+    clientPort.emitError(hostile);
+
+    await expect(pending).rejects.toMatchObject({
+      name: "DecoderWorkerTransportError",
+      message: "decoder worker failed"
+    });
+    await expect(pending).rejects.not.toThrow(hostile);
+    await client.dispose();
+  });
+
   it("probes WebCodecs support before constructing the sole decoder", async () => {
     const fixture = createFixture({}, { supported: false });
     await expect(fixture.configure()).rejects.toMatchObject({
@@ -530,10 +549,12 @@ describe("dedicated decoder worker boundary", () => {
     const waiting = fixture.client.waitForFrames(1, { timeoutMs: 100 });
 
     const reordered = fixture.decoder.emitAt(1);
-    await expect(waiting).rejects.toMatchObject({
+    const failure = await waiting.catch((error: unknown) => error);
+    expect(failure).toMatchObject({
       code: "DECODER_OUTPUT_INVALID",
       fatal: true
     });
+    expect((failure as Error).message).not.toContain("synthetic decoder error");
     expect(reordered.closeCalls).toBe(1);
     const late = fixture.decoder.emitNext();
     expect(late.closeCalls).toBe(1);
@@ -1199,6 +1220,11 @@ class FakeDuplexPort implements DecoderWorkerClientPort, DecoderWorkerMessagePor
   public emitMessage(message: unknown): void {
     const event = { data: message } as MessageEvent<unknown>;
     for (const listener of [...this.#messageListeners]) listener(event);
+  }
+
+  public emitError(message: string): void {
+    const event = { message } as ErrorEvent;
+    for (const listener of [...this.#errorListeners]) listener(event);
   }
 
   #terminateFromPeer(): void {

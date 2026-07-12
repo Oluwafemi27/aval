@@ -138,7 +138,7 @@ describe("worker-backed interaction cache preparation", () => {
     fixture.backend.failUpload = true;
 
     await expect(prepareInteractionCache(fixture.input))
-      .rejects.toThrow("injected resident upload failure");
+      .rejects.toThrow("failed to upload a WebGL frame");
 
     expect(fixture.worker.abortCalls).toBe(1);
     expect(fixture.worker.openFrames).toBe(0);

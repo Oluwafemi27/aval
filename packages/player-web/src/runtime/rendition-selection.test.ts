@@ -8,28 +8,65 @@ import {
 } from "./asset-test-fixture.js";
 import { RuntimePlaybackError } from "./errors.js";
 import {
+  createAvcRenditionCandidates,
   createOpaqueRenditionCandidates,
+  inspectAvcRenditionCandidate,
   inspectOpaqueRenditionCandidate
-} from "./rendition-selection.js";
+} from "./avc-rendition-selection.js";
 
-describe("deterministic opaque rendition selection", () => {
+describe("deterministic AVC rendition selection", () => {
+  it("accepts exact packed alpha and records visible color area separately", () => {
+    const packed: RenditionV01 = {
+      id: "packed",
+      profile: "avc-annexb-packed-alpha-v0",
+      codec: "avc1.42E020",
+      codedWidth: 64,
+      codedHeight: 144,
+      alphaLayout: {
+        type: "stacked-v0",
+        colorRect: [0, 0, 64, 64],
+        alphaRect: [0, 72, 64, 64]
+      },
+      bitrate: { average: 1_000, peak: 2_000 },
+      capabilities: ["webcodecs", "webgl2"]
+    };
+
+    const candidates = createAvcRenditionCandidates(
+      [packed],
+      { width: 64, height: 64 }
+    );
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      rank: 0,
+      visibleColorArea: 4_096,
+      codedArea: 9_216,
+      rendition: { id: "packed" },
+      geometry: {
+        profile: "avc-annexb-packed-alpha-v0",
+        decodedStorageRect: [0, 0, 64, 136]
+      }
+    });
+    expect(createOpaqueRenditionCandidates).toBe(createAvcRenditionCandidates);
+    expect(inspectOpaqueRenditionCandidate).toBe(inspectAvcRenditionCandidate);
+  });
+
   it("is independent of input order and applies every exact tie break", () => {
     const renditions = [
-      opaqueTestRendition("z-area", 80, 80, 5_000, 4_000),
-      opaqueTestRendition("z-peak", 100, 50, 7_000, 4_000),
-      opaqueTestRendition("b-tie", 100, 50, 8_000, 4_000),
-      opaqueTestRendition("a-tie", 100, 50, 8_000, 4_000),
-      opaqueTestRendition("low", 50, 50, 8_000, 4_000)
+      opaqueTestRendition("z-area", 128, 128, 5_000, 4_000),
+      opaqueTestRendition("z-peak", 96, 96, 7_000, 4_000),
+      opaqueTestRendition("b-tie", 96, 96, 8_000, 4_000),
+      opaqueTestRendition("a-tie", 96, 96, 8_000, 4_000),
+      opaqueTestRendition("low", 64, 64, 8_000, 4_000)
     ];
 
     const expected = ["z-area", "a-tie", "b-tie", "z-peak", "low"];
-    expect(createOpaqueRenditionCandidates(renditions).map(id)).toEqual(
+    expect(createAvcRenditionCandidates(renditions).map(id)).toEqual(
       expected
     );
-    expect(createOpaqueRenditionCandidates(
+    expect(createAvcRenditionCandidates(
       [...renditions].reverse()
     ).map(id)).toEqual(expected);
-    expect(createOpaqueRenditionCandidates([
+    expect(createAvcRenditionCandidates([
       renditions[2]!,
       renditions[4]!,
       renditions[0]!,
@@ -38,7 +75,7 @@ describe("deterministic opaque rendition selection", () => {
     ]).map(id)).toEqual(expected);
   });
 
-  it("retains only the exact opaque codec, capability tuple, and alpha shape", () => {
+  it("retains exact AVC tuples and rejects mixed production alpha classes", () => {
     const opaque = opaqueTestRendition("opaque");
     const reference: RenditionV01 = {
       id: "reference",
@@ -54,11 +91,11 @@ describe("deterministic opaque rendition selection", () => {
       profile: "avc-annexb-packed-alpha-v0",
       codec: "avc1.42E020",
       codedWidth: 64,
-      codedHeight: 128,
+      codedHeight: 144,
       alphaLayout: {
         type: "stacked-v0",
         colorRect: [0, 0, 64, 64],
-        alphaRect: [0, 64, 64, 64]
+        alphaRect: [0, 72, 64, 64]
       },
       bitrate: { average: 1_000, peak: 2_000 },
       capabilities: ["webcodecs", "webgl2"]
@@ -76,18 +113,21 @@ describe("deterministic opaque rendition selection", () => {
       alphaLayout: { type: "straight-rgba-v0" }
     } as unknown as RenditionV01;
 
-    expect(createOpaqueRenditionCandidates([
+    expect(createAvcRenditionCandidates([
       reference,
-      packed,
       wrongCodec,
       opaque,
       wrongCapabilities,
       wrongAlpha
     ]).map(id)).toEqual(["opaque"]);
-    expect(Object.isFrozen(createOpaqueRenditionCandidates([reference]))).toBe(
+    expect(() => createAvcRenditionCandidates(
+      [opaque, packed],
+      { width: 64, height: 64 }
+    )).toThrow("cannot be mixed");
+    expect(Object.isFrozen(createAvcRenditionCandidates([reference]))).toBe(
       true
     );
-    expect(createOpaqueRenditionCandidates([reference])).toEqual([]);
+    expect(createAvcRenditionCandidates([reference])).toEqual([]);
   });
 
   it("checks coded-area arithmetic before sorting", () => {
@@ -101,10 +141,10 @@ describe("deterministic opaque rendition selection", () => {
       }
     } as unknown as RenditionV01;
 
-    expect(() => createOpaqueRenditionCandidates([unsafe]))
+    expect(() => createAvcRenditionCandidates([unsafe]))
       .toThrow(RuntimePlaybackError);
     try {
-      createOpaqueRenditionCandidates([unsafe]);
+      createAvcRenditionCandidates([unsafe]);
     } catch (error) {
       expect(error).toMatchObject({
         code: "invalid-asset",
@@ -141,10 +181,10 @@ describe("deterministic opaque rendition selection", () => {
       abovePeak,
       unsafeAverage
     ]) {
-      expect(() => createOpaqueRenditionCandidates([rendition]))
+      expect(() => createAvcRenditionCandidates([rendition]))
         .toThrow(RuntimePlaybackError);
       try {
-        createOpaqueRenditionCandidates([rendition]);
+        createAvcRenditionCandidates([rendition]);
       } catch (error) {
         expect(error).toMatchObject({
           code: "invalid-asset",
@@ -156,11 +196,12 @@ describe("deterministic opaque rendition selection", () => {
 
   it("returns deeply immutable candidates detached from mutable input", () => {
     const source = opaqueTestRendition("opaque");
-    const candidates = createOpaqueRenditionCandidates([source]);
+    const candidates = createAvcRenditionCandidates([source]);
     const candidate = candidates[0]!;
 
     expect(candidate).toMatchObject({
       rank: 0,
+      visibleColorArea: 4_096,
       codedArea: 4_096,
       rendition: { id: "opaque" }
     });
@@ -177,10 +218,10 @@ describe("deterministic opaque rendition selection", () => {
 
   it("strictly inspects every catalog unit before a candidate reaches a worker", () => {
     const catalog = installRuntimeAssetCatalog(createOpaqueTestAsset());
-    const candidate = createOpaqueRenditionCandidates(
+    const candidate = createAvcRenditionCandidates(
       catalog.manifest.renditions
     )[0]!;
-    const result = inspectOpaqueRenditionCandidate(catalog, candidate);
+    const result = inspectAvcRenditionCandidate(catalog, candidate);
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -209,10 +250,10 @@ describe("deterministic opaque rendition selection", () => {
     const catalog = installRuntimeAssetCatalog(createOpaqueTestAsset({
       corruptIntroDelta: true
     }));
-    const candidate = createOpaqueRenditionCandidates(
+    const candidate = createAvcRenditionCandidates(
       catalog.manifest.renditions
     )[0]!;
-    const result = inspectOpaqueRenditionCandidate(catalog, candidate);
+    const result = inspectAvcRenditionCandidate(catalog, candidate);
 
     expect(result.ok).toBe(false);
     if (result.ok) {

@@ -1,5 +1,7 @@
 import {
+  decodePngRgba,
   validateCompleteAsset,
+  validatePngProfile,
   type ValidatedAssetLayout
 } from "@rendered-motion/format";
 
@@ -23,6 +25,21 @@ export function validateCompiledOutput(
         `Compiler output digest mismatch for ${"unit" in blob ? blob.unit : blob.staticFrame}`
       );
     }
+  }
+  for (let index = 0; index < layout.frontIndex.staticBlobs.length; index += 1) {
+    const blob = layout.frontIndex.staticBlobs[index];
+    const descriptor = layout.frontIndex.manifest.staticFrames[index];
+    if (blob === undefined || descriptor === undefined) {
+      throw new CompilerError(
+        "ASSET_INVALID",
+        "Compiler output static descriptors are incomplete"
+      );
+    }
+    decodePngRgba(validatePngProfile({
+      png: bytes.subarray(blob.offset, blob.offset + blob.length),
+      expectedWidth: descriptor.width,
+      expectedHeight: descriptor.height
+    }));
   }
   return layout;
 }

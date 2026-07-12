@@ -122,6 +122,36 @@ describe("MotionGraphEngine transition routing", () => {
     expect(effectTypes(next)).not.toContain("transitionstart");
   });
 
+  it("does not clear a mismatched pending route or request on invalid resume", () => {
+    const engine = animatedEngine(reversibleGraph());
+    engine.request("hover");
+    const waitingSnapshot = engine.snapshot();
+    const waitingTrace = engine.getTrace();
+
+    expect(() => engine.resumeAnimated()).toThrowError(/requires phase static/);
+    expect(engine.snapshot()).toEqual(waitingSnapshot);
+    expect(engine.getTrace()).toEqual(waitingTrace);
+    expect(engine.snapshot()).toMatchObject({
+      phase: "waiting",
+      requestedState: "hover",
+      visualState: "idle",
+      pendingEdgeId: "idle-to-hover",
+      pendingRequestCount: 1
+    });
+
+    engine.tick({ contentOrdinal: 0n });
+    const activeSnapshot = engine.snapshot();
+    const activeTrace = engine.getTrace();
+    expect(() => engine.resumeAnimated()).toThrowError(/requires phase static/);
+    expect(engine.snapshot()).toEqual(activeSnapshot);
+    expect(engine.getTrace()).toEqual(activeTrace);
+    expect(engine.snapshot()).toMatchObject({
+      phase: "reversible",
+      activeEdgeId: "idle-to-hover",
+      pendingRequestCount: 1
+    });
+  });
+
   it("uses the pending edge's inverse event before normal visual-state lookup", () => {
     const engine = animatedEngine(reversibleGraph());
 

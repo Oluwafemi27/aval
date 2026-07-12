@@ -11,6 +11,7 @@ import {
   validateCompleteAsset
 } from "@rendered-motion/format";
 
+import { inspectAssetFile } from "../src/commands/asset.js";
 import { compileProjectFile } from "../src/compile/project-compiler.js";
 import { encodeCanonicalRgbaPng } from "../src/compile/png.js";
 
@@ -62,6 +63,13 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
   it("compiles identical source projects to byte-identical canonical assets", async () => {
     const first = await compileProjectFile({ projectPath, outputPath: firstPath });
     const second = await compileProjectFile({ projectPath, outputPath: secondPath });
+    const modernProjectPath = join(directory, "motion-v02.json");
+    const modernOutputPath = join(directory, "modern.rma");
+    await writeFile(modernProjectPath, JSON.stringify(sourceProjectV02(), null, 2));
+    const modern = await compileProjectFile({
+      projectPath: modernProjectPath,
+      outputPath: modernOutputPath
+    });
     const firstBytes = new Uint8Array(await readFile(firstPath));
     const secondBytes = new Uint8Array(await readFile(secondPath));
 
@@ -69,20 +77,37 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
     expect(first.bytes).toBe(firstBytes.byteLength);
     expect(second.bytes).toBe(secondBytes.byteLength);
     expect(firstBytes).toEqual(secondBytes);
+    expect(new Uint8Array(await readFile(modernOutputPath))).toEqual(firstBytes);
     expect(() => validateCompleteAsset({ bytes: firstBytes })).not.toThrow();
     expect(first.buildDetails.projectFile).toMatchObject({
       sha256: expect.stringMatching(/^[0-9a-f]{64}$/u)
     });
     expect(first.buildDetails.sources).toHaveLength(1);
+    expect(first.buildDetails.statics[0]?.validation).toMatchObject({
+      profile: "strict-rgba-png-v0",
+      decoder: "format-pure-rfc1950-1951-v0",
+      width: 32,
+      height: 32,
+      rgbaBytes: 32 * 32 * 4
+    });
     expect(first.buildDetails.sources[0]?.inputFiles).toHaveLength(16);
     expect(first.buildDetails.invocations.map(({ operation }) => operation))
       .toEqual(expect.arrayContaining([
         "frames:probe",
-        "frames:alpha-audit",
         "frames:materialize-rgba",
         "encode:opaque:active-body",
         "encode:opaque:idle-body"
       ]));
+    expect(first.buildDetails.alphaPolicy).toMatchObject({
+      requested: "opaque",
+      selected: "opaque",
+      audit: { allOpaque: true, uniqueReferencedFrames: 16 }
+    });
+    expect(modern.buildDetails.alphaPolicy).toMatchObject({
+      requested: "auto",
+      selected: "opaque",
+      audit: { allOpaque: true, uniqueReferencedFrames: 16 }
+    });
     expect(JSON.stringify(first.buildDetails.invocations)).not.toContain(directory);
   }, 30_000);
 
@@ -175,6 +200,70 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
       continuity: "cut"
     }]);
   });
+
+  it("honors an explicit project-wide packed profile and decode-back gate", async () => {
+    const packedProjectPath = join(directory, "motion-packed.json");
+    const packedOutputPath = join(directory, "packed.rma");
+    const project = structuredClone(sourceProjectV02()) as any;
+    project.profile = "avc-annexb-packed-alpha-v0";
+    await writeFile(packedProjectPath, JSON.stringify(project, null, 2));
+
+    const result = await compileProjectFile({
+      projectPath: packedProjectPath,
+      outputPath: packedOutputPath
+    });
+    expect(result.buildDetails.alphaPolicy).toMatchObject({
+      requested: "packed",
+      selected: "packed",
+      warnings: [expect.stringContaining("fully opaque")]
+    });
+    expect(result.warnings).toEqual([
+      "Packed alpha was requested for fully opaque canonical pixels"
+    ]);
+    expect(new Set(result.warnings).size).toBe(result.warnings.length);
+    expect(result.buildDetails.renditions[0]).toMatchObject({
+      profile: "avc-annexb-packed-alpha-v0",
+      alphaQuality: {
+        frameCount: 16,
+        aggregate: {
+          meanAbsoluteError: expect.any(Number),
+          p99AbsoluteError: expect.any(Number)
+        }
+      },
+      compositeQuality: {
+        policy: "report-only",
+        frameCount: 16,
+        backgrounds: [
+          { background: "black" },
+          { background: "white" },
+          { background: "magenta" }
+        ]
+      }
+    });
+    expect(parseFrontIndex(new Uint8Array(await readFile(packedOutputPath)))
+      .manifest.renditions[0]?.profile)
+      .toBe("avc-annexb-packed-alpha-v0");
+    await expect(inspectAssetFile(packedOutputPath)).resolves.toMatchObject({
+      avcClaim: "syntax-and-dependency-inspected",
+      avc: [{ rendition: "opaque" }]
+    });
+  }, 30_000);
+
+  it("rejects an explicit poster that differs from the body entry pixels", async () => {
+    const mismatchProjectPath = join(directory, "motion-poster-mismatch.json");
+    const mismatchOutputPath = join(directory, "poster-mismatch.rma");
+    const project = structuredClone(sourceProjectV02()) as any;
+    project.states[0].poster = { source: "frames", frame: 1 };
+    await writeFile(mismatchProjectPath, JSON.stringify(project, null, 2));
+
+    await expect(compileProjectFile({
+      projectPath: mismatchProjectPath,
+      outputPath: mismatchOutputPath
+    })).rejects.toMatchObject({
+      code: "INPUT_INVALID",
+      field: "states[1].poster"
+    });
+  }, 30_000);
 });
 
 function sourceProject(): unknown {
@@ -239,4 +328,17 @@ function sourceProject(): unknown {
     }],
     bindings: [{ source: "pointer.enter", event: "hover-active" }]
   };
+}
+
+function sourceProjectV02(): unknown {
+  const value = structuredClone(sourceProject()) as any;
+  value.projectVersion = "0.2";
+  value.profile = "avc-annexb-auto-v0";
+  value.renditions = value.renditions.map((rendition: any) => ({
+    id: rendition.id,
+    width: rendition.codedWidth,
+    height: rendition.codedHeight,
+    bitrate: rendition.bitrate
+  }));
+  return value;
 }

@@ -62,11 +62,14 @@ export class WorkerSampleFactory {
     validateWorkerLimits(options.limits);
     const rendition = options.catalog.renditions.require(options.rendition);
     if (
-      rendition.profile !== "avc-annexb-opaque-v0" ||
+      (
+        rendition.profile !== "avc-annexb-opaque-v0" &&
+        rendition.profile !== "avc-annexb-packed-alpha-v0"
+      ) ||
       rendition.codec !== "avc1.42E020"
     ) {
       throw new RangeError(
-        "worker sample factory requires an exact opaque AVC rendition"
+        "worker sample factory requires an exact AVC rendition"
       );
     }
 

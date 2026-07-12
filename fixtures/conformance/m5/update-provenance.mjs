@@ -48,6 +48,24 @@ const provenance = {
   provenanceVersion: "0.2",
   generatedAt: "2026-07-12",
   generator: "rendered-motion-compiler/0.1",
+  pipelineLineage: {
+    migration: "rgba-filter-chain-to-direct-bt709-limited-yuv420p-v0",
+    previousAssets: [
+      {
+        name: "opaque-loop.rma",
+        sha256: "dcda9b3afbd9e56c5aec4c71b24208bec94bef98d6046656ba837a4bc322ca49"
+      },
+      {
+        name: "opaque-path.rma",
+        sha256: "edec42aad4ed140404caf895093fc3a986fbfdfaaf28f720cb47e918bf1308e0"
+      },
+      {
+        name: "opaque-reversible.rma",
+        sha256: "642e5d60a461f3f0d0e53be9c1a238a3f5dfdad23f4db19eb2c12a94a6f13e8a"
+      }
+    ],
+    review: "Intentional encoded-byte migration; source projects and PNG frames remain unchanged."
+  },
   compiler,
   toolchain: reviewedToolchain,
   fixtures: records

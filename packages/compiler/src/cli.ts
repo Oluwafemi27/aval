@@ -210,8 +210,8 @@ function safe(value: string): string {
 
 export const HELP_TEXT = `Usage:
   rma compile <project.json> --out <asset.rma> [--report <report.json>]
-  rma compile <input.mov|input.mp4|input.m4v> --loop <start:end> --out <asset.rma>
-  rma compile <prefix%0Nd.png> --frames <first:count> --fps <n/d> --loop <start:end> --canvas <wxh> --out <asset.rma>
+  rma compile <input.mov|input.mp4|input.m4v> --loop <start:end> [--alpha auto|opaque|packed] --out <asset.rma>
+  rma compile <prefix%0Nd.png> --frames <first:count> --fps <n/d> --loop <start:end> --canvas <wxh> [--alpha auto|opaque|packed] --out <asset.rma>
   rma inspect <asset.rma> [--json]
   rma validate <asset.rma> [--json]
   rma unpack <asset.rma> --out <empty-directory> [--json]

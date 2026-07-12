@@ -103,7 +103,11 @@ describe("runtime model boundary", () => {
       new Error("d".repeat(2_000)),
       {
         unit: untrustedUnit,
-        ordinal: 7
+        ordinal: 7,
+        width: 511,
+        height: 257,
+        alphaStatistic: "p99",
+        policyPhase: "enter-full"
       }
     );
 
@@ -113,6 +117,12 @@ describe("runtime model boundary", () => {
       MAX_RUNTIME_DIAGNOSTIC_TEXT_LENGTH
     );
     expect(failure.context.ordinal).toBe(7);
+    expect(failure.context).toMatchObject({
+      width: 511,
+      height: 257,
+      alphaStatistic: "p99",
+      policyPhase: "enter-full"
+    });
     expect(Object.isFrozen(failure.context)).toBe(true);
     expect(Object.isFrozen(failure)).toBe(true);
 
@@ -164,9 +174,10 @@ describe("runtime model boundary", () => {
     expect(Object.isFrozen(report)).toBe(true);
   });
 
-  it("uses the exact eight static reasons and deterministic precedence", () => {
+  it("uses the exact M6 static reasons and deterministic precedence", () => {
     expect(STATIC_REASONS).toEqual([
-      "no-opaque-rendition",
+      "reduced-motion",
+      "no-avc-rendition",
       "worker-unavailable",
       "renderer-unavailable",
       "codec-unsupported",
@@ -184,7 +195,7 @@ describe("runtime model boundary", () => {
       phase: "preparation" as const,
       staticReady: true,
       deadlineExpired: false,
-      hasOpaqueRendition: true,
+      hasAvcRendition: true,
       workerAvailable: true,
       rendererAvailable: true,
       candidateFailures: [readiness]
@@ -198,10 +209,10 @@ describe("runtime model boundary", () => {
     );
     expect(summarizeStaticReason({
       ...base,
-      hasOpaqueRendition: false,
+      hasAvcRendition: false,
       workerAvailable: false,
       rendererAvailable: false
-    })).toBe("no-opaque-rendition");
+    })).toBe("no-avc-rendition");
     expect(summarizeStaticReason({
       ...base,
       workerAvailable: false,

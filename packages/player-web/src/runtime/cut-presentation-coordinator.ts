@@ -9,7 +9,7 @@ import type {
   RenderFrameHandle,
   ResidentFrameHandle,
   StreamingFrameHandle
-} from "./opaque-frame-renderer.js";
+} from "./frame-renderer.js";
 import {
   RuntimePlaybackError,
   normalizeRuntimeFailure,
@@ -834,7 +834,7 @@ export class CutPresentationCoordinator implements IntegratedPlaybackSession {
           operation: "upload-cut-continuation"
         });
       } finally {
-        // OpaqueFrameRenderer owns this closure. The guard also protects test
+        // FrameRenderer owns this closure. The guard also protects test
         // adapters and renderer failures that reject before claiming source.
         if (!next.frame.closed) next.frame.close();
       }

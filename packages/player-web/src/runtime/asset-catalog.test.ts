@@ -1,7 +1,10 @@
 import { validateCompleteAsset } from "@rendered-motion/format";
 import { describe, expect, it } from "vitest";
 
-import { createOpaqueTestAsset } from "./asset-test-fixture.js";
+import {
+  createOpaqueTestAsset,
+  strictTestPng
+} from "./asset-test-fixture.js";
 import {
   RuntimeAssetCatalog,
   installRuntimeAssetCatalog
@@ -44,7 +47,7 @@ describe("owned validated runtime asset catalog", () => {
     });
     expect(catalog.staticFrames.require("idle")).toMatchObject({
       frame: { id: "idle", width: 64, height: 64 },
-      range: { staticFrame: "idle", length: 33 }
+      range: { staticFrame: "idle", length: strictTestPng(64, 64).byteLength }
     });
 
     for (const index of [

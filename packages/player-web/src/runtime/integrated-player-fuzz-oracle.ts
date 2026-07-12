@@ -26,7 +26,10 @@ export interface TrackedFuzzRequest {
 
 export interface FuzzCleanupFactoryView {
   readonly activeAttempts: number;
-  readonly sessions: readonly { readonly disposed: boolean }[];
+  readonly sessions: readonly {
+    readonly disposed: boolean;
+    readonly maximumGeneration: number;
+  }[];
 }
 
 export interface FuzzCleanupStoreView {
@@ -48,8 +51,11 @@ export interface FuzzPlaybackBoundsView {
 export class FuzzRecorder {
   public readonly entries: string[] = [];
   public step = -100;
+  public actualPlane: "unprepared" | "static" | "animated" | "disposed" =
+    "unprepared";
 
   readonly #seed: number;
+  #initialAnimatedRevealPending = false;
 
   public constructor(seed: number) {
     this.#seed = seed;
@@ -66,6 +72,43 @@ export class FuzzRecorder {
 
   public recordDraw(tag: string): void {
     this.push(`draw:${tag}`);
+    if (
+      this.#initialAnimatedRevealPending &&
+      tag.startsWith("animated:")
+    ) {
+      this.#initialAnimatedRevealPending = false;
+      this.actualPlane = "animated";
+      this.push("plane:animated");
+    }
+  }
+
+  public coverStatic(state: string): void {
+    this.recordDraw(`static:${state}`);
+    this.actualPlane = "static";
+    this.push(`plane:static:${state}`);
+  }
+
+  public revealAnimated(): void {
+    const lastDraw = [...this.entries].reverse().find((entry) =>
+      entry.startsWith("draw:")
+    );
+    if (lastDraw === undefined && this.actualPlane === "unprepared") {
+      this.#initialAnimatedRevealPending = true;
+      this.push("plane:animated-pending-initial-draw");
+      return;
+    }
+    fuzzInvariant(
+      lastDraw?.startsWith("draw:animated:") === true,
+      this,
+      "animated plane revealed without a prepared animated draw"
+    );
+    this.actualPlane = "animated";
+    this.push("plane:animated");
+  }
+
+  public disposePlane(): void {
+    this.actualPlane = "disposed";
+    this.push("plane:disposed");
   }
 
   public recordEvent(event: Readonly<EffectHostEvent>): void {
@@ -117,6 +160,11 @@ export function assertFuzzLiveBounds(
     snapshot.readiness === "interactiveReady",
     recorder,
     "readiness drifted"
+  );
+  fuzzInvariant(
+    recorder.actualPlane === "animated",
+    recorder,
+    "interactive graph does not own the revealed animated plane"
   );
   const trace = session.traceState();
   fuzzInvariant(
@@ -308,6 +356,15 @@ export function assertFuzzCleanup(
     "session leaked"
   );
   fuzzInvariant(
+    factory.sessions.every(({ maximumGeneration }) =>
+      Number.isSafeInteger(maximumGeneration) &&
+      maximumGeneration >= 1 &&
+      maximumGeneration <= GRAPH_LIMITS.maxInputsPerTick * 128
+    ),
+    recorder,
+    "session generation escaped its deterministic bound"
+  );
+  fuzzInvariant(
     requests.every(({ status }) => status !== "pending"),
     recorder,
     "request leaked"
@@ -316,6 +373,11 @@ export function assertFuzzCleanup(
     player.snapshot().disposed && player.snapshot().readiness === "disposed",
     recorder,
     "player did not terminalize disposal"
+  );
+  fuzzInvariant(
+    recorder.actualPlane === "disposed",
+    recorder,
+    "terminal cleanup retained an actual presentation plane"
   );
 }
 

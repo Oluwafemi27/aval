@@ -97,6 +97,7 @@ export function buildReportInvocation(
       ...(arguments_.fps === undefined ? {} : { frameRate: arguments_.fps }),
       ...(arguments_.canvas === undefined ? {} : { canvas: arguments_.canvas }),
       ...(arguments_.bitrate === undefined ? {} : { bitrate: arguments_.bitrate }),
+      ...(arguments_.alpha === undefined ? {} : { alpha: arguments_.alpha }),
       ...(arguments_.frames === undefined ? {} : { frames: arguments_.frames }),
       normalizeVfr:
         arguments_.normalizeVfr ||

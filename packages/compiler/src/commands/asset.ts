@@ -9,7 +9,6 @@ import {
   describeAccessUnits,
   readValidatedAsset,
   sha256AssetBytes,
-  staticPngClaim,
   type InspectedAccessUnitRange
 } from "./asset-validation.js";
 
@@ -45,11 +44,11 @@ export interface AssetInspection {
   readonly staticFrames: readonly string[];
   readonly digestClaim: "all-internal-and-whole-file";
   readonly avcClaim: "syntax-and-dependency-inspected" | "not-applicable";
-  readonly staticPngClaim: "generated-profile-envelope" | "m4-envelope-only";
-  readonly avc: readonly OpaqueRenditionSummary[];
+  readonly staticPngClaim: "strict-profile-fully-decoded";
+  readonly avc: readonly AvcRenditionSummary[];
 }
 
-export interface OpaqueRenditionSummary {
+export interface AvcRenditionSummary {
   readonly rendition: string;
   readonly macroblocksPerFrame: number;
   readonly codedWidth: number;
@@ -58,6 +57,9 @@ export interface OpaqueRenditionSummary {
   readonly parameterSet: AvcParameterSetSummary;
   readonly units: readonly AvcUnitInspection[];
 }
+
+/** @deprecated Use the profile-neutral AvcRenditionSummary name. */
+export type OpaqueRenditionSummary = AvcRenditionSummary;
 
 export interface AssetValidationReport {
   readonly command: "validate";
@@ -69,7 +71,7 @@ export interface AssetValidationReport {
   readonly staticBlobs: number;
   readonly digestClaim: "all-internal-and-whole-file";
   readonly avcClaim: "syntax-and-dependency-inspected" | "not-applicable";
-  readonly staticPngClaim: "generated-profile-envelope" | "m4-envelope-only";
+  readonly staticPngClaim: "strict-profile-fully-decoded";
 }
 
 export async function inspectAssetFile(
@@ -129,7 +131,7 @@ export async function inspectAssetFile(
     avcClaim: validated.avc.length === 0
       ? "not-applicable"
       : "syntax-and-dependency-inspected",
-    staticPngClaim: staticPngClaim(bytes, front, signal),
+    staticPngClaim: "strict-profile-fully-decoded",
     avc: Object.freeze(validated.avc.map(({ rendition, inspection }) =>
       Object.freeze({
         rendition,
@@ -169,7 +171,7 @@ export async function validateAssetReport(
     avcClaim: avc.length === 0
       ? "not-applicable"
       : "syntax-and-dependency-inspected",
-    staticPngClaim: staticPngClaim(bytes, layout.frontIndex, signal)
+    staticPngClaim: "strict-profile-fully-decoded"
   });
 }
 

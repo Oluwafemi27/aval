@@ -23,16 +23,14 @@ describe("validateCompiledManifestV01", () => {
   });
 
   it("accepts every closed rendition profile and validates its relationships", () => {
-    const manifest = mutableManifest();
-    manifest.renditions = [
-      reference("a-reference"),
+    const production = [
       {
         id: "b-opaque",
         profile: "avc-annexb-opaque-v0",
         codec: "avc1.42E020",
-        codedWidth: 4,
-        codedHeight: 4,
-        alphaLayout: { type: "opaque-v0", colorRect: [0, 0, 4, 4] },
+        codedWidth: 16,
+        codedHeight: 16,
+        alphaLayout: { type: "opaque-v0", colorRect: [0, 0, 2, 2] },
         bitrate: { average: 1_000, peak: 2_000 },
         capabilities: ["webcodecs", "webgl2"]
       },
@@ -40,22 +38,33 @@ describe("validateCompiledManifestV01", () => {
         id: "c-packed",
         profile: "avc-annexb-packed-alpha-v0",
         codec: "avc1.42E020",
-        codedWidth: 4,
-        codedHeight: 4,
+        codedWidth: 16,
+        codedHeight: 16,
         alphaLayout: {
           type: "stacked-v0",
           colorRect: [0, 0, 2, 2],
-          alphaRect: [0, 2, 2, 2]
+          alphaRect: [0, 10, 2, 2]
         },
         bitrate: { average: 2_000, peak: 2_000 },
         capabilities: ["webcodecs", "webgl2"]
       }
     ];
-    rebuildSamples(manifest);
-    manifest.limits.decodedPixelBytes = 64;
-    manifest.limits.runtimeWorkingSetBytes = 64;
 
-    expect(validateCompiledManifestV01(manifest).renditions).toHaveLength(3);
+    for (const rendition of production) {
+      const manifest = mutableManifest();
+      manifest.renditions = [reference("a-reference"), rendition];
+      rebuildSamples(manifest);
+      manifest.limits.decodedPixelBytes = 1_024;
+      manifest.limits.runtimeWorkingSetBytes = 1_024;
+      expect(validateCompiledManifestV01(manifest).renditions).toHaveLength(2);
+    }
+
+    const mixed = mutableManifest();
+    mixed.renditions = [reference("a-reference"), ...production];
+    rebuildSamples(mixed);
+    mixed.limits.decodedPixelBytes = 1_024;
+    mixed.limits.runtimeWorkingSetBytes = 1_024;
+    expectProfileInvalid(mixed, "renditions");
 
     const outside = mutableManifest();
     outside.renditions = [{
@@ -69,6 +78,53 @@ describe("validateCompiledManifestV01", () => {
       capabilities: ["webcodecs", "webgl2"]
     }];
     expectInvalid(outside, "renditions[0].alphaLayout.colorRect");
+  });
+
+  it("accepts lower rendition fallback only within one production alpha class", () => {
+    for (const renditions of [
+      [opaqueRendition("a-small", 8), opaqueRendition("b-large", 16)],
+      [packedRendition("a-small", 8), packedRendition("b-large", 16)]
+    ]) {
+      const manifest = mutableManifest();
+      manifest.canvas.width = 16;
+      manifest.canvas.height = 16;
+      for (const frame of manifest.staticFrames) {
+        frame.width = 16;
+        frame.height = 16;
+      }
+      manifest.renditions = renditions;
+      rebuildSamples(manifest);
+      manifest.limits.decodedPixelBytes = 3_072;
+      manifest.limits.runtimeWorkingSetBytes = 3_072;
+
+      expect(validateCompiledManifestV01(manifest).renditions.map(({ id }) => id))
+        .toEqual(["a-small", "b-large"]);
+    }
+  });
+
+  it("rejects every M4-shallow packed rectangle and coded-size alternative", () => {
+    const mutations = [
+      (rendition: any) => { rendition.alphaLayout.colorRect = [1, 0, 2, 2]; },
+      (rendition: any) => { rendition.alphaLayout.colorRect = [0, 0, 1, 2]; },
+      (rendition: any) => { rendition.alphaLayout.alphaRect = [1, 10, 2, 2]; },
+      (rendition: any) => { rendition.alphaLayout.alphaRect = [0, 9, 2, 2]; },
+      (rendition: any) => { rendition.alphaLayout.alphaRect = [0, 11, 2, 2]; },
+      (rendition: any) => { rendition.alphaLayout.alphaRect = [0, 10, 1, 2]; },
+      (rendition: any) => { rendition.codedWidth = 32; },
+      (rendition: any) => { rendition.codedHeight = 32; }
+    ] as const;
+
+    for (const mutate of mutations) {
+      const manifest = validPackedManifest();
+      mutate(manifest.renditions[0]);
+      expectProfileInvalid(manifest);
+    }
+  });
+
+  it("charges packed decoded-pixel limits from the complete coded surface", () => {
+    const manifest = validPackedManifest();
+    manifest.limits.decodedPixelBytes = 1_023;
+    expectInvalid(manifest, "limits.decodedPixelBytes");
   });
 
   it("validates canonical identity order, exact sample spans, and digest syntax", () => {
@@ -236,6 +292,19 @@ function mutableManifest(): any {
   return structuredClone(validManifest());
 }
 
+function expectProfileInvalid(value: unknown, path?: string): void {
+  try {
+    validateCompiledManifestV01(value);
+    throw new Error("expected manifest profile validation to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(FormatError);
+    expect((error as FormatError).code).toBe("PROFILE_INVALID");
+    if (path !== undefined) {
+      expect((error as FormatError).path).toBe(path);
+    }
+  }
+}
+
 function reference(id: string): any {
   return {
     id,
@@ -246,6 +315,46 @@ function reference(id: string): any {
     alphaLayout: { type: "straight-rgba-v0" },
     capabilities: []
   };
+}
+
+function opaqueRendition(id: string, size: number): any {
+  return {
+    id,
+    profile: "avc-annexb-opaque-v0",
+    codec: "avc1.42E020",
+    codedWidth: 16,
+    codedHeight: 16,
+    alphaLayout: { type: "opaque-v0", colorRect: [0, 0, size, size] },
+    bitrate: { average: 1_000, peak: 2_000 },
+    capabilities: ["webcodecs", "webgl2"]
+  };
+}
+
+function packedRendition(id: string, size: number): any {
+  const pane = size % 2 === 0 ? size : size + 1;
+  const storageHeight = 2 * pane + 8;
+  return {
+    id,
+    profile: "avc-annexb-packed-alpha-v0",
+    codec: "avc1.42E020",
+    codedWidth: 16,
+    codedHeight: Math.ceil(storageHeight / 16) * 16,
+    alphaLayout: {
+      type: "stacked-v0",
+      colorRect: [0, 0, size, size],
+      alphaRect: [0, pane + 8, size, size]
+    },
+    bitrate: { average: 1_000, peak: 2_000 },
+    capabilities: ["webcodecs", "webgl2"]
+  };
+}
+
+function validPackedManifest(): any {
+  const manifest = mutableManifest();
+  manifest.renditions = [{ ...packedRendition("reference", 2) }];
+  manifest.limits.decodedPixelBytes = 1_024;
+  manifest.limits.runtimeWorkingSetBytes = 1_024;
+  return manifest;
 }
 
 function rebuildSamples(manifest: any): void {

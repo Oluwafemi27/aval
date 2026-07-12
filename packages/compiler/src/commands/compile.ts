@@ -116,6 +116,7 @@ function directOptions(
       arguments_.normalizeVfr ||
       (arguments_.fps !== undefined && !inputPath.includes("%")),
     ...(arguments_.bitrate === undefined ? {} : { bitrate: arguments_.bitrate }),
+    ...(arguments_.alpha === undefined ? {} : { alpha: arguments_.alpha }),
     ...(arguments_.ffmpegPath === undefined
       ? {}
       : { ffmpegPath: arguments_.ffmpegPath }),

@@ -7,6 +7,7 @@ import type {
   StateV01,
   StaticBlobRange,
   StaticFrameV01,
+  ValidatedStaticPngProfile,
   UnitV01,
   ValidatedAssetLayout
 } from "@rendered-motion/format";
@@ -64,6 +65,7 @@ export interface RuntimeCatalogRecordIndex {
 export interface RuntimeCatalogStaticFrame {
   readonly frame: Readonly<StaticFrameV01>;
   readonly range: Readonly<StaticBlobRange>;
+  readonly png: Readonly<ValidatedStaticPngProfile>;
 }
 
 export interface CatalogMaps {
@@ -142,7 +144,12 @@ export function buildCatalogMaps(
     manifest.staticFrames,
     "static frame"
   );
-  for (const range of layout.frontIndex.staticBlobs) {
+  for (let index = 0; index < layout.frontIndex.staticBlobs.length; index += 1) {
+    const range = layout.frontIndex.staticBlobs[index];
+    const png = layout.staticPngProfiles[index];
+    if (range === undefined || png === undefined) {
+      throw indexError("validated static PNG profile relation is missing");
+    }
     const frame = staticDescriptorById.get(range.staticFrame);
     if (frame === undefined) {
       throw indexError("validated static range relation is missing");
@@ -151,7 +158,7 @@ export function buildCatalogMaps(
     insertUnique(
       staticFrames,
       frame.id,
-      Object.freeze({ frame, range }),
+      Object.freeze({ frame, range, png }),
       "validated asset contains a duplicate static range"
     );
   }

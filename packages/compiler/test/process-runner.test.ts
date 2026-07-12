@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cwd, execPath } from "node:process";
@@ -6,7 +6,11 @@ import { Writable } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
-import { CompilerError } from "../src/diagnostics.js";
+import {
+  CompilerError,
+  diagnosticFromError,
+  formatDiagnostic
+} from "../src/diagnostics.js";
 import {
   createProcessEnvironment,
   runBoundedProcess
@@ -160,6 +164,53 @@ describe("bounded process runner", () => {
     })).rejects.toMatchObject({ code: "FFMPEG_FAILED" });
   });
 
+  it.each(["read", "short-read"] as const)(
+    "keeps a private stdin spool path out of %s diagnostics",
+    async (failure) => {
+      const root = await mkdtemp(join(tmpdir(), "rma-private-spool-secret-"));
+      const privatePath = join(root, "customer-project-secret.yuv");
+      try {
+        if (failure === "short-read") await writeFile(privatePath, Uint8Array.of(7));
+        let error: unknown;
+        try {
+          await runBoundedProcess({
+            executable: execPath,
+            arguments: ["-e", "setInterval(() => {}, 1000)"],
+            cwd: cwd(),
+            limits: LIMITS,
+            stdinFile: {
+              path: privatePath,
+              offset: 0,
+              length: failure === "short-read" ? 2 : 1
+            }
+          });
+        } catch (caught) {
+          error = caught;
+        }
+        expect(error).toMatchObject({
+          code: "IO_FAILED",
+          message: failure === "read"
+            ? "Could not read compiler input spool"
+            : "Compiler input spool ended before the requested byte range"
+        });
+        expect((error as CompilerError).path).toBeUndefined();
+        const diagnostic = diagnosticFromError(error);
+        expect(diagnostic).not.toHaveProperty("path");
+        for (const surface of [
+          (error as Error).message,
+          JSON.stringify(error),
+          JSON.stringify(diagnostic),
+          formatDiagnostic(diagnostic)
+        ]) {
+          expect(surface).not.toContain(root);
+          expect(surface).not.toContain("customer-project-secret");
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  );
+
   it("enforces exact streamed stdout for short and extra output", async () => {
     const sink = (): Writable => new Writable({
       write(_chunk, _encoding, callback): void {
@@ -257,6 +308,88 @@ describe("bounded process runner", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("maps private working-directory creation failures without exposing the root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rma-private-create-secret-"));
+    const privateRoot = join(root, "customer-project-secret", "missing-parent");
+    try {
+      let error: unknown;
+      try {
+        await runBoundedProcess({
+          executable: execPath,
+          arguments: ["-e", "process.exit(0)"],
+          cwd: cwd(),
+          limits: LIMITS,
+          privateWorkingDirectory: { root: privateRoot, prefix: "operation-" }
+        });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({
+        code: "IO_FAILED",
+        message: "Could not create a private process working directory"
+      });
+      expect((error as CompilerError).path).toBeUndefined();
+      const diagnostic = diagnosticFromError(error);
+      expect(diagnostic).not.toHaveProperty("path");
+      for (const surface of [
+        (error as Error).message,
+        JSON.stringify(error),
+        JSON.stringify(diagnostic),
+        formatDiagnostic(diagnostic)
+      ]) {
+        expect(surface).not.toContain(privateRoot);
+        expect(surface).not.toContain("customer-project-secret");
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "maps a private working-directory cleanup failure without exposing its path",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "rma-private-cleanup-secret-"));
+      try {
+        let error: unknown;
+        try {
+          await runBoundedProcess({
+            executable: execPath,
+            arguments: [
+              "-e",
+              "require('node:fs').chmodSync(require('node:path').dirname(process.cwd()), 0o500)"
+            ],
+            cwd: cwd(),
+            limits: LIMITS,
+            privateWorkingDirectory: { root, prefix: "customer-secret-" }
+          });
+        } catch (caught) {
+          error = caught;
+        } finally {
+          await chmod(root, 0o700);
+        }
+        expect(error).toMatchObject({
+          code: "IO_FAILED",
+          message: "Could not remove a private process working directory"
+        });
+        expect((error as CompilerError).path).toBeUndefined();
+        const diagnostic = diagnosticFromError(error);
+        expect(diagnostic).not.toHaveProperty("path");
+        for (const surface of [
+          (error as Error).message,
+          JSON.stringify(error),
+          JSON.stringify(diagnostic),
+          formatDiagnostic(diagnostic)
+        ]) {
+          expect(surface).not.toContain(root);
+          expect(surface).not.toContain("customer-secret");
+        }
+      } finally {
+        await chmod(root, 0o700).catch(() => undefined);
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  );
 
   it("uses a mode-0700 proxy-free environment and cleans it after success", async () => {
     const root = await mkdtemp(join(tmpdir(), "rma-runner-private-"));

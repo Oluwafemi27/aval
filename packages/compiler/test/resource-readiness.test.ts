@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { deriveReadiness } from "../src/compile/readiness-plan.js";
 import { estimateRuntimeLimits } from "../src/compile/resource-estimate.js";
-import type { SourceProjectV01 } from "../src/model.js";
+import { deriveAvcRenditionGeometryFromVisible } from "@rendered-motion/format";
+import type {
+  NormalizedSourceProject,
+  SourceProjectV01
+} from "../src/model.js";
 
 describe("compiled resource and readiness derivation", () => {
   it("includes reversible residency, cuts, decoder ring, real encoded bytes, and canvas", () => {
     const project = {
       canvas: { width: 32, height: 16 },
       renditions: [
-        { id: "large", codedWidth: 32, codedHeight: 16 },
-        { id: "small", codedWidth: 16, codedHeight: 16 }
+        { id: "large", width: 32, height: 16 },
+        { id: "small", width: 16, height: 16 }
       ],
       units: [{
         id: "resident",
@@ -22,19 +26,34 @@ describe("compiled resource and readiness derivation", () => {
         start: { type: "cut" },
         targetRunwayFrames: 8
       }]
-    } as unknown as SourceProjectV01;
+    } as unknown as NormalizedSourceProject;
     const limits = estimateRuntimeLimits(project, [
       sample("large", 10),
       sample("large", 20),
       sample("small", 40)
+    ], [
+      deriveAvcRenditionGeometryFromVisible({
+        canvasWidth: 32,
+        canvasHeight: 16,
+        profile: "avc-annexb-opaque-v0",
+        visibleWidth: 32,
+        visibleHeight: 16
+      }),
+      deriveAvcRenditionGeometryFromVisible({
+        canvasWidth: 32,
+        canvasHeight: 16,
+        profile: "avc-annexb-opaque-v0",
+        visibleWidth: 16,
+        visibleHeight: 8
+      })
     ]);
 
     expect(limits).toEqual({
       maxCompiledBytes: 32 * 1024 * 1024,
       maxRuntimeBytes: 64 * 1024 * 1024,
-      decodedPixelBytes: 6_144,
-      persistentCacheBytes: 26 * 6_144,
-      runtimeWorkingSetBytes: 26 * 6_144 + 12 * 6_144 + 40 + 2_048
+      decodedPixelBytes: 2_048,
+      persistentCacheBytes: 26 * 2_048,
+      runtimeWorkingSetBytes: 26 * 2_048 + 12 * 2_048 + 40 + 2_048
     });
   });
 

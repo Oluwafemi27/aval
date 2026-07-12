@@ -36,9 +36,9 @@ import {
   validateTimeout
 } from "./interaction-cache-preparation-support.js";
 import type {
-  OpaqueFrameRenderer,
+  FrameRenderer,
   ResidentFrameHandle
-} from "./opaque-frame-renderer.js";
+} from "./frame-renderer.js";
 import type { WorkerSampleFactory } from "./worker-samples.js";
 
 export {
@@ -422,7 +422,7 @@ export async function prepareInteractionCache(
 
 /** Real renderer already satisfies the preparation's narrow upload boundary. */
 export function asInteractionCachePreparationRenderer(
-  renderer: OpaqueFrameRenderer
+  renderer: FrameRenderer
 ): InteractionCachePreparationRenderer {
   return renderer;
 }

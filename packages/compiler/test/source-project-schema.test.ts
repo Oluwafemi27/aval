@@ -66,6 +66,12 @@ describe("source project schema", () => {
     );
     expect(parsed.sources.map(({ id }) => id)).toEqual(["later", "source"]);
     expect(parsed.units.map(({ id }) => id)).toEqual(["idle-loop", "later-shot"]);
+    expect(parsed).toMatchObject({
+      sourceProjectVersion: "0.1",
+      alphaPolicy: "opaque",
+      alphaPolicyRejectionCode: "OPAQUE_ONLY_M5"
+    });
+    expect(parsed).not.toHaveProperty("profile");
     expect(Object.isFrozen(parsed)).toBe(true);
     expect(Object.isFrozen(parsed.units)).toBe(true);
   });

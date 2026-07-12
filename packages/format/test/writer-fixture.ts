@@ -6,38 +6,19 @@ import type {
   ParsedFrontIndex
 } from "../src/model.js";
 import { validManifest } from "./manifest-fixture.js";
+import { makeSizedTestPng } from "./png-test-fixture.js";
 
-const PNG_SIGNATURE = Object.freeze([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
-] as const);
-
-function writeUint32BE(bytes: Uint8Array, offset: number, value: number): void {
-  bytes[offset] = Math.floor(value / 0x100_0000) & 0xff;
-  bytes[offset + 1] = Math.floor(value / 0x1_0000) & 0xff;
-  bytes[offset + 2] = Math.floor(value / 0x100) & 0xff;
-  bytes[offset + 3] = value & 0xff;
-}
-
-/** Build the shallow PNG profile intentionally accepted by M4. */
-export function shallowPng(
+/** Build one deterministic strict PNG with a requested minimum byte length. */
+export function strictPng(
   width: number,
   height: number,
   length = 33,
   marker = 0
 ): Uint8Array {
-  if (!Number.isSafeInteger(length) || length < 33) {
-    throw new Error("test PNG length must be at least 33");
+  if (!Number.isSafeInteger(length) || length < 0) {
+    throw new Error("test PNG minimum length must be nonnegative");
   }
-  const bytes = new Uint8Array(length);
-  bytes.set(PNG_SIGNATURE, 0);
-  writeUint32BE(bytes, 8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  writeUint32BE(bytes, 16, width);
-  writeUint32BE(bytes, 20, height);
-  bytes.set([8, 6, 0, 0, 0], 24);
-  bytes.set([0xde, 0xad, 0xbe, 0xef], 29);
-  if (length > 33) bytes[length - 1] = marker & 0xff;
-  return bytes;
+  return makeSizedTestPng(width, height, length, marker);
 }
 
 function manifestInputFromCompiled(
@@ -67,7 +48,7 @@ export interface WriterFixtureOptions {
   readonly staticLength?: number | ((index: number) => number);
 }
 
-/** A fresh valid writer input with real RMRF samples and shallow PNG payloads. */
+/** A fresh valid writer input with real RMRF samples and strict PNG payloads. */
 export function validWriterInput(
   options: WriterFixtureOptions = {}
 ): CanonicalAssetInputV01 {
@@ -102,7 +83,7 @@ export function validWriterInput(
   );
   const staticPayloads = compiled.staticFrames.map((frame, index) => ({
     staticFrame: frame.id,
-    bytes: shallowPng(
+    bytes: strictPng(
       frame.width,
       frame.height,
       typeof options.staticLength === "function"
@@ -172,15 +153,17 @@ export function avcWriterInput(extraPayloadBytes: number): CanonicalAssetInputV0
         id: "reference",
         profile: "avc-annexb-opaque-v0",
         codec: "avc1.42E020",
-        codedWidth: 2,
-        codedHeight: 2,
+        codedWidth: 16,
+        codedHeight: 16,
         alphaLayout: { type: "opaque-v0", colorRect: [0, 0, 2, 2] },
         bitrate: { average: 1_000, peak: 2_000 },
         capabilities: ["webcodecs", "webgl2"]
       }],
       limits: {
         ...input.manifest.limits,
-        maxCompiledBytes: 32 * 1024 * 1024
+        maxCompiledBytes: 32 * 1024 * 1024,
+        decodedPixelBytes: 1_024,
+        runtimeWorkingSetBytes: 1_024
       }
     },
     accessUnits

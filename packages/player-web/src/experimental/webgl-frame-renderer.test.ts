@@ -20,6 +20,12 @@ const LAYOUT: FrameTextureLayout = {
   layerCount: 3
 };
 
+const BROWSER_WEBGL_LAYOUT: FrameTextureLayout = {
+  width: 16,
+  height: 16,
+  layerCount: 3
+};
+
 describe("WebGlFrameRenderer", () => {
   it("allocates once, serializes uploads, reuses one staging buffer, and closes sources", async () => {
     const backend = new FakeBackend();
@@ -138,7 +144,7 @@ describe("WebGlFrameRenderer", () => {
 
     await renderer.uploadResident(0, first.source);
     await expect(renderer.uploadResident(1, second.source)).rejects.toThrow(
-      /injected upload failure/
+      "failed to upload a WebGL frame"
     );
 
     expect(first.closeCalls()).toBe(1);
@@ -260,13 +266,19 @@ describe("WebGlFrameRenderer", () => {
     expect(() => renderer.draw(second)).not.toThrow();
   });
 
-  it.each(["fragment", "program"] as const)(
-    "deletes compiled shaders when %s creation fails",
-    (failure) => {
+  it.each([
+    ["fragment", "failed to compile the WebGL frame shader"],
+    ["program", "failed to create WebGL shader program"]
+  ] as const)(
+    "deletes each compiled shader once when %s setup fails",
+    (failure, expectedError) => {
       const fixture = createShaderFailureCanvas(failure);
       const backend = new BrowserWebGl2FrameBackend(fixture.canvas);
 
-      expect(() => backend.allocate(LAYOUT, STREAMING_SLOT_COUNT)).toThrow();
+      expect(
+        () => backend.allocate(BROWSER_WEBGL_LAYOUT, STREAMING_SLOT_COUNT)
+      ).toThrow(expectedError);
+      expect(fixture.deletedShaders).toHaveLength(fixture.shaders.length);
       expect(new Set(fixture.deletedShaders)).toEqual(
         new Set(fixture.shaders)
       );

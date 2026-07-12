@@ -271,7 +271,7 @@ const FIXTURE_PATH = fileURLToPath(
   new URL("../../fixtures/conformance/m55/opaque-all-routes.rma", import.meta.url)
 );
 const FIXTURE_SHA256 =
-  "28bbd6ca250fff5571ff9ef8a95a69d878e198641a05e8923743a521106f70d5";
+  "f991621d528aac6ef8fdc854ff7f575174c5c85a71fc64a6db231b8c239013e2";
 
 test("reports exact M5.5 browser support without a codec substitute", async ({
   page

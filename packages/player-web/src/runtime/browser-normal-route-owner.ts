@@ -1,15 +1,15 @@
 import type { GraphEdgeDefinition, GraphPresentation } from "@rendered-motion/graph";
 import {
-  OPAQUE_STREAMING_SLOT_COUNT,
+  FRAME_STREAMING_SLOT_COUNT,
   type RenderFrameHandle,
   type StreamingFrameHandle
-} from "./opaque-frame-renderer.js";
+} from "./frame-renderer.js";
 import type { BrowserFrameMedia } from "./browser-playback-types.js";
 
 import type {
-  OpaqueCandidateActivationInput,
-  OpaqueCandidateReadinessSessionInput
-} from "./opaque-candidate-factory.js";
+  AvcCandidateActivationInput,
+  AvcCandidateReadinessSessionInput
+} from "./avc-candidate-factory.js";
 import {
   type PathScheduler,
   type PathSchedulerSnapshot
@@ -22,11 +22,14 @@ import {
   safeBrowserSchedulerSnapshot,
   type BrowserNormalReady
 } from "./browser-playback-types.js";
+import {
+  integratedActivationPresentationOrdinal
+} from "./integrated-player-support.js";
 
 /** Owns the sole streaming scheduler and all normal/intro media preparation. */
 export class BrowserNormalRouteOwner {
-  readonly #candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
-  readonly #activation: Readonly<OpaqueCandidateActivationInput>;
+  readonly #candidate: Readonly<AvcCandidateReadinessSessionInput>;
+  readonly #activation: Readonly<AvcCandidateActivationInput>;
   #scheduler: PathScheduler;
   #lastSnapshot: Readonly<PathSchedulerSnapshot>;
   #prefix: BrowserInitialPrefix | null = null;
@@ -34,8 +37,8 @@ export class BrowserNormalRouteOwner {
   #disposed = false;
 
   public constructor(options: {
-    readonly candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
-    readonly activation: Readonly<OpaqueCandidateActivationInput>;
+    readonly candidate: Readonly<AvcCandidateReadinessSessionInput>;
+    readonly activation: Readonly<AvcCandidateActivationInput>;
   }) {
     this.#candidate = options.candidate;
     this.#activation = options.activation;
@@ -164,6 +167,9 @@ export class BrowserNormalRouteOwner {
     signal: AbortSignal
   ): Promise<Readonly<BrowserNormalReady>> {
     this.#assertActive();
+    const activationOrdinal = integratedActivationPresentationOrdinal(
+      this.#activation.graphSnapshot
+    );
     if (expected.kind === "intro") {
       const prefix = new BrowserInitialPrefix({
         candidate: this.#candidate,
@@ -171,12 +177,12 @@ export class BrowserNormalRouteOwner {
         unit: expected.unitId
       });
       this.#prefix = prefix;
-      return prefix.prepare(expected.frameIndex, 0n, signal);
+      return prefix.prepare(expected.frameIndex, activationOrdinal, signal);
     }
     if (expected.kind !== "body") {
-      throw new Error("opaque activation requires intro or body frame zero");
+      throw new Error("AVC activation requires intro or body frame zero");
     }
-    await this.#startBody(expected.state, 0n);
+    await this.#startBody(expected.state, activationOrdinal);
     return this.#takeAndUpload(false, signal);
   }
 
@@ -191,7 +197,10 @@ export class BrowserNormalRouteOwner {
     if (presentation.frameIndex + 1 < state.initialUnit!.frameCount) {
       return prefix.prepare(
         presentation.frameIndex + 1,
-        BigInt(presentation.frameIndex + 1),
+        integratedActivationPresentationOrdinal(
+          this.#activation.graphSnapshot
+        ) +
+          BigInt(presentation.frameIndex + 1),
         signal
       );
     }
@@ -199,7 +208,10 @@ export class BrowserNormalRouteOwner {
     this.#prefix = null;
     await this.#startBody(
       presentation.state,
-      BigInt(presentation.frameIndex + 1)
+      integratedActivationPresentationOrdinal(
+        this.#activation.graphSnapshot
+      ) +
+        BigInt(presentation.frameIndex + 1)
     );
     return this.#takeAndUpload(false, signal);
   }
@@ -371,13 +383,13 @@ export class BrowserNormalRouteOwner {
   /** Keeps the last committed stream pixels valid across discarded uploads. */
   #selectStreamingSlot(ordinal: bigint): number {
     const preferred = Number(
-      ordinal % BigInt(OPAQUE_STREAMING_SLOT_COUNT)
+      ordinal % BigInt(FRAME_STREAMING_SLOT_COUNT)
     );
     const retained = this.#lastPresented?.handle;
     if (retained?.kind !== "stream" || retained.slot !== preferred) {
       return preferred;
     }
-    return (preferred + 1) % OPAQUE_STREAMING_SLOT_COUNT;
+    return (preferred + 1) % FRAME_STREAMING_SLOT_COUNT;
   }
 
   async #startBody(stateId: string, firstOrdinal: bigint): Promise<void> {
@@ -397,7 +409,7 @@ export class BrowserNormalRouteOwner {
 }
 
 class BrowserInitialPrefix {
-  readonly #candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
+  readonly #candidate: Readonly<AvcCandidateReadinessSessionInput>;
   readonly #state: string;
   readonly #unit: string;
   readonly #generation: number;
@@ -405,7 +417,7 @@ class BrowserInitialPrefix {
   #disposed = false;
 
   public constructor(options: {
-    readonly candidate: Readonly<OpaqueCandidateReadinessSessionInput>;
+    readonly candidate: Readonly<AvcCandidateReadinessSessionInput>;
     readonly state: string;
     readonly unit: string;
   }) {

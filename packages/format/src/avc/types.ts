@@ -1,3 +1,5 @@
+import type { Rect } from "../model.js";
+
 /** A single Annex B access unit and its container key assertion. */
 export interface AvcAccessUnitInput {
   readonly bytes: Uint8Array;
@@ -23,6 +25,8 @@ export interface AvcFrameRate {
 export interface AvcConstrainedBaselineProfile {
   readonly codedWidth: number;
   readonly codedHeight: number;
+  /** Exact decoded-picture crop; omitted only for full-coded M5 compatibility. */
+  readonly expectedDecodedStorageRect?: Rect;
   readonly frameRate: AvcFrameRate;
   readonly averageBitrate: number;
   readonly peakBitrate: number;

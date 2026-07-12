@@ -63,6 +63,24 @@ export class RealtimeDriverDisposedError extends Error {
   }
 }
 
+interface RealtimeFrameRequestToken {
+  invalidated: boolean;
+  synchronousCallback: boolean;
+}
+
+interface RealtimePendingFrame {
+  readonly handle: number;
+  readonly token: RealtimeFrameRequestToken;
+}
+
+interface RealtimeClockInitializationToken {
+  reentered: boolean;
+}
+
+interface RealtimeContentTickToken {
+  reentered: boolean;
+}
+
 /**
  * Converts display opportunities into at most one rational content tick.
  * It never advances semantic state itself: the injected tick path first proves
@@ -76,7 +94,6 @@ export class RealtimeDriver {
   readonly #now: () => number;
   readonly #tryContentTick: RealtimeDriverOptions["tryContentTick"];
   readonly #onUnderflow: RealtimeDriverOptions["onUnderflow"];
-  readonly #animationCallback: FrameRequestCallback;
 
   #initialized = false;
   #running = false;
@@ -84,7 +101,12 @@ export class RealtimeDriver {
   #originMs = 0;
   #nextPresentationOrdinal = 1n;
   #nextDeadlineMs: number | null = null;
-  #pendingFrameHandle: number | null = null;
+  #pendingFrame: RealtimePendingFrame | null = null;
+  #frameRequestInFlight: RealtimeFrameRequestToken | null = null;
+  #frameCancellationInFlight = false;
+  #clockInitializationInFlight: RealtimeClockInitializationToken | null = null;
+  #contentTickInFlight: RealtimeContentTickToken | null = null;
+  #lifecycleGeneration = 0n;
   #lastDisplayCallbackMs: number | null = null;
   #underflowReportedFor: bigint | null = null;
   #displayCallbacks = 0;
@@ -105,22 +127,29 @@ export class RealtimeDriver {
     this.#now = options.now;
     this.#tryContentTick = options.tryContentTick;
     this.#onUnderflow = options.onUnderflow;
-    this.#animationCallback = (timestamp): void => {
-      this.#handleDisplayCallback(timestamp);
-    };
   }
 
   public start(): void {
     this.#assertUsable();
+    this.#assertContentTickIdle();
+    this.#assertFrameHostIdle();
     if (this.#running) return;
     this.#ensureClockInitialized();
     this.#running = true;
-    this.#scheduleFrame();
+    try {
+      this.#scheduleFrame();
+    } catch (error) {
+      this.#running = false;
+      this.#invalidateFrameOwnership();
+      throw error;
+    }
   }
 
   /** Deterministic proof adapter over the same single-tick attempt. */
   public tickOnce(): Readonly<RealtimeTickOutcome> {
     this.#assertUsable();
+    this.#assertContentTickIdle();
+    this.#assertFrameHostIdle();
     if (this.#running) {
       throw new RangeError(
         "manual tick is unavailable while the realtime driver is running"
@@ -143,32 +172,62 @@ export class RealtimeDriver {
     });
   }
 
+  /**
+   * Suspends display ownership while a reduced-motion static surface is
+   * prepared. Unlike failure stop, this preserves the smoothness claim and
+   * permits start() to resume the same candidate if policy flips precommit.
+   */
+  public pauseForPolicy(): void {
+    this.#assertUsable();
+    this.#running = false;
+    this.#advanceLifecycleGeneration();
+    this.#invalidateFrameOwnership();
+  }
+
   /** Fatal playback recovery freezes and cancels the owned callback immediately. */
   public stopAfterFailure(): void {
     if (this.#disposed) return;
     this.#running = false;
     this.#smoothSession = false;
-    if (this.#pendingFrameHandle !== null) {
-      const handle = this.#pendingFrameHandle;
-      this.#pendingFrameHandle = null;
-      this.#cancelFrame(handle);
-    }
+    this.#advanceLifecycleGeneration();
+    this.#invalidateFrameOwnership();
   }
 
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#running = false;
-    if (this.#pendingFrameHandle !== null) {
-      const handle = this.#pendingFrameHandle;
-      this.#pendingFrameHandle = null;
-      this.#cancelFrame(handle);
-    }
+    this.#advanceLifecycleGeneration();
+    this.#invalidateFrameOwnership();
   }
 
   #ensureClockInitialized(): void {
     if (this.#initialized) return;
-    const origin = this.#now();
+    const active = this.#clockInitializationInFlight;
+    if (active !== null) {
+      active.reentered = true;
+      throw new RangeError("realtime clock initialization reentered synchronously");
+    }
+    const token: RealtimeClockInitializationToken = { reentered: false };
+    const expectedGeneration = this.#lifecycleGeneration;
+    this.#clockInitializationInFlight = token;
+    let origin: number;
+    try {
+      origin = this.#now();
+    } finally {
+      if (this.#clockInitializationInFlight === token) {
+        this.#clockInitializationInFlight = null;
+      }
+    }
+    if (token.reentered) {
+      throw new RangeError("realtime clock initialization reentered synchronously");
+    }
+    if (this.#disposed) throw new RealtimeDriverDisposedError();
+    if (this.#lifecycleGeneration !== expectedGeneration) {
+      throw new RangeError(
+        "realtime lifecycle changed during clock initialization"
+      );
+    }
     validateClockValue(origin, "realtime clock origin");
     this.#originMs = origin;
     this.#nextDeadlineMs = deadlineFromOrigin(
@@ -179,36 +238,61 @@ export class RealtimeDriver {
     this.#initialized = true;
   }
 
+  #handleScheduledFrame(
+    token: RealtimeFrameRequestToken,
+    timestamp: number
+  ): void {
+    if (this.#frameRequestInFlight === token) {
+      token.invalidated = true;
+      token.synchronousCallback = true;
+      this.#running = false;
+      this.#smoothSession = false;
+      throw new RangeError(
+        "animation-frame callback ran synchronously during its request"
+      );
+    }
+    const pending = this.#pendingFrame;
+    if (
+      pending === null ||
+      pending.token !== token ||
+      token.invalidated
+    ) {
+      return;
+    }
+    this.#pendingFrame = null;
+    token.invalidated = true;
+    this.#handleDisplayCallback(timestamp);
+  }
+
   #handleDisplayCallback(timestamp: number): void {
     if (!this.#running || this.#disposed) return;
-    this.#pendingFrameHandle = null;
-    validateClockValue(timestamp, "animation-frame timestamp");
-    if (
-      this.#lastDisplayCallbackMs !== null &&
-      timestamp < this.#lastDisplayCallbackMs
-    ) {
-      this.#running = false;
-      throw new RangeError("animation-frame clock must be monotonic");
-    }
-    const previousDisplayCallbackMs = this.#lastDisplayCallbackMs;
-    this.#lastDisplayCallbackMs = timestamp;
-    this.#displayCallbacks = checkedIncrement(
-      this.#displayCallbacks,
-      "display callback count"
-    );
-
     try {
+      validateClockValue(timestamp, "animation-frame timestamp");
+      if (
+        this.#lastDisplayCallbackMs !== null &&
+        timestamp < this.#lastDisplayCallbackMs
+      ) {
+        throw new RangeError("animation-frame clock must be monotonic");
+      }
+      const previousDisplayCallbackMs = this.#lastDisplayCallbackMs;
+      this.#lastDisplayCallbackMs = timestamp;
+      this.#displayCallbacks = checkedIncrement(
+        this.#displayCallbacks,
+        "display callback count"
+      );
       if (timestamp + CONTENT_DEADLINE_EPSILON_MS >= this.#nextDeadlineMs!) {
         const missedDisplayCadence = previousDisplayCallbackMs !== null &&
           timestamp - previousDisplayCallbackMs >
             this.#frameDurationMs + CONTENT_DEADLINE_EPSILON_MS;
         this.#attemptContentTick(timestamp, false, missedDisplayCadence);
       }
+      if (this.#running) this.#scheduleFrame();
     } catch (error) {
       this.#running = false;
+      this.#smoothSession = false;
+      this.#invalidateFrameOwnership();
       throw error;
     }
-    if (this.#running) this.#scheduleFrame();
   }
 
   #attemptContentTick(
@@ -224,121 +308,248 @@ export class RealtimeDriver {
         presentationOrdinal: ordinal
       });
     }
-    const result = this.#tryContentTick(Object.freeze({
-      presentationOrdinal: ordinal,
-      deadlineMs,
-      opportunityTimeMs,
-      manual
-    }));
-    if (
-      result === null ||
-      typeof result !== "object" ||
-      (
-        result.status !== "advanced" &&
-        result.status !== "underflow" &&
-        result.status !== "stopped"
-      )
-    ) {
-      throw new TypeError("realtime content tick result is invalid");
-    }
-
-    if (result.status === "underflow") {
-      this.#smoothSession = false;
-      if (this.#underflowReportedFor !== ordinal) {
-        this.#underflows = checkedIncrement(
-          this.#underflows,
-          "underflow count"
-        );
-        this.#underflowReportedFor = ordinal;
-        try {
-          this.#onUnderflow?.(Object.freeze({
-            presentationOrdinal: ordinal,
-            deadlineMs,
-            opportunityTimeMs
-          }));
-        } catch {
-          // Underflow observers are diagnostics and cannot own the RAF loop.
-        }
+    const token: RealtimeContentTickToken = { reentered: false };
+    const expectedGeneration = this.#lifecycleGeneration;
+    this.#contentTickInFlight = token;
+    try {
+      const result = this.#tryContentTick(Object.freeze({
+        presentationOrdinal: ordinal,
+        deadlineMs,
+        opportunityTimeMs,
+        manual
+      }));
+      this.#assertContentTickAvailable(token);
+      if (result === null || typeof result !== "object") {
+        throw new TypeError("realtime content tick result is invalid");
       }
-      // Freeze the rational clock rather than trying to catch up missed media.
-      this.#originMs += Math.max(0, opportunityTimeMs - deadlineMs);
-      validateClockValue(this.#originMs, "shifted realtime clock origin");
-      this.#nextDeadlineMs = deadlineFromOrigin(
-        this.#originMs,
-        ordinal,
-        this.#frameRate
+      const status = result.status;
+      this.#assertContentTickCurrent(
+        token,
+        expectedGeneration,
+        status === "stopped"
       );
-      return Object.freeze({
-        status: "underflow",
-        presentationOrdinal: ordinal
-      });
-    }
+      if (
+        status !== "advanced" &&
+        status !== "underflow" &&
+        status !== "stopped"
+      ) {
+        throw new TypeError("realtime content tick result is invalid");
+      }
 
-    if (result.status === "stopped") {
-      // A fatal media boundary owns its asynchronous static recovery. Freeze
-      // this clock immediately and never issue another animated content tick.
-      this.#running = false;
-      this.#smoothSession = false;
-      return Object.freeze({
-        status: "stopped",
-        presentationOrdinal: ordinal
-      });
-    }
+      if (status === "underflow") {
+        this.#smoothSession = false;
+        if (this.#underflowReportedFor !== ordinal) {
+          try {
+            this.#onUnderflow?.(Object.freeze({
+              presentationOrdinal: ordinal,
+              deadlineMs,
+              opportunityTimeMs
+            }));
+          } catch {
+            // Underflow observers are diagnostics and cannot own the RAF loop.
+          }
+          this.#assertContentTickCurrent(token, expectedGeneration, false);
+          this.#underflows = checkedIncrement(
+            this.#underflows,
+            "underflow count"
+          );
+          this.#underflowReportedFor = ordinal;
+        }
+        // Freeze the rational clock rather than trying to catch up missed media.
+        this.#originMs += Math.max(0, opportunityTimeMs - deadlineMs);
+        validateClockValue(this.#originMs, "shifted realtime clock origin");
+        this.#nextDeadlineMs = deadlineFromOrigin(
+          this.#originMs,
+          ordinal,
+          this.#frameRate
+        );
+        return Object.freeze({
+          status: "underflow",
+          presentationOrdinal: ordinal
+        });
+      }
 
-    this.#advancedTicks = checkedIncrement(
-      this.#advancedTicks,
-      "advanced content-tick count"
-    );
-    this.#underflowReportedFor = null;
-    this.#nextPresentationOrdinal += 1n;
-    let nextDeadlineMs = deadlineFromOrigin(
-      this.#originMs,
-      this.#nextPresentationOrdinal,
-      this.#frameRate
-    );
-    if (
-      !manual &&
-      (
-        missedDisplayCadence ||
-        nextDeadlineMs <= opportunityTimeMs + CONTENT_DEADLINE_EPSILON_MS
-      )
-    ) {
-      // A throttled or missed display opportunity drops wall-clock debt. The
-      // authored frame sequence resumes at its normal cadence and is never
-      // burst-played to catch up with time that elapsed off-screen.
-      this.#originMs += Math.max(0, opportunityTimeMs - deadlineMs);
-      validateClockValue(this.#originMs, "rebased realtime clock origin");
-      nextDeadlineMs = deadlineFromOrigin(
+      if (status === "stopped") {
+        // A fatal media boundary owns its asynchronous static recovery. Freeze
+        // this clock immediately and never issue another animated content tick.
+        this.#running = false;
+        this.#smoothSession = false;
+        return Object.freeze({
+          status: "stopped",
+          presentationOrdinal: ordinal
+        });
+      }
+
+      this.#advancedTicks = checkedIncrement(
+        this.#advancedTicks,
+        "advanced content-tick count"
+      );
+      this.#underflowReportedFor = null;
+      this.#nextPresentationOrdinal += 1n;
+      let nextDeadlineMs = deadlineFromOrigin(
         this.#originMs,
         this.#nextPresentationOrdinal,
         this.#frameRate
       );
+      if (
+        !manual &&
+        (
+          missedDisplayCadence ||
+          nextDeadlineMs <= opportunityTimeMs + CONTENT_DEADLINE_EPSILON_MS
+        )
+      ) {
+        // A throttled or missed display opportunity drops wall-clock debt. The
+        // authored frame sequence resumes at its normal cadence and is never
+        // burst-played to catch up with time that elapsed off-screen.
+        this.#originMs += Math.max(0, opportunityTimeMs - deadlineMs);
+        validateClockValue(this.#originMs, "rebased realtime clock origin");
+        nextDeadlineMs = deadlineFromOrigin(
+          this.#originMs,
+          this.#nextPresentationOrdinal,
+          this.#frameRate
+        );
+      }
+      this.#nextDeadlineMs = nextDeadlineMs;
+      return Object.freeze({
+        status: "advanced",
+        presentationOrdinal: ordinal
+      });
+    } catch (error) {
+      if (token.reentered) throw contentTickReentryError();
+      throw error;
+    } finally {
+      if (this.#contentTickInFlight === token) {
+        this.#contentTickInFlight = null;
+      }
     }
-    this.#nextDeadlineMs = nextDeadlineMs;
-    return Object.freeze({
-      status: "advanced",
-      presentationOrdinal: ordinal
-    });
   }
 
   #scheduleFrame(): void {
-    if (this.#pendingFrameHandle !== null) {
+    this.#assertFrameHostIdle();
+    if (this.#pendingFrame !== null) {
       throw new RangeError("realtime driver already has a pending callback");
     }
-    let handle: number;
+    if (this.#frameRequestInFlight !== null) {
+      throw new RangeError("realtime frame request reentered synchronously");
+    }
+    const token: RealtimeFrameRequestToken = {
+      invalidated: false,
+      synchronousCallback: false
+    };
+    const callback: FrameRequestCallback = (timestamp): void => {
+      this.#handleScheduledFrame(token, timestamp);
+    };
+    this.#frameRequestInFlight = token;
+    let handle: unknown;
     try {
-      handle = this.#requestFrame(this.#animationCallback);
+      handle = this.#requestFrame(callback);
     } catch (error) {
+      token.invalidated = true;
       this.#running = false;
       throw error;
+    } finally {
+      if (this.#frameRequestInFlight === token) {
+        this.#frameRequestInFlight = null;
+      }
     }
-    if (!Number.isSafeInteger(handle) || handle < 0) {
+    if (token.synchronousCallback) {
       this.#running = false;
+      this.#cancelReturnedFrame(handle);
+      throw new RangeError(
+        "animation-frame callback ran synchronously during its request"
+      );
+    }
+    if (token.invalidated || !this.#running || this.#disposed) {
+      token.invalidated = true;
+      this.#cancelReturnedFrame(handle);
+      if (this.#disposed) throw new RealtimeDriverDisposedError();
+      throw new RangeError(
+        "realtime frame ownership changed during its request"
+      );
+    }
+    if (
+      typeof handle !== "number" ||
+      !Number.isSafeInteger(handle) ||
+      handle < 0
+    ) {
+      token.invalidated = true;
+      this.#running = false;
+      this.#cancelReturnedFrame(handle);
       throw new RangeError(
         "animation-frame request must return a non-negative integer handle"
       );
     }
-    this.#pendingFrameHandle = handle;
+    this.#pendingFrame = { handle, token };
+  }
+
+  #invalidateFrameOwnership(): void {
+    if (this.#frameRequestInFlight !== null) {
+      this.#frameRequestInFlight.invalidated = true;
+    }
+    const pending = this.#pendingFrame;
+    if (pending === null) return;
+    this.#pendingFrame = null;
+    pending.token.invalidated = true;
+    this.#invokeCancelFrame(pending.handle);
+  }
+
+  #cancelReturnedFrame(handle: unknown): void {
+    if (typeof handle !== "number") return;
+    try {
+      this.#invokeCancelFrame(handle);
+    } catch {
+      // The stable scheduling/lifecycle failure remains authoritative.
+    }
+  }
+
+  #invokeCancelFrame(handle: number): void {
+    if (this.#frameCancellationInFlight) {
+      throw new RangeError("realtime frame cancellation reentered synchronously");
+    }
+    this.#frameCancellationInFlight = true;
+    try {
+      this.#cancelFrame(handle);
+    } finally {
+      this.#frameCancellationInFlight = false;
+    }
+  }
+
+  #assertFrameHostIdle(): void {
+    if (this.#frameCancellationInFlight) {
+      throw new RangeError("realtime frame cancellation is in progress");
+    }
+  }
+
+  #assertContentTickIdle(): void {
+    const active = this.#contentTickInFlight;
+    if (active === null) return;
+    active.reentered = true;
+    throw contentTickReentryError();
+  }
+
+  #assertContentTickCurrent(
+    token: RealtimeContentTickToken,
+    expectedGeneration: bigint,
+    allowLifecycleChange: boolean
+  ): void {
+    this.#assertContentTickAvailable(token);
+    if (
+      !allowLifecycleChange &&
+      this.#lifecycleGeneration !== expectedGeneration
+    ) {
+      throw new RangeError(
+        "realtime lifecycle changed during a content tick"
+      );
+    }
+  }
+
+  #assertContentTickAvailable(token: RealtimeContentTickToken): void {
+    if (token.reentered) throw contentTickReentryError();
+    if (this.#disposed) throw new RealtimeDriverDisposedError();
+  }
+
+  #advanceLifecycleGeneration(): void {
+    this.#lifecycleGeneration += 1n;
   }
 
   #assertUsable(): void {
@@ -391,4 +602,8 @@ function checkedIncrement(value: number, label: string): number {
     throw new RangeError(`${label} exceeds safe-integer range`);
   }
   return value + 1;
+}
+
+function contentTickReentryError(): RangeError {
+  return new RangeError("realtime content tick reentered synchronously");
 }

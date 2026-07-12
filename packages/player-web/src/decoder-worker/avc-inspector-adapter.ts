@@ -2,6 +2,7 @@ import { AvcIncrementalInspector } from "@rendered-motion/format";
 
 import {
   type DecoderWorkerAvcProfile,
+  type DecoderWorkerOutputExpectation,
   type DecoderWorkerSample
 } from "./protocol.js";
 
@@ -22,13 +23,24 @@ export interface WorkerAvcInspector {
 }
 
 export type WorkerAvcInspectorFactory = (
-  profile: DecoderWorkerAvcProfile
+  profile: DecoderWorkerAvcProfile,
+  expectedOutput: DecoderWorkerOutputExpectation
 ) => WorkerAvcInspector;
 
 export function createDefaultWorkerAvcInspector(
-  profile: DecoderWorkerAvcProfile
+  profile: DecoderWorkerAvcProfile,
+  expectedOutput: DecoderWorkerOutputExpectation
 ): WorkerAvcInspector {
-  return new AvcIncrementalInspector(profile);
+  const rect = expectedOutput.visibleRect;
+  return new AvcIncrementalInspector({
+    ...profile,
+    expectedDecodedStorageRect: Object.freeze([
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height
+    ])
+  });
 }
 
 export function inspectWorkerSample(

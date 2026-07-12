@@ -110,6 +110,93 @@ describe("IntegratedPlayer terminal disposal", () => {
     store.settlement.resolve();
     await expect(disposal).resolves.toBeUndefined();
   });
+
+  it.each([
+    ["candidate", "direct"],
+    ["candidate", "async-immediate"],
+    ["static-store", "direct"],
+    ["static-store", "async-immediate"]
+  ] as const)(
+    "does not self-await a %s %s disposal callback",
+    async (owner, mode) => {
+      const store = owner === "static-store"
+        ? new ReentrantSettlementStore(mode)
+        : new ThrowingStaticStore();
+      const factory = owner === "candidate"
+        ? new ReentrantCandidateFactory(mode)
+        : new ThrowingCandidateFactory();
+      const player = new IntegratedPlayer({
+        bytes: createIntegratedOpaqueTestAsset(),
+        createStaticStore: () => store,
+        candidateFactory: factory,
+        timers: new IdleTimers()
+      });
+      if (store instanceof ReentrantSettlementStore) store.player = player;
+      if (factory instanceof ReentrantCandidateFactory) factory.player = player;
+      await player.prepare();
+      const catalog = player.catalog;
+
+      const first = player.dispose();
+      const second = player.dispose();
+
+      expect(second).toBe(first);
+      await expect(first).resolves.toBeUndefined();
+      await expect(player.dispose()).resolves.toBeUndefined();
+      if (store instanceof ReentrantSettlementStore) {
+        expect(store.settledCalls).toBe(1);
+      }
+      if (factory instanceof ReentrantCandidateFactory) {
+        expect(factory.disposeCalls).toBe(1);
+      }
+      expect(catalog.disposed).toBe(true);
+      expect(player.snapshot().disposed).toBe(true);
+    }
+  );
+
+  it("settles aborted reduced-to-full re-entry cleanup before retiring static owners", async () => {
+    const order: string[] = [];
+    const store = new OrderedStaticStore(order);
+    const factory = new GatedReentryCandidateFactory(order);
+    const player = new IntegratedPlayer({
+      bytes: createIntegratedOpaqueTestAsset(),
+      createStaticStore: () => store,
+      candidateFactory: factory,
+      motionPolicy: "reduce",
+      timers: new IdleTimers()
+    });
+    await expect(player.prepare()).resolves.toMatchObject({
+      mode: "static",
+      reason: "reduced-motion"
+    });
+    const catalog = player.catalog;
+
+    const reentry = player.setMotionPolicy("full");
+    await waitFor(() => factory.prepareCalls === 1);
+
+    const disposal = player.dispose();
+    await waitFor(() => factory.disposeStarted);
+    await expectPending(disposal);
+    expect(store.disposeCalls).toBe(0);
+    expect(catalog.disposed).toBe(false);
+    expect(catalog.ownedByteLength).toBeGreaterThan(0);
+
+    factory.disposal.resolve();
+    await expect(disposal).resolves.toBeUndefined();
+    await expect(reentry).resolves.toMatchObject({
+      actualMode: "disposed",
+      disposed: true
+    });
+
+    expect(order.indexOf("candidate:dispose-end")).toBeGreaterThan(
+      order.indexOf("candidate:dispose-start")
+    );
+    expect(order.indexOf("static:dispose")).toBeGreaterThan(
+      order.indexOf("candidate:dispose-end")
+    );
+    expect(store.disposeCalls).toBe(1);
+    expect(catalog.disposed).toBe(true);
+    expect(catalog.ownedByteLength).toBe(0);
+  });
 });
 
 class ThrowingCandidateFactory implements IntegratedCandidateFactory {
@@ -163,18 +250,20 @@ class DisposalPlaybackSession implements IntegratedPlaybackSession {
 class ThrowingStaticStore implements IntegratedStaticSurfaceStore {
   public throwDispose = false;
   public disposeCalls = 0;
+  #state = "idle";
 
   public async installInitial(_options: {
     readonly state: string;
     readonly signal: AbortSignal;
-  }): Promise<void> {}
+  }): Promise<void> { this.#state = _options.state; }
   public async validateAll(_options: {
     readonly signal: AbortSignal;
   }): Promise<void> {}
   public async presentState(
     _state: string,
     _options: { readonly signal: AbortSignal }
-  ): Promise<void> {}
+  ): Promise<void> { this.#state = _state; }
+  public currentState(): string | null { return this.#state; }
   public coverCurrent(): void {}
   public revealAnimated(): void {}
   public async settled(): Promise<void> {}
@@ -210,6 +299,120 @@ class GatedSettlementStore extends ThrowingStaticStore {
   public override async settled(): Promise<void> {
     this.settledCalls += 1;
     await this.settlement.promise;
+  }
+}
+
+type ReentrantDisposalMode = "direct" | "async-immediate";
+
+class ReentrantSettlementStore extends ThrowingStaticStore {
+  public player: IntegratedPlayer | null = null;
+  public settledCalls = 0;
+  readonly #mode: ReentrantDisposalMode;
+
+  public constructor(mode: ReentrantDisposalMode) {
+    super();
+    this.#mode = mode;
+  }
+
+  public override settled(): Promise<void> {
+    this.settledCalls += 1;
+    const player = this.player!;
+    return this.#mode === "direct"
+      ? player.dispose()
+      : (async () => player.dispose())();
+  }
+}
+
+class ReentrantCandidateFactory implements IntegratedCandidateFactory {
+  public readonly availability = Object.freeze({
+    workerAvailable: true,
+    rendererAvailable: true
+  });
+  public player: IntegratedPlayer | null = null;
+  public disposeCalls = 0;
+  readonly #mode: ReentrantDisposalMode;
+
+  public constructor(mode: ReentrantDisposalMode) {
+    this.#mode = mode;
+  }
+
+  public create(): IntegratedCandidateAttempt {
+    const session = new DisposalPlaybackSession();
+    let disposed = false;
+    return {
+      playback: session,
+      prepare: async () => undefined,
+      prepareActivation: async ({ expectedPresentation }) =>
+        Object.freeze({ expectedPresentation }),
+      drawInitial: () => undefined,
+      dispose: () => {
+        if (disposed) return Promise.resolve();
+        disposed = true;
+        this.disposeCalls += 1;
+        const player = this.player!;
+        return this.#mode === "direct"
+          ? player.dispose()
+          : (async () => player.dispose())();
+      }
+    };
+  }
+}
+
+class OrderedStaticStore extends ThrowingStaticStore {
+  readonly #order: string[];
+
+  public constructor(order: string[]) {
+    super();
+    this.#order = order;
+  }
+
+  public override dispose(): void {
+    this.#order.push("static:dispose");
+    super.dispose();
+  }
+}
+
+class GatedReentryCandidateFactory implements IntegratedCandidateFactory {
+  public readonly availability = Object.freeze({
+    workerAvailable: true,
+    rendererAvailable: true
+  });
+  public readonly disposal = deferred<void>();
+  public prepareCalls = 0;
+  public disposeStarted = false;
+  readonly #order: string[];
+
+  public constructor(order: string[]) {
+    this.#order = order;
+  }
+
+  public create(): IntegratedCandidateAttempt {
+    let disposePromise: Promise<void> | null = null;
+    return {
+      playback: new DisposalPlaybackSession(),
+      prepare: async ({ signal }) => {
+        this.prepareCalls += 1;
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) {
+            resolve();
+            return;
+          }
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+      },
+      prepareActivation: async ({ expectedPresentation }) =>
+        Object.freeze({ expectedPresentation }),
+      drawInitial: () => undefined,
+      dispose: () => {
+        if (disposePromise !== null) return disposePromise;
+        this.disposeStarted = true;
+        this.#order.push("candidate:dispose-start");
+        disposePromise = this.disposal.promise.then(() => {
+          this.#order.push("candidate:dispose-end");
+        });
+        return disposePromise;
+      }
+    };
   }
 }
 

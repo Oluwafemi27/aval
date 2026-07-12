@@ -701,9 +701,14 @@ function schedulerSnapshot(
 }
 
 class ImmediateStaticStore implements IntegratedStaticSurfaceStore {
-  public async installInitial(): Promise<void> {}
+  #state = "idle";
+  public async installInitial(options: {
+    readonly state: string;
+    readonly signal: AbortSignal;
+  }): Promise<void> { this.#state = options.state; }
   public async validateAll(): Promise<void> {}
-  public async presentState(): Promise<void> {}
+  public async presentState(state: string): Promise<void> { this.#state = state; }
+  public currentState(): string | null { return this.#state; }
   public coverCurrent(): void {}
   public revealAnimated(): void {}
   public async settled(): Promise<void> {}

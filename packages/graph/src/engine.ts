@@ -86,6 +86,37 @@ export class MotionGraphEngine {
     return this.#runtime.record("begin-animated", effects);
   }
 
+  public resumeAnimated(): Readonly<MotionGraphResult> {
+    this.#runtime.assertPhase("static", "resumeAnimated");
+    if (this.#runtime.readiness !== "static") {
+      throw new MotionGraphError(
+        "NOT_READY",
+        "resumeAnimated requires static readiness"
+      );
+    }
+    const presentation = this.#runtime.presentation;
+    const requested = this.#runtime.requireRequestedState();
+    const visual = this.#runtime.requireVisualState();
+    if (
+      presentation?.kind !== "static" ||
+      presentation.state !== visual ||
+      requested !== visual ||
+      this.#runtime.routes.hasRoute() ||
+      this.#runtime.ledger.pendingRequestCount !== 0
+    ) {
+      throw new MotionGraphError(
+        "NOT_READY",
+        "resumeAnimated requires one settled static state"
+      );
+    }
+    const body = this.#runtime.bodyPresentation(visual, 0);
+    const effects: MotionGraphEffect[] = [];
+    this.#changeReadiness("animated", effects);
+    this.#runtime.presentation = body;
+    this.#runtime.phase = "stable";
+    return this.#runtime.record("resume-animated", effects);
+  }
+
   public beginStatic(reason: string): Readonly<MotionGraphResult> {
     this.#runtime.assertPhase("preparing", "beginStatic");
     const effects: MotionGraphEffect[] = [];

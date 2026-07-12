@@ -3,7 +3,6 @@ import { dirname, resolve } from "node:path";
 import {
   FORMAT_DEFAULT_BUDGETS,
   FormatError,
-  prepareAvcEncoderRendition,
   writeCanonicalAsset,
   type AccessUnitInputV01,
   type CanonicalAssetInputV01,
@@ -17,10 +16,6 @@ import {
   discoverFfmpeg,
   verifyFfmpegProvenance
 } from "../ffmpeg/discovery.js";
-import {
-  createEncodeAvcUnitInvocation,
-  encodeAvcUnit
-} from "../ffmpeg/encode-unit.js";
 import { mediaTimeout } from "../ffmpeg/encode-unit.js";
 import { probeTimeout } from "../ffmpeg/probe.js";
 import type {
@@ -28,17 +23,24 @@ import type {
   CompileInvocationDetails,
   CompileRenditionDetails,
   CompileResult,
-  OpaqueRenditionTargetV01,
+  NormalizedSourceProject,
   ProjectArtifactOptions,
   ProjectCompileOptions,
-  SourceProjectV01,
   SourceUnitV01
 } from "../model.js";
 import { parseSourceProject } from "../source-project-schema.js";
 import { sha256Concat, sha256Hex } from "./hash.js";
+import { compileAvcRendition } from "./avc-rendition-pipeline.js";
+import {
+  mergeCanonicalAlphaAudits,
+  resolveAlphaPolicy
+} from "./alpha-policy.js";
 import { ffmpegGenerator, writeAssetAtomic } from "./output.js";
 import { validateCompiledOutput } from "./output-validation.js";
-import { encodeCanonicalRgbaPng } from "./png.js";
+import {
+  encodeCanonicalRgbaPng,
+  inspectCanonicalRgbaPng
+} from "./png.js";
 import { deriveReadiness } from "./readiness-plan.js";
 import { estimateRuntimeLimits } from "./resource-estimate.js";
 import { validateProjectMedia } from "./project-continuity.js";
@@ -97,6 +99,13 @@ export async function buildProjectArtifact(
     ...(options.signal === undefined ? {} : { signal: options.signal })
   });
   try {
+    const alphaPolicy = resolveAlphaPolicy(
+      project.alphaPolicy,
+      mergeCanonicalAlphaAudits(
+        [...sources.values()].map(({ alphaAudit }) => alphaAudit)
+      ),
+      { rejectionCode: project.alphaPolicyRejectionCode }
+    );
     const media = await validateProjectMedia({
       project,
       sources,
@@ -124,81 +133,46 @@ export async function buildProjectArtifact(
     ];
 
     for (const rendition of project.renditions) {
-      validateLevelPreflight(rendition, project);
-      const encodedStreams: {
-        readonly id: string;
-        readonly bytes: Uint8Array;
-        readonly expectedAccessUnitCount: number;
-      }[] = [];
-      for (const unit of project.units) {
+      const pipelineUnits = project.units.map((unit) => {
         const source = sources.get(unit.source)!;
         const [startFrame, endFrame] = resolvePreparedFrameRange(
           source,
           unit.range[0],
           unit.range[1]
         );
-        const encodeInput = {
-          source: source.input,
-          startFrame,
-          endFrame,
-          frameRate: project.frameRate,
-          codedWidth: rendition.codedWidth,
-          codedHeight: rendition.codedHeight,
-          bitrate: rendition.bitrate,
-          executable: provenance.executable,
-          ...(options.mediaTimeoutMs === undefined
-            ? {}
-            : { timeoutMs: options.mediaTimeoutMs }),
-          ...(options.signal === undefined ? {} : { signal: options.signal })
-        };
-        const invocation = createEncodeAvcUnitInvocation(encodeInput);
-        invocations.push(Object.freeze({
-          operation: `encode:${rendition.id}:${unit.id}`,
-          tool: "ffmpeg" as const,
-          arguments: redactArguments(
-            invocation.arguments,
-            [[source.input.path, `$SPOOL/${unit.source}`]]
-          )
-        }));
-        const bytes = await encodeAvcUnit(encodeInput);
-        cumulativeRawEncodedBytes += bytes.byteLength;
-        if (
-          !Number.isSafeInteger(cumulativeRawEncodedBytes) ||
-          cumulativeRawEncodedBytes > FORMAT_DEFAULT_BUDGETS.maxFileBytes
-        ) {
-          throw new CompilerError(
-            "OUTPUT_LIMIT",
-            "Raw encoder output exceeds the compiled-file budget"
-          );
-        }
-        encodedStreams.push(Object.freeze({
+        return Object.freeze({
           id: unit.id,
-          bytes,
-          expectedAccessUnitCount: unit.range[1] - unit.range[0]
-        }));
-      }
-      let prepared: ReturnType<typeof prepareAvcEncoderRendition>;
-      try {
-        prepared = prepareAvcEncoderRendition({
-          profile: {
-            codedWidth: rendition.codedWidth,
-            codedHeight: rendition.codedHeight,
-            frameRate: project.frameRate,
-            averageBitrate: rendition.bitrate.average,
-            peakBitrate: rendition.bitrate.peak,
-            cpbBufferBits: rendition.bitrate.peak,
-            requireBt709LimitedRange: true
-          },
-          units: encodedStreams
+          source: source.input,
+          sourceToken: `$SPOOL/${unit.source}`,
+          startFrame,
+          endFrame
         });
-      } catch (error) {
-        if (error instanceof FormatError) {
-          throw new CompilerError("AVC_PROFILE_INVALID", error.message, {
-            cause: error
-          });
-        }
-        throw error;
+      });
+      const compiled = await compileAvcRendition({
+        rendition,
+        canvasWidth: project.canvas.width,
+        canvasHeight: project.canvas.height,
+        selectedAlphaProfile: alphaPolicy.selected,
+        frameRate: project.frameRate,
+        units: pipelineUnits,
+        executable: provenance.executable,
+        ...(options.mediaTimeoutMs === undefined
+          ? {}
+          : { timeoutMs: options.mediaTimeoutMs }),
+        ...(options.signal === undefined ? {} : { signal: options.signal })
+      });
+      invocations.push(...compiled.invocations);
+      cumulativeRawEncodedBytes += compiled.rawEncodedBytes;
+      if (
+        !Number.isSafeInteger(cumulativeRawEncodedBytes) ||
+        cumulativeRawEncodedBytes > FORMAT_DEFAULT_BUDGETS.maxFileBytes
+      ) {
+        throw new CompilerError(
+          "OUTPUT_LIMIT",
+          "Raw encoder output exceeds the compiled-file budget"
+        );
       }
+      const prepared = compiled.prepared;
       const encodedUnits = new Map(
         prepared.units.map((unit) => [unit.id, unit.accessUnits])
       );
@@ -237,13 +211,21 @@ export async function buildProjectArtifact(
       }
       renditionDetails.push(Object.freeze({
         id: rendition.id,
-        codedWidth: rendition.codedWidth,
-        codedHeight: rendition.codedHeight,
+        profile: compiled.geometry.profile,
+        geometry: compiled.geometry,
+        codedWidth: compiled.geometry.codedWidth,
+        codedHeight: compiled.geometry.codedHeight,
         bitrate: rendition.bitrate,
         encodedBytes,
         accessUnits: renditionAccessUnits,
         inspection: prepared.inspection,
-        canonicalizations: prepared.canonicalizations
+        canonicalizations: prepared.canonicalizations,
+        pixelPipeline: Object.freeze({
+          yuvProfile: "bt709-limited-yuv420p-v0" as const,
+          dilation: "nearest-radius-4-v0" as const
+        }),
+        alphaQuality: compiled.alphaQuality,
+        compositeQuality: compiled.compositeQuality
       }));
     }
 
@@ -254,7 +236,8 @@ export async function buildProjectArtifact(
       project,
       units,
       accessUnits,
-      posters: posterPlan
+      posters: posterPlan,
+      renditions: renditionDetails
     });
     let bytes: Uint8Array;
     try {
@@ -269,6 +252,9 @@ export async function buildProjectArtifact(
     await verifyFfmpegProvenance(provenance, options.signal);
     invocations.push(...toolchainInvocations("verify"));
     const sourceWarnings = [...sources.values()].flatMap(({ warnings }) => warnings);
+    const publicWarnings = Object.freeze([
+      ...new Set([...sourceWarnings, ...alphaPolicy.warnings])
+    ]);
     const staticDetails = posterPlan.frames.map((frame) => Object.freeze({
       id: frame.id,
       bytes: frame.bytes.byteLength,
@@ -276,7 +262,12 @@ export async function buildProjectArtifact(
       states: Object.freeze(project.states
         .filter((state) => posterPlan.staticIdByState.get(state.id) === frame.id)
         .map(({ id }) => id)
-        .sort())
+        .sort()),
+      validation: inspectCanonicalRgbaPng({
+        png: frame.bytes,
+        expectedWidth: project.canvas.width,
+        expectedHeight: project.canvas.height
+      })
     }));
     const encodedPayloadBytes = accessUnits.reduce(
       (total, sample) => total + sample.bytes.byteLength,
@@ -292,7 +283,7 @@ export async function buildProjectArtifact(
       bytes: artifactBytes.byteLength,
       sha256: sha256Hex(artifactBytes),
       provenance,
-      warnings: Object.freeze(sourceWarnings),
+      warnings: publicWarnings,
       buildDetails: Object.freeze({
         detailsVersion: "0.1" as const,
         mode: "project" as const,
@@ -300,6 +291,7 @@ export async function buildProjectArtifact(
           bytes: projectFile.bytes,
           sha256: projectFile.sha256
         }),
+        alphaPolicy,
         manifest: assetInput.manifest,
         sources: Object.freeze(project.sources.map((source) => {
           const prepared = sources.get(source.id)!;
@@ -337,21 +329,8 @@ export async function buildProjectArtifact(
   }
 }
 
-function redactArguments(
-  arguments_: readonly string[],
-  replacements: readonly (readonly [path: string, token: string])[]
-): readonly string[] {
-  return Object.freeze(arguments_.map((argument) => {
-    let redacted = argument;
-    for (const [path, token] of replacements) {
-      redacted = redacted.split(path).join(token);
-    }
-    return redacted;
-  }));
-}
-
 function collectSourceFrameReferences(
-  project: SourceProjectV01
+  project: NormalizedSourceProject
 ): ReadonlyMap<string, readonly number[]> {
   const references = new Map<string, Set<number>>(
     project.sources.map(({ id }) => [id, new Set<number>()])
@@ -384,7 +363,7 @@ interface PosterPlan {
 }
 
 export function buildPosters(
-  project: SourceProjectV01,
+  project: Pick<NormalizedSourceProject, "canvas" | "states">,
   rgbaByState: ReadonlyMap<string, Uint8Array>
 ): Readonly<PosterPlan> {
   const framesByDigest = new Map<
@@ -471,37 +450,59 @@ function lowerUnit(
 }
 
 function buildAssetInput(input: {
-  readonly project: SourceProjectV01;
+  readonly project: NormalizedSourceProject;
   readonly units: readonly UnitInputV01[];
   readonly accessUnits: readonly AccessUnitInputV01[];
   readonly posters: Readonly<PosterPlan>;
+  readonly renditions: readonly CompileRenditionDetails[];
 }): CanonicalAssetInputV01 {
   const readiness = deriveReadiness(input.project);
-  const limits = estimateRuntimeLimits(input.project, input.accessUnits);
+  const limits = estimateRuntimeLimits(
+    input.project,
+    input.accessUnits,
+    input.renditions.map(({ geometry }) => geometry)
+  );
+  const geometryById = new Map(
+    input.renditions.map(({ id, geometry }) => [id, geometry])
+  );
   return {
     manifest: {
       formatVersion: "0.1",
       generator: ffmpegGenerator(),
       canvas: input.project.canvas,
       frameRate: input.project.frameRate,
-      renditions: input.project.renditions.map((rendition) => ({
-        id: rendition.id,
-        profile: "avc-annexb-opaque-v0" as const,
-        codec: "avc1.42E020" as const,
-        codedWidth: rendition.codedWidth,
-        codedHeight: rendition.codedHeight,
-        alphaLayout: {
-          type: "opaque-v0" as const,
-          colorRect: [
-            0,
-            0,
-            rendition.codedWidth,
-            rendition.codedHeight
-          ] as const
-        },
-        bitrate: rendition.bitrate,
-        capabilities: ["webcodecs", "webgl2"] as const
-      })),
+      renditions: input.project.renditions.map((rendition) => {
+        const geometry = geometryById.get(rendition.id);
+        if (geometry === undefined) {
+          throw new CompilerError("IO_FAILED", "Compiled rendition geometry is missing");
+        }
+        const common = {
+          id: rendition.id,
+          codec: "avc1.42E020" as const,
+          codedWidth: geometry.codedWidth,
+          codedHeight: geometry.codedHeight,
+          bitrate: rendition.bitrate,
+          capabilities: ["webcodecs", "webgl2"] as const
+        };
+        return geometry.profile === "avc-annexb-opaque-v0"
+          ? {
+              ...common,
+              profile: geometry.profile,
+              alphaLayout: {
+                type: "opaque-v0" as const,
+                colorRect: geometry.visibleColorRect
+              }
+            }
+          : {
+              ...common,
+              profile: geometry.profile,
+              alphaLayout: {
+                type: "stacked-v0" as const,
+                colorRect: geometry.visibleColorRect,
+                alphaRect: geometry.visibleAlphaRect!
+              }
+            };
+      }),
       units: input.units,
       staticFrames: input.posters.frames.map(({ id, bytes }) => ({
         id,
@@ -533,30 +534,11 @@ function buildAssetInput(input: {
   };
 }
 
-function validateLevelPreflight(
-  rendition: OpaqueRenditionTargetV01,
-  project: SourceProjectV01
-): void {
-  const macroblocks =
-    Math.ceil(rendition.codedWidth / 16) *
-    Math.ceil(rendition.codedHeight / 16);
-  if (
-    macroblocks > 5_120 ||
-    macroblocks * project.frameRate.numerator >
-      216_000 * project.frameRate.denominator
-  ) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      `${rendition.id} exceeds AVC Level 3.2 macroblock limits`
-    );
-  }
-}
-
 async function readProject(
   path: string,
   signal?: AbortSignal
 ): Promise<Readonly<{
-  readonly project: SourceProjectV01;
+  readonly project: NormalizedSourceProject;
   readonly bytes: number;
   readonly sha256: string;
 }>> {

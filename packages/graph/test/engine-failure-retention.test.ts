@@ -38,6 +38,11 @@ describe("MotionGraphEngine failed presentation retention", () => {
         isTransitioning: false
       }
     });
+    const failedSnapshot = engine.snapshot();
+    const failedTrace = engine.getTrace();
+    expect(() => engine.resumeAnimated()).toThrowError(/requires phase static/);
+    expect(engine.snapshot()).toEqual(failedSnapshot);
+    expect(engine.getTrace()).toEqual(failedTrace);
     expect(() => engine.failStatic("again", {
       retainedVisualState: "missing"
     })).toThrow("retained visual state");
@@ -78,6 +83,48 @@ describe("MotionGraphEngine failed presentation retention", () => {
       "fallback",
       "settle"
     ]);
+
+    const resumed = engine.resumeAnimated();
+    expect(resumed).toMatchObject({
+      operation: "resume-animated",
+      presentation: {
+        kind: "body",
+        state: "idle",
+        unitId: "idle-body",
+        frameIndex: 0
+      },
+      snapshot: {
+        readiness: "animated",
+        phase: "stable",
+        requestedState: "idle",
+        visualState: "idle",
+        contentOrdinal: recovered.snapshot.contentOrdinal,
+        inputSequence: recovered.snapshot.inputSequence,
+        inputsSinceTick: recovered.snapshot.inputsSinceTick
+      }
+    });
+    expect(resumed.effects).toEqual([{
+      type: "readinesschange",
+      from: "static",
+      to: "animated"
+    }]);
+  });
+
+  it("does not resume or clear a disposed terminal graph", () => {
+    const engine = new MotionGraphEngine();
+    engine.install({
+      initialState: "idle",
+      states: [state("idle")],
+      edges: []
+    });
+    engine.beginStatic("reduced-motion");
+    engine.dispose();
+    const snapshot = engine.snapshot();
+    const trace = engine.getTrace();
+
+    expect(() => engine.resumeAnimated()).toThrowError(/requires phase static/);
+    expect(engine.snapshot()).toEqual(snapshot);
+    expect(engine.getTrace()).toEqual(trace);
   });
 });
 

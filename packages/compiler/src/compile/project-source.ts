@@ -9,7 +9,6 @@ import {
   type RegularFileIdentity
 } from "../file-fingerprint.js";
 import {
-  createNativeAlphaAuditInvocation,
   type FfmpegFrameInput
 } from "../ffmpeg/encode-unit.js";
 import {
@@ -22,11 +21,11 @@ import { inspectPngSequence } from "../input/png-sequence.js";
 import { resolveExistingLocalFile } from "../local-path.js";
 import type {
   MediaProbe,
+  AlphaAuditSummary,
   SourceDescriptorV01
 } from "../model.js";
 import { normalizeHoldTimeline } from "./normalize-timeline.js";
 import { materializeNormalizedRgbaSource } from "./rgba-spool.js";
-import { scanSelectedNativeOpacity } from "./opaque-frames.js";
 
 export interface PreparedProjectSource {
   readonly id: string;
@@ -39,7 +38,7 @@ export interface PreparedProjectSource {
   readonly projectFrameToSpoolFrame: ReadonlyMap<number, number>;
   readonly inputFiles: readonly SourceInputFingerprint[];
   readonly normalization: SourceNormalizationReport;
-  readonly alphaAudit: "passed" | "skipped-no-alpha";
+  readonly alphaAudit: Readonly<AlphaAuditSummary>;
   readonly invocations: readonly PreparedSourceInvocation[];
   readonly warnings: readonly string[];
   readonly cleanup: () => Promise<void>;
@@ -175,16 +174,6 @@ async function prepareVideoSource(
   const nativeFrames = references.map((frame) =>
     sourceFrameByProjectFrame?.[frame] ?? frame
   );
-  const alphaInvocation = await scanReferencedNativeOpacity(
-    ffmpegInput,
-    nativeFrames,
-    probe,
-    input.ffmpeg,
-    source.id,
-    redactedSource,
-    input.signal,
-    input.mediaTimeoutMs
-  );
   const materialized = await materializeNormalizedRgbaSource({
     source: ffmpegInput,
     probe,
@@ -192,6 +181,11 @@ async function prepareVideoSource(
     outputWidth: input.canvas.width,
     outputHeight: input.canvas.height,
     sourceFrameByOutputFrame: nativeFrames,
+    alphaReferences: references.map((frame) => Object.freeze({
+      source: source.id,
+      frame,
+      role: "unit" as const
+    })),
     executable: input.ffmpeg,
     ...(input.mediaTimeoutMs === undefined
       ? {}
@@ -234,10 +228,9 @@ async function prepareVideoSource(
           duplicatedSourceFrames,
           droppedSourceFrames
         }),
-    alphaAudit: probe.hasAlpha ? "passed" : "skipped-no-alpha",
+    alphaAudit: materialized.alphaAudit,
     invocations: Object.freeze([
       probeInvocation,
-      ...(alphaInvocation === null ? [] : [alphaInvocation]),
       preparedInvocation(
         `${source.id}:materialize-rgba`,
         "ffmpeg",
@@ -313,16 +306,6 @@ async function preparePngSource(
     sequence.pattern,
     redactedSource
   );
-  const alphaInvocation = await scanReferencedNativeOpacity(
-    ffmpegInput,
-    references,
-    probe,
-    input.ffmpeg,
-    source.id,
-    redactedSource,
-    input.signal,
-    input.mediaTimeoutMs
-  );
   const materialized = await materializeNormalizedRgbaSource({
     source: ffmpegInput,
     probe,
@@ -330,6 +313,11 @@ async function preparePngSource(
     outputWidth: input.canvas.width,
     outputHeight: input.canvas.height,
     sourceFrameByOutputFrame: references,
+    alphaReferences: references.map((frame) => Object.freeze({
+      source: source.id,
+      frame,
+      role: "unit" as const
+    })),
     executable: input.ffmpeg,
     ...(input.mediaTimeoutMs === undefined
       ? {}
@@ -361,10 +349,9 @@ async function preparePngSource(
       selectedProjectFrames: references,
       selectedNativeFrames: Object.freeze([...references])
     }),
-    alphaAudit: probe.hasAlpha ? "passed" : "skipped-no-alpha",
+    alphaAudit: materialized.alphaAudit,
     invocations: Object.freeze([
       probeInvocation,
-      ...(alphaInvocation === null ? [] : [alphaInvocation]),
       preparedInvocation(
         `${source.id}:materialize-rgba`,
         "ffmpeg",
@@ -509,40 +496,6 @@ function requiredReferences(
 
 function frameMap(frames: readonly number[]): ReadonlyMap<number, number> {
   return new Map(frames.map((frame, index) => [frame, index]));
-}
-
-async function scanReferencedNativeOpacity(
-  source: FfmpegFrameInput,
-  sourceFrames: readonly number[],
-  probe: MediaProbe,
-  ffmpeg: string,
-  sourceId: string,
-  redactedSource: string,
-  signal?: AbortSignal,
-  timeoutMs?: number
-): Promise<Readonly<PreparedSourceInvocation> | null> {
-  if (!probe.hasAlpha) return null;
-  const unique = [...new Set(sourceFrames)].sort((left, right) => left - right);
-  const invocation = createNativeAlphaAuditInvocation({
-    source,
-    sourceFrames: unique
-  });
-  await scanSelectedNativeOpacity(
-    source,
-    unique,
-    probe.width,
-    probe.height,
-    ffmpeg,
-    signal,
-    timeoutMs
-  );
-  return preparedInvocation(
-    `${sourceId}:alpha-audit`,
-    "ffmpeg",
-    invocation.arguments,
-    source.path,
-    redactedSource
-  );
 }
 
 function preparedInvocation(

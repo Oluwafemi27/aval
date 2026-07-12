@@ -117,6 +117,16 @@ const provenance = {
   provenanceVersion: "0.1",
   generatedAt: "2026-07-12",
   generator: "rendered-motion-compiler/0.1",
+  pipelineLineage: {
+    migration: "rgba-filter-chain-to-direct-bt709-limited-yuv420p-v0",
+    previousAssets: [
+      {
+        name: "opaque-all-routes.rma",
+        sha256: "28bbd6ca250fff5571ff9ef8a95a69d878e198641a05e8923743a521106f70d5"
+      }
+    ],
+    review: "Intentional encoded-byte migration; source project and PNG frames remain unchanged."
+  },
   compiler: report.compiler,
   toolchain: normalizedToolchain(report.toolchain),
   fixture: {

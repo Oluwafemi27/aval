@@ -52,7 +52,8 @@ export const RUNTIME_READINESS_LADDER = Object.freeze({
 });
 
 export const STATIC_REASONS = Object.freeze([
-  "no-opaque-rendition",
+  "reduced-motion",
+  "no-avc-rendition",
   "worker-unavailable",
   "renderer-unavailable",
   "codec-unsupported",
@@ -270,7 +271,7 @@ export interface StaticReasonSummaryInput {
   /** False means failStatic: no successful static result may be summarized. */
   readonly staticReady: boolean;
   readonly deadlineExpired: boolean;
-  readonly hasOpaqueRendition: boolean;
+  readonly hasAvcRendition: boolean;
   readonly workerAvailable: boolean;
   readonly rendererAvailable: boolean;
   readonly candidateFailures: readonly Readonly<RuntimeFailure>[];
@@ -292,8 +293,8 @@ export function summarizeStaticReason(
   if (input.deadlineExpired) {
     return "preparation-timeout";
   }
-  if (!input.hasOpaqueRendition) {
-    return "no-opaque-rendition";
+  if (!input.hasAvcRendition) {
+    return "no-avc-rendition";
   }
   if (!input.workerAvailable) {
     return "worker-unavailable";

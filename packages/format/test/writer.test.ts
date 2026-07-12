@@ -226,7 +226,7 @@ describe("writeCanonicalAsset", () => {
     );
   });
 
-  it("self-validates reference sample identity and shallow PNG metadata", () => {
+  it("self-validates reference sample identity and the strict PNG profile", () => {
     const badReference = validWriterInput();
     const referenceBytes = badReference.accessUnits[0]!.bytes.slice();
     referenceBytes[0] = 0;

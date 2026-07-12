@@ -1,6 +1,7 @@
 import type {
   CompiledManifestV01,
   EdgeV01,
+  RenditionV01,
   UnitV01
 } from "@rendered-motion/format";
 
@@ -116,12 +117,10 @@ export function createInteractionCachePlan(
 ): Readonly<InteractionCachePlan> {
   validateObject(input, "interaction cache plan input");
   validateObject(input.manifest, "interaction cache manifest");
-  const rendition = input.manifest.renditions.find(
-    (candidate) => candidate.id === input.rendition
+  const rendition = requireProductionAvcRendition(
+    input.manifest.renditions,
+    input.rendition
   );
-  if (rendition?.profile !== "avc-annexb-opaque-v0") {
-    throw new RangeError("selected rendition must be an opaque AVC rendition");
-  }
 
   const units = new Map(input.manifest.units.map((unit) => [unit.id, unit]));
   const states = new Map(input.manifest.states.map((state) => [state.id, state]));
@@ -188,6 +187,29 @@ export function createInteractionCachePlan(
     cutRunways,
     deviceLimits: input.deviceLimits
   });
+}
+
+type ProductionAvcRendition = Extract<
+  RenditionV01,
+  {
+    readonly profile:
+      | "avc-annexb-opaque-v0"
+      | "avc-annexb-packed-alpha-v0";
+  }
+>;
+
+function requireProductionAvcRendition(
+  renditions: readonly RenditionV01[],
+  id: string
+): Readonly<ProductionAvcRendition> {
+  const selected = renditions.find((candidate) => candidate.id === id);
+  if (
+    selected?.profile !== "avc-annexb-opaque-v0" &&
+    selected?.profile !== "avc-annexb-packed-alpha-v0"
+  ) {
+    throw new RangeError("selected rendition must be a production AVC rendition");
+  }
+  return selected;
 }
 
 /** Shared sequence/layer owner used by the manifest planner and M2 adapter. */

@@ -43,7 +43,7 @@ export function validateCutPresentationOptions(
     typeof options.renderer.uploadStreaming !== "function" ||
     typeof options.renderer.draw !== "function"
   ) {
-    throw new TypeError("cut presentation requires an opaque frame renderer");
+    throw new TypeError("cut presentation requires an frame renderer");
   }
   const slots = options.streamingSlots ?? DEFAULT_CUT_STREAMING_SLOTS;
   if (!Number.isSafeInteger(slots) || slots < 1) {

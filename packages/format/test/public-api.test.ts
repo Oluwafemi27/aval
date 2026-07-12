@@ -28,6 +28,12 @@ const RUNTIME_EXPORTS = Object.freeze([
   "REFERENCE_FRAME_MAGIC",
   "SHA256_HEX_PATTERN",
   "adaptManifestToMotionGraph",
+  "adler32",
+  "crc32",
+  "decodePngRgba",
+  "decodePngRgbaFromInflated",
+  "deriveAvcRenditionGeometry",
+  "deriveAvcRenditionGeometryFromVisible",
   "encodeReferenceFrame",
   "inspectAvcAnnexBEncoderCandidateRendition",
   "inspectAvcAnnexBRendition",
@@ -42,6 +48,7 @@ const RUNTIME_EXPORTS = Object.freeze([
   "serializeCanonicalJson",
   "serializeCanonicalJsonWithLimits",
   "validateCompleteAsset",
+  "validatePngProfile",
   "validateReferenceFrame",
   "writeCanonicalAsset"
 ] as const);

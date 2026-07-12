@@ -3,9 +3,8 @@ import { basename, dirname, extname, resolve } from "node:path";
 import {
   FORMAT_DEFAULT_BUDGETS,
   FormatError,
-  maximumAvcDecodedRgbaBytes,
-  prepareAvcEncoderRendition,
   writeCanonicalAsset,
+  type AvcRenditionGeometry,
   type AccessUnitInputV01,
   type CanonicalAssetInputV01,
   type UnitInputV01
@@ -16,13 +15,7 @@ import {
   discoverFfmpeg,
   verifyFfmpegProvenance
 } from "../ffmpeg/discovery.js";
-import {
-  createEncodeAvcUnitInvocation,
-  createNativeAlphaAuditInvocation,
-  encodeAvcUnit,
-  mediaTimeout,
-  type FfmpegFrameInput
-} from "../ffmpeg/encode-unit.js";
+import { mediaTimeout, type FfmpegFrameInput } from "../ffmpeg/encode-unit.js";
 import {
   createProbeMediaInvocation,
   createProbePngSequenceInvocation,
@@ -42,6 +35,7 @@ import type {
   MediaProbe
 } from "../model.js";
 import { analyzeSeam } from "./seam-analysis.js";
+import { compileAvcRendition } from "./avc-rendition-pipeline.js";
 import {
   resolveDirectCanvas,
   type DirectCanvas
@@ -49,10 +43,13 @@ import {
 import { buildDirectFramePlan } from "./frame-plan.js";
 import { sha256Concat, sha256Hex } from "./hash.js";
 import { normalizeHoldTimeline } from "./normalize-timeline.js";
-import { scanSelectedNativeOpacity } from "./opaque-frames.js";
+import { resolveAlphaPolicy } from "./alpha-policy.js";
 import { ffmpegGenerator, writeAssetAtomic } from "./output.js";
 import { validateCompiledOutput } from "./output-validation.js";
-import { encodeCanonicalRgbaPng } from "./png.js";
+import {
+  encodeCanonicalRgbaPng,
+  inspectCanonicalRgbaPng
+} from "./png.js";
 import {
   fingerprintSourceInputs,
   verifySourceInputFingerprints,
@@ -176,30 +173,6 @@ export async function buildDirectArtifact(
   const nativeFrames = projectFrames.map((frame) =>
     sourceFrameByProjectFrame?.[frame] ?? frame
   );
-  if (sourceProbe.hasAlpha) {
-    const selected = Object.freeze([...new Set(nativeFrames)]
-      .sort((left, right) => left - right));
-    const invocation = createNativeAlphaAuditInvocation({
-      source: sourceInput,
-      sourceFrames: selected
-    });
-    invocations.push(Object.freeze({
-      operation: "alpha-audit:direct",
-      tool: "ffmpeg" as const,
-      arguments: redactArguments(
-        invocation.arguments,
-        [[sourceInput.path, "$SOURCE/direct"]]
-      )
-    }));
-  }
-  await scanDirectNativeOpacity(
-    sourceInput,
-    nativeFrames,
-    sourceProbe,
-    provenance.executable,
-    options.signal,
-    options.mediaTimeoutMs
-  );
   const materialized = await materializeNormalizedRgbaSource({
     source: sourceInput,
     probe: sourceProbe,
@@ -207,6 +180,11 @@ export async function buildDirectArtifact(
     outputWidth: canvas.width,
     outputHeight: canvas.height,
     sourceFrameByOutputFrame: nativeFrames,
+    alphaReferences: projectFrames.map((frame) => Object.freeze({
+      source: "direct",
+      frame,
+      role: "unit" as const
+    })),
     executable: provenance.executable,
     ...(options.mediaTimeoutMs === undefined
       ? {}
@@ -214,6 +192,10 @@ export async function buildDirectArtifact(
     ...(options.signal === undefined ? {} : { signal: options.signal })
   });
   cleanup = materialized.cleanup;
+  const alphaPolicy = resolveAlphaPolicy(
+    options.alpha ?? "auto",
+    materialized.alphaAudit
+  );
   invocations.push(Object.freeze({
     operation: "materialize-rgba:direct",
     tool: "ffmpeg" as const,
@@ -299,75 +281,33 @@ export async function buildDirectArtifact(
   const accessUnits: AccessUnitInputV01[] = [];
   let cumulativePayloadBytes = 0;
   const units: UnitInputV01[] = [];
-  const encodedStreams: {
-    readonly id: string;
-    readonly bytes: Uint8Array;
-    readonly expectedAccessUnitCount: number;
-  }[] = [];
-  let cumulativeRawEncodedBytes = 0;
-  for (const unit of plan.units) {
-    const encodeInput = {
-      source: compilerSource,
-      startFrame: unit.startFrame,
-      endFrame: unit.endFrame,
-      frameRate: plan.frameRate,
-      codedWidth: canvas.width,
-      codedHeight: canvas.height,
-      bitrate,
-      executable: provenance.executable,
-      ...(options.mediaTimeoutMs === undefined
-        ? {}
-        : { timeoutMs: options.mediaTimeoutMs }),
-      ...(options.signal === undefined ? {} : { signal: options.signal })
-    };
-    const invocation = createEncodeAvcUnitInvocation(encodeInput);
-    invocations.push(Object.freeze({
-      operation: `encode:opaque.1x:${unit.id}`,
-      tool: "ffmpeg" as const,
-      arguments: redactArguments(
-        invocation.arguments,
-        [[compilerSource.path, "$SPOOL/direct"]]
-      )
-    }));
-    const encoded = await encodeAvcUnit(encodeInput);
-    cumulativeRawEncodedBytes += encoded.byteLength;
-    if (
-      !Number.isSafeInteger(cumulativeRawEncodedBytes) ||
-      cumulativeRawEncodedBytes > FORMAT_DEFAULT_BUDGETS.maxFileBytes
-    ) {
-      throw new CompilerError(
-        "OUTPUT_LIMIT",
-        "Raw encoder output exceeds the compiled-file budget"
-      );
-    }
-    encodedStreams.push(Object.freeze({
+  const renditionId = "avc.1x";
+  const compiled = await compileAvcRendition({
+    rendition: {
+      id: renditionId,
+      width: canvas.width,
+      height: canvas.height,
+      bitrate
+    },
+    canvasWidth: canvas.width,
+    canvasHeight: canvas.height,
+    selectedAlphaProfile: alphaPolicy.selected,
+    frameRate: plan.frameRate,
+    units: plan.units.map((unit) => Object.freeze({
       id: unit.id,
-      bytes: encoded,
-      expectedAccessUnitCount: unit.frameCount
-    }));
-  }
-  let prepared: ReturnType<typeof prepareAvcEncoderRendition>;
-  try {
-    prepared = prepareAvcEncoderRendition({
-      profile: {
-        codedWidth: canvas.width,
-        codedHeight: canvas.height,
-        frameRate: plan.frameRate,
-        averageBitrate: bitrate.average,
-        peakBitrate: bitrate.peak,
-        cpbBufferBits: bitrate.peak,
-        requireBt709LimitedRange: true
-      },
-      units: encodedStreams
-    });
-  } catch (error) {
-    if (error instanceof FormatError) {
-      throw new CompilerError("AVC_PROFILE_INVALID", error.message, {
-        cause: error
-      });
-    }
-    throw error;
-  }
+      source: compilerSource,
+      sourceToken: "$SPOOL/direct",
+      startFrame: unit.startFrame,
+      endFrame: unit.endFrame
+    })),
+    executable: provenance.executable,
+    ...(options.mediaTimeoutMs === undefined
+      ? {}
+      : { timeoutMs: options.mediaTimeoutMs }),
+    ...(options.signal === undefined ? {} : { signal: options.signal })
+  });
+  invocations.push(...compiled.invocations);
+  const prepared = compiled.prepared;
   const samplesByUnit = new Map(
     prepared.units.map((unit) => [unit.id, unit.accessUnits])
   );
@@ -386,7 +326,7 @@ export async function buildDirectArtifact(
         );
       }
       accessUnits.push(Object.freeze({
-        rendition: "opaque.1x",
+        rendition: renditionId,
         unit: unit.id,
         frameIndex,
         key: sample.key,
@@ -406,7 +346,7 @@ export async function buildDirectArtifact(
           portalFrames: Object.freeze([unit.frameCount - 1])
         }]),
         samples: Object.freeze([{
-          rendition: "opaque.1x",
+          rendition: renditionId,
           sha256: sampleDigest
         }])
       }));
@@ -416,7 +356,7 @@ export async function buildDirectArtifact(
         kind: "one-shot",
         frameCount: unit.frameCount,
         samples: Object.freeze([{
-          rendition: "opaque.1x",
+          rendition: renditionId,
           sha256: sampleDigest
         }])
       }));
@@ -447,7 +387,9 @@ export async function buildDirectArtifact(
     bitrate,
     units,
     accessUnits,
-    poster
+    poster,
+    renditionId,
+    compiled.geometry
   );
   let bytes: Uint8Array;
   try {
@@ -461,7 +403,11 @@ export async function buildDirectArtifact(
   }
   await verifyFfmpegProvenance(provenance, options.signal);
   invocations.push(...toolchainInvocations("verify"));
-  const warnings = Object.freeze([...normalizationWarnings, ...plan.warnings]);
+  const warnings = Object.freeze([
+    ...normalizationWarnings,
+    ...plan.warnings,
+    ...alphaPolicy.warnings
+  ]);
   const normalization: SourceNormalizationReport =
     sourceFrameByProjectFrame === undefined
       ? Object.freeze({
@@ -493,6 +439,7 @@ export async function buildDirectArtifact(
       detailsVersion: "0.1" as const,
       mode: source.mode,
       projectFile: null,
+      alphaPolicy,
       manifest: input.manifest,
       sources: Object.freeze([Object.freeze({
         id: "direct",
@@ -509,24 +456,37 @@ export async function buildDirectArtifact(
         frames: sourceProbe.frames,
         inputFiles: source.inputFiles,
         normalization,
-        alphaAudit: sourceProbe.hasAlpha ? "passed" as const : "skipped-no-alpha" as const,
+        alphaAudit: materialized.alphaAudit,
         warnings: Object.freeze(normalizationWarnings)
       })]),
       renditions: Object.freeze([Object.freeze({
-        id: "opaque.1x",
-        codedWidth: canvas.width,
-        codedHeight: canvas.height,
+        id: renditionId,
+        profile: compiled.geometry.profile,
+        geometry: compiled.geometry,
+        codedWidth: compiled.geometry.codedWidth,
+        codedHeight: compiled.geometry.codedHeight,
         bitrate,
         encodedBytes: encodedPayloadBytes,
         accessUnits: accessUnits.length,
         inspection: prepared.inspection,
-        canonicalizations: prepared.canonicalizations
+        canonicalizations: prepared.canonicalizations,
+        pixelPipeline: Object.freeze({
+          yuvProfile: "bt709-limited-yuv420p-v0" as const,
+          dilation: "nearest-radius-4-v0" as const
+        }),
+        alphaQuality: compiled.alphaQuality,
+        compositeQuality: compiled.compositeQuality
       })]),
       statics: Object.freeze([Object.freeze({
         id: "static.00",
         bytes: poster.byteLength,
         sha256: sha256Hex(poster),
-        states: Object.freeze(["default"])
+        states: Object.freeze(["default"]),
+        validation: inspectCanonicalRgbaPng({
+          png: poster,
+          expectedWidth: canvas.width,
+          expectedHeight: canvas.height
+        })
       })]),
       invocations: Object.freeze(invocations),
       accessUnits: accessUnits.length,
@@ -547,13 +507,12 @@ function directAssetInput(
   bitrate: { readonly average: number; readonly peak: number },
   units: readonly UnitInputV01[],
   accessUnits: readonly AccessUnitInputV01[],
-  poster: Uint8Array
+  poster: Uint8Array,
+  renditionId: string,
+  geometry: Readonly<AvcRenditionGeometry>
 ): CanonicalAssetInputV01 {
   const bootstrapUnits = units.map(({ id }) => id).sort();
-  const decodedPixelBytes = maximumAvcDecodedRgbaBytes(
-    canvas.width,
-    canvas.height
-  );
+  const decodedPixelBytes = geometry.codedRgbaBytes;
   const encodedBytes = accessUnits.reduce(
     (total, sample) => total + sample.bytes.byteLength,
     0
@@ -577,19 +536,34 @@ function directAssetInput(
         colorSpace: "srgb"
       },
       frameRate,
-      renditions: [{
-        id: "opaque.1x",
-        profile: "avc-annexb-opaque-v0",
-        codec: "avc1.42E020",
-        codedWidth: canvas.width,
-        codedHeight: canvas.height,
-        alphaLayout: {
-          type: "opaque-v0",
-          colorRect: [0, 0, canvas.width, canvas.height]
-        },
-        bitrate,
-        capabilities: ["webcodecs", "webgl2"]
-      }],
+      renditions: [geometry.profile === "avc-annexb-opaque-v0"
+        ? {
+            id: renditionId,
+            profile: geometry.profile,
+            codec: "avc1.42E020" as const,
+            codedWidth: geometry.codedWidth,
+            codedHeight: geometry.codedHeight,
+            alphaLayout: {
+              type: "opaque-v0" as const,
+              colorRect: geometry.visibleColorRect
+            },
+            bitrate,
+            capabilities: ["webcodecs", "webgl2"] as const
+          }
+        : {
+            id: renditionId,
+            profile: geometry.profile,
+            codec: "avc1.42E020" as const,
+            codedWidth: geometry.codedWidth,
+            codedHeight: geometry.codedHeight,
+            alphaLayout: {
+              type: "stacked-v0" as const,
+              colorRect: geometry.visibleColorRect,
+              alphaRect: geometry.visibleAlphaRect!
+            },
+            bitrate,
+            capabilities: ["webcodecs", "webgl2"] as const
+          }],
       units,
       staticFrames: [{
         id: "static.00",
@@ -849,27 +823,6 @@ async function readRetainedCanonicalFrames(
     frames.set(index, frame);
   }
   return frames;
-}
-
-async function scanDirectNativeOpacity(
-  source: FfmpegFrameInput,
-  sourceFrames: readonly number[],
-  probe: Readonly<MediaProbe>,
-  ffmpeg: string,
-  signal?: AbortSignal,
-  timeoutMs?: number
-): Promise<void> {
-  if (!probe.hasAlpha) return;
-  const unique = [...new Set(sourceFrames)].sort((left, right) => left - right);
-  await scanSelectedNativeOpacity(
-    source,
-    unique,
-    probe.width,
-    probe.height,
-    ffmpeg,
-    signal,
-    timeoutMs
-  );
 }
 
 function framesToRoundedMicros(

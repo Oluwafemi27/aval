@@ -14,6 +14,10 @@ import type {
   AvcIncrementalAccessUnitInspection,
   AvcIncrementalInspector,
   AvcParameterSetSummary,
+  AvcProductionRenditionProfileV01,
+  AvcRenditionGeometry,
+  AvcRenditionGeometryInput,
+  AvcVisibleRenditionGeometryInput,
   AvcRenditionInspection,
   AvcRenditionInspectionInput,
   AvcUnitInput,
@@ -39,6 +43,9 @@ import type {
   FormatOptions,
   Id,
   ParsedFrontIndex,
+  PngDecodePlan,
+  PngProfileValidationInput,
+  PngRgbaDecodeResult,
   PortV01,
   RationalV01,
   ReadinessV01,
@@ -84,6 +91,10 @@ export type PublicFormatTypes = readonly [
   AvcIncrementalAccessUnitInspection,
   AvcIncrementalInspector,
   AvcParameterSetSummary,
+  AvcProductionRenditionProfileV01,
+  AvcRenditionGeometry,
+  AvcRenditionGeometryInput,
+  AvcVisibleRenditionGeometryInput,
   AvcRenditionInspection,
   AvcRenditionInspectionInput,
   AvcUnitInput,
@@ -109,6 +120,9 @@ export type PublicFormatTypes = readonly [
   FormatOptions,
   Id,
   ParsedFrontIndex,
+  PngDecodePlan,
+  PngProfileValidationInput,
+  PngRgbaDecodeResult,
   PortV01,
   RationalV01,
   ReadinessV01,
@@ -150,3 +164,20 @@ export type { NormalizedWriterInput } from "@rendered-motion/format";
 declare const publicAvcProfile: AvcConstrainedBaselineProfile;
 // @ts-expect-error compatibility policy is selected by the entry point
 publicAvcProfile.requireConstraintSet2;
+
+const pngDeflateCode: FormatErrorCode = "PNG_DEFLATE_INVALID";
+const pngScanlineCode: FormatErrorCode = "PNG_SCANLINE_INVALID";
+void pngDeflateCode;
+void pngScanlineCode;
+
+declare const publicGeometry: AvcRenditionGeometry;
+// @ts-expect-error public geometry is immutable
+publicGeometry.codedWidth = 16;
+// @ts-expect-error public geometry rectangles are immutable
+publicGeometry.decodedStorageRect[0] = 1;
+
+declare const pngPlan: PngDecodePlan;
+// @ts-expect-error PNG decode plans are immutable
+pngPlan.expectedFilteredBytes = 0;
+// @ts-expect-error plan ranges are immutable
+pngPlan.deflateRange.offset = 0;

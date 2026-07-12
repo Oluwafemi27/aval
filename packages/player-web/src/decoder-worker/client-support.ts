@@ -256,12 +256,10 @@ export function createAbortError(message: string): DOMException {
 }
 
 export function normalizeTransportError(
-  error: unknown,
+  _error: unknown,
   message: string
 ): Error {
-  if (error instanceof Error && error.message.length > 0) {
-    return new DecoderWorkerTransportError(`${message}: ${error.message}`);
-  }
+  // Worker/browser exception messages are not a public diagnostic channel.
   return new DecoderWorkerTransportError(message);
 }
 

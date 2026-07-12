@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { expect, test, type Page } from "@playwright/test";
+import { maximumAvcDecodedRgbaBytes } from "@rendered-motion/format";
 
 interface BrowserSupport {
   readonly supported: boolean;
@@ -150,12 +151,12 @@ const FIXTURE_PATH = fileURLToPath(
   new URL("../../fixtures/conformance/m5/opaque-path.rma", import.meta.url)
 );
 const FIXTURE_SHA256 =
-  "edec42aad4ed140404caf895093fc3a986fbfdfaaf28f720cb47e918bf1308e0";
+  "f3777ad640387940858e9ef52924dd7c1fec2c02d9f732b93c866fc0b39efa20";
 const REVERSIBLE_FIXTURE_PATH = fileURLToPath(
   new URL("../../fixtures/conformance/m5/opaque-reversible.rma", import.meta.url)
 );
 const REVERSIBLE_FIXTURE_SHA256 =
-  "642e5d60a461f3f0d0e53be9c1a238a3f5dfdad23f4db19eb2c12a94a6f13e8a";
+  "d7cfff018d1b42b9cde438f65ea7a56d267618cb3f2ec0a91b1819caf7d6bcc9";
 const EXPECTED_FRAME_COUNT = 2_008;
 
 test("decodes the compiled opaque path through one dedicated worker", async ({
@@ -224,7 +225,10 @@ test("decodes the compiled opaque path through one dedicated worker", async ({
       maxDecodeQueueSize: 8,
       maxPendingSamples: 12,
       maxOutstandingFrames: 12,
-      maxDecodedBytes: 48 * 48 * 4 * 12
+      maxDecodedBytes: maximumAvcDecodedRgbaBytes(
+        report.asset.codedWidth,
+        report.asset.codedHeight
+      ) * 12
     },
     batchCount: 168,
     maxBatchFrames: 12,
@@ -370,7 +374,10 @@ test("contains unsupported, malformed, crash, watchdog, cancellation, and dispos
     code: null,
     fatal: null
   });
-  expect(report.workerCrash.message).toContain("intentional M5 conformance worker crash");
+  expect(report.workerCrash.message).toBe("decoder worker failed");
+  expect(report.workerCrash.message).not.toContain(
+    "intentional M5 conformance worker crash"
+  );
   expect(report.watchdog).toMatchObject({
     name: "DecoderWorkerWatchdogError",
     code: null,

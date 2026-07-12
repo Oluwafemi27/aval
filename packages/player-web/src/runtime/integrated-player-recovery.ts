@@ -157,16 +157,6 @@ export class IntegratedRecoveryCoordinator {
           { operation: "animated-recovery-trace" }
         ));
       }
-      this.#detachActiveCandidate(candidate);
-      try {
-        await candidate.dispose();
-      } catch (error) {
-        this.#reportFailure(normalizeRuntimeFailure(
-          "readiness-failure",
-          error,
-          { operation: "animated-recovery-cleanup" }
-        ));
-      }
     }
     throwIfIntegratedAborted(signal);
 
@@ -191,10 +181,16 @@ export class IntegratedRecoveryCoordinator {
         try {
           await raceIntegratedAbort(
             this.#staticStore.presentState(requested, {
-              signal: controller.signal
+              signal: controller.signal,
+              cover: false
             }),
             controller.signal
           );
+          if (this.#staticStore.currentState() !== requested) {
+            throw new IntegratedPlaybackInvariantError(
+              "recovery static store committed the wrong state"
+            );
+          }
         } catch (error) {
           if (signal.aborted) throw integratedAbortReason(signal);
           if (controller.signal.aborted) continue;
@@ -217,13 +213,22 @@ export class IntegratedRecoveryCoordinator {
         { operation: "animated-static-recovery" }
       );
       this.#reportFailure(staticFailure);
+      const retainedVisualState = this.#effects.visualState;
+      let retainedStaticMatches = false;
       try {
-        this.#staticStore.coverCurrent();
+        retainedStaticMatches = retainedVisualState !== null &&
+          this.#staticStore.currentState() === retainedVisualState;
       } catch {
-        // Preserve the original static installation failure.
+        // The original static failure remains authoritative.
+      }
+      if (retainedStaticMatches) {
+        try {
+          this.#staticStore.coverCurrent();
+        } catch {
+          // Preserve the original static installation failure and candidate.
+        }
       }
       this.#stageReadyResult(null);
-      const retainedVisualState = this.#effects.visualState;
       const failed = this.#graph.failStatic(
         staticFailure.message,
         retainedVisualState === null ? {} : { retainedVisualState }
@@ -236,6 +241,9 @@ export class IntegratedRecoveryCoordinator {
           readiness: this.#effects.readiness
         });
       }
+      // Error readiness is terminal but player disposal remains explicit. The
+      // candidate is retained because motion policy still owns animated mode,
+      // and an unverified/stale static must never replace its state identity.
       throw new PlaybackFallbackError(staticFailure.message);
     }
 
@@ -267,13 +275,47 @@ export class IntegratedRecoveryCoordinator {
         ? { retainedVisualState }
         : {}
     );
-    const recoveredForHost = this.#effects.applyRecovery(
-      recovered,
-      (presentation) => {
-        assertIntegratedStaticPresentation(presentation, requested);
-        this.#staticStore.coverCurrent();
+    let recoveredForHost: Readonly<ReturnType<EffectHost["applyRecovery"]>>;
+    try {
+      recoveredForHost = this.#effects.applyRecovery(
+        recovered,
+        (presentation) => {
+          assertIntegratedStaticPresentation(presentation, requested);
+          try {
+            this.#staticStore.coverCurrent();
+          } catch {
+            // A visibility host can fail before applying its side effect. One
+            // bounded retry handles that transient without replaying graph
+            // effects or replacing the already-staged strict surface.
+            this.#staticStore.coverCurrent();
+          }
+        }
+      );
+    } catch (error) {
+      const coverFailure = normalizeRuntimeFailure(
+        "renderer-failure",
+        error,
+        { operation: "animated-recovery-cover" }
+      );
+      this.#reportFailure(coverFailure);
+      this.#stageReadyResult(null);
+      const failedVisualState = this.#effects.visualState;
+      const failed = this.#graph.failStatic(
+        coverFailure.message,
+        failedVisualState === null ? {} : {
+          retainedVisualState: failedVisualState
+        }
+      );
+      const failedForHost = this.#effects.applyFailure(failed);
+      if (traceState !== null) {
+        this.#trace.recordOperation({
+          result: failedForHost,
+          playback: traceState,
+          readiness: this.#effects.readiness
+        });
       }
-    );
+      throw new PlaybackFallbackError(coverFailure.message);
+    }
     if (traceState !== null) {
       this.#trace.recordOperation({
         result: recoveredForHost,
@@ -281,17 +323,33 @@ export class IntegratedRecoveryCoordinator {
         readiness: this.#effects.readiness
       });
     }
+
+    // The candidate owns the last usable animated pixels and its presentation
+    // backend. Retire it only after the newest strict static has crossed the
+    // effect host's draw barrier and is visibly covering that backend.
+    if (candidate !== null) {
+      await this.#retireCandidate(candidate, "animated-recovery-cleanup");
+    }
   }
 
   async #requestStatic(target: string, signal: AbortSignal): Promise<void> {
     throwIfIntegratedAborted(signal);
     const prePresent = this.#canPrePresent(target);
+    let strictStaticCovered = false;
     if (prePresent) {
       try {
         await raceIntegratedAbort(
           this.#staticStore.presentState(target, { signal }),
           signal
         );
+        if (this.#staticStore.currentState() !== target) {
+          throw new IntegratedPlaybackInvariantError(
+            "static request store committed the wrong state"
+          );
+        }
+        // StaticPresentationPlane.present() is an atomic draw-and-cover
+        // contract unless cover:false is explicitly requested.
+        strictStaticCovered = true;
       } catch (error) {
         if (signal.aborted) throw integratedAbortReason(signal);
         const failure = normalizeRuntimeFailure(
@@ -326,12 +384,41 @@ export class IntegratedRecoveryCoordinator {
       }
       this.#effects.apply(result, (presentation) => {
         assertIntegratedStaticPresentation(presentation, staticState);
-        this.#staticStore.coverCurrent();
+        // The strict store already completed its atomic draw-and-cover before
+        // graph commit. This callback is the graph's ordering barrier only;
+        // re-running a fallible visibility host would create a partial commit.
+        strictStaticCovered = true;
       });
     } else {
       this.#effects.apply(result);
     }
+    if (strictStaticCovered) {
+      await this.#retireCandidateAfterStaticCover();
+    }
     return request;
+  }
+
+  async #retireCandidateAfterStaticCover(): Promise<void> {
+    const candidate = this.#getActiveCandidate();
+    if (candidate === null) return;
+    await this.#retireCandidate(candidate, "static-request-candidate-cleanup");
+  }
+
+  async #retireCandidate(
+    candidate: IntegratedCandidateAttempt,
+    operation: string
+  ): Promise<void> {
+    if (this.#getActiveCandidate() !== candidate) return;
+    this.#detachActiveCandidate(candidate);
+    try {
+      await candidate.dispose();
+    } catch (error) {
+      this.#reportFailure(normalizeRuntimeFailure(
+        "readiness-failure",
+        error,
+        { operation }
+      ));
+    }
   }
 
   #canPrePresent(target: string): boolean {

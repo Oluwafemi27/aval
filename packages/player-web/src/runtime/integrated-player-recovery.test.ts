@@ -52,16 +52,16 @@ describe("IntegratedPlayer animated failure recovery", () => {
     });
     expect(requestTrace).toEqual(["resolved"]);
 
-    const recovery = order.slice(order.indexOf("dispose:animated"));
+    const recovery = order.slice(order.indexOf("stage:hover"));
     expect(recovery).toEqual([
-      "dispose:animated",
-      "present:hover",
+      "stage:hover",
       "effect:readinesschange",
       "effect:fallback",
       "effect:transitionstart",
       "draw:static",
       "effect:visualstatechange",
-      "effect:transitionend"
+      "effect:transitionend",
+      "dispose:animated"
     ]);
 
     await harness.player.requestState("idle");
@@ -72,6 +72,104 @@ describe("IntegratedPlayer animated failure recovery", () => {
       requestedState: "idle",
       visualState: "idle"
     });
+  });
+
+  it("covers strict static before starting asynchronous candidate cleanup", async () => {
+    const harness = await createHarness();
+    const disposalGate = deferred<void>();
+    harness.factory.nextDisposeGate = disposalGate;
+    harness.session.failure = fatalWorkerFailure();
+
+    expect(harness.player.tryContentTick({
+      presentationOrdinal: 1n,
+      rationalDeadlineUs: 33_333
+    })).toEqual({ status: "stopped" });
+    await waitFor(() => harness.order.includes("dispose:animated:start"));
+
+    const cover = harness.order.indexOf("draw:static");
+    const disposalStart = harness.order.indexOf("dispose:animated:start");
+    expect(harness.order).toContain("stage:idle");
+    expect(cover).toBeGreaterThan(harness.order.indexOf("stage:idle"));
+    expect(disposalStart).toBeGreaterThan(cover);
+    expect(harness.order).not.toContain("dispose:animated:end");
+    expect(harness.factory.disposals).toBe(0);
+    expect(harness.player.snapshot()).toMatchObject({
+      readiness: "staticReady",
+      selectedRendition: null,
+      requestedState: "idle",
+      visualState: "idle"
+    });
+
+    const newerRequest = harness.player.requestState("hover");
+    await settleMicrotasks();
+    expect(harness.order).not.toContain("present:hover");
+
+    disposalGate.resolve();
+    await harness.player.settled();
+    await newerRequest;
+
+    const disposalEnd = harness.order.indexOf("dispose:animated:end");
+    expect(disposalEnd).toBeGreaterThan(disposalStart);
+    expect(harness.factory.disposals).toBe(1);
+    expect(harness.order.indexOf("present:hover")).toBeGreaterThan(disposalEnd);
+    expect(harness.player.snapshot()).toMatchObject({
+      readiness: "staticReady",
+      requestedState: "hover",
+      visualState: "hover"
+    });
+  });
+
+  it("retries a transient recovery cover before committing static readiness", async () => {
+    const harness = await createHarness();
+    harness.store.coverFailuresRemaining = 1;
+    harness.session.failure = fatalWorkerFailure();
+
+    expect(harness.player.tryContentTick({
+      presentationOrdinal: 1n,
+      rationalDeadlineUs: 33_333
+    })).toEqual({ status: "stopped" });
+    await harness.player.settled();
+
+    expect(harness.store.coverCalls).toBe(2);
+    expect(harness.order.filter((event) => event === "draw:static"))
+      .toHaveLength(1);
+    expect(harness.factory.disposals).toBe(1);
+    expect(harness.player.snapshot()).toMatchObject({
+      readiness: "staticReady",
+      selectedRendition: null,
+      visualState: "idle"
+    });
+  });
+
+  it("terminalizes a recovery whose strict static cover cannot become visible", async () => {
+    const harness = await createHarness();
+    harness.store.coverFailuresRemaining = 2;
+    harness.session.failure = fatalWorkerFailure();
+
+    expect(harness.player.tryContentTick({
+      presentationOrdinal: 1n,
+      rationalDeadlineUs: 33_333
+    })).toEqual({ status: "stopped" });
+    await expect(harness.player.settled()).rejects.toThrow(
+      "injected recovery cover failure"
+    );
+
+    expect(harness.store.coverCalls).toBe(2);
+    expect(harness.order).not.toContain("draw:static");
+    expect(harness.factory.disposals).toBe(0);
+    expect(harness.player.snapshot()).toMatchObject({
+      readiness: "error",
+      selectedRendition: null,
+      visualState: "idle",
+      isTransitioning: false
+    });
+    expect(harness.failures.at(-1)).toMatchObject({
+      code: "renderer-failure",
+      context: { operation: "animated-recovery-cover" }
+    });
+
+    await harness.player.dispose();
+    expect(harness.factory.disposals).toBe(1);
   });
 
   it("recovers a synchronous renderer failure after graph tick without advancing again", async () => {
@@ -151,7 +249,8 @@ describe("IntegratedPlayer animated failure recovery", () => {
     const recoveryDraw = harness.order.lastIndexOf("draw:static");
     expect(harness.order.slice(recoveryDraw + 1)).toEqual([
       "effect:visualstatechange",
-      "effect:transitionend"
+      "effect:transitionend",
+      "dispose:animated"
     ]);
   });
 
@@ -298,6 +397,39 @@ describe("IntegratedPlayer animated failure recovery", () => {
     });
   });
 
+  it("serializes a motion-policy change behind the active recovery surface", async () => {
+    const harness = await createHarness();
+    const gate = deferred<void>();
+    harness.store.nextGate = gate;
+    harness.session.failure = fatalWorkerFailure();
+
+    expect(harness.player.tryContentTick({
+      presentationOrdinal: 1n,
+      rationalDeadlineUs: 33_333
+    })).toEqual({ status: "stopped" });
+    await waitFor(() => harness.store.activePresentations === 1);
+    const reducing = harness.player.setMotionPolicy("reduce");
+    await settleMicrotasks();
+
+    expect(harness.store.activePresentations).toBe(1);
+    expect(harness.store.presented).toEqual(["idle"]);
+    gate.resolve();
+    await harness.player.settled();
+    await reducing;
+
+    expect(harness.store.maximumActivePresentations).toBe(1);
+    expect(harness.store.presented).toEqual(["idle"]);
+    expect(harness.player.snapshot()).toMatchObject({
+      readiness: "staticReady",
+      visualState: "idle"
+    });
+    expect(harness.player.motionSnapshot()).toMatchObject({
+      desiredMode: "reduce",
+      actualMode: "static",
+      stickyFailure: true
+    });
+  });
+
   it("aborts a superseded recovery surface before obsolete pixels commit", async () => {
     const harness = await createHarness();
     harness.store.nextGate = deferred<void>();
@@ -400,6 +532,100 @@ describe("IntegratedPlayer animated failure recovery", () => {
       visualState: "idle"
     });
     expect(harness.store.coverCalls).toBeGreaterThan(0);
+    expect(harness.factory.disposals).toBe(0);
+    expect(harness.player.motionSnapshot().actualMode).toBe("animated");
+    await harness.player.dispose();
+    expect(harness.factory.disposals).toBe(1);
+  });
+
+  it("retains failed-recovery animated pixels when the old static cannot cover", async () => {
+    const harness = await createHarness();
+    harness.store.failure = new Error("injected static presentation failure");
+    harness.store.coverFailuresRemaining = 1;
+    harness.session.failure = fatalWorkerFailure();
+
+    expect(harness.player.tryContentTick({
+      presentationOrdinal: 1n,
+      rationalDeadlineUs: 33_333
+    })).toEqual({ status: "stopped" });
+    await expect(harness.player.settled()).rejects.toThrow(
+      "injected static presentation failure"
+    );
+
+    expect(harness.factory.disposals).toBe(0);
+    expect(harness.player.snapshot()).toMatchObject({ readiness: "error" });
+    await harness.player.dispose();
+    expect(harness.factory.disposals).toBe(1);
+  });
+
+  it("never covers stale idle static when hover recovery staging fails", async () => {
+    const harness = await createHarness();
+    harness.session.script.push(
+      frame("intro", "idle", null, "intro", 1),
+      frame("body", "idle", null, "idle-body", 0),
+      frame("body", "hover", null, "hover-body", 0)
+    );
+    advanceOnce(harness, 1n);
+    advanceOnce(harness, 2n);
+    const hover = harness.player.requestState("hover");
+    advanceOnce(harness, 3n);
+    await hover;
+    expect(harness.player.snapshot().visualState).toBe("hover");
+    expect(harness.store.currentState()).toBe("idle");
+
+    harness.store.failure = new Error("injected hover static failure");
+    harness.session.failure = fatalWorkerFailure();
+    expect(harness.player.tryContentTick({
+      presentationOrdinal: 4n,
+      rationalDeadlineUs: 133_332
+    })).toEqual({ status: "stopped" });
+    await expect(harness.player.settled()).rejects.toThrow(
+      "injected hover static failure"
+    );
+
+    expect(harness.store.coverCalls).toBe(0);
+    expect(harness.factory.disposals).toBe(0);
+    expect(harness.player.snapshot()).toMatchObject({
+      readiness: "error",
+      visualState: "hover",
+      selectedRendition: null
+    });
+    expect(harness.player.motionSnapshot().actualMode).toBe("animated");
+    await harness.player.dispose();
+    expect(harness.factory.disposals).toBe(1);
+  });
+
+  it("never covers stale idle static when hover reduction staging fails", async () => {
+    const harness = await createHarness();
+    harness.session.script.push(
+      frame("intro", "idle", null, "intro", 1),
+      frame("body", "idle", null, "idle-body", 0),
+      frame("body", "hover", null, "hover-body", 0)
+    );
+    advanceOnce(harness, 1n);
+    advanceOnce(harness, 2n);
+    const hover = harness.player.requestState("hover");
+    advanceOnce(harness, 3n);
+    await hover;
+    harness.store.failure = new Error("injected hover reduction failure");
+
+    await harness.player.setMotionPolicy("reduce");
+
+    expect(harness.store.currentState()).toBe("idle");
+    expect(harness.store.coverCalls).toBe(0);
+    expect(harness.factory.disposals).toBe(0);
+    expect(harness.player.snapshot()).toMatchObject({
+      readiness: "error",
+      visualState: "hover",
+      selectedRendition: null
+    });
+    expect(harness.player.motionSnapshot()).toMatchObject({
+      actualMode: "static",
+      staticOrigin: "png-failure",
+      stickyFailure: true
+    });
+    await harness.player.dispose();
+    expect(harness.factory.disposals).toBe(1);
   });
 
   it("aborts an active static request and settles every owner on disposal", async () => {
@@ -501,6 +727,7 @@ class RecoveryCandidateFactory implements IntegratedCandidateFactory {
     rendererAvailable: true
   });
   public disposals = 0;
+  public nextDisposeGate: ReturnType<typeof deferred<void>> | null = null;
   #session: RecoveryPlaybackSession | null = null;
   readonly #order: string[];
 
@@ -523,9 +750,18 @@ class RecoveryCandidateFactory implements IntegratedCandidateFactory {
       prepareActivation: async ({ expectedPresentation }) =>
         Object.freeze({ expectedPresentation }),
       drawInitial: () => undefined,
-      dispose: () => {
+      dispose: async () => {
         if (disposed) return;
         disposed = true;
+        const gate = this.nextDisposeGate;
+        this.nextDisposeGate = null;
+        if (gate !== null) {
+          this.#order.push("dispose:animated:start");
+          await gate.promise;
+          this.disposals += 1;
+          this.#order.push("dispose:animated:end");
+          return;
+        }
         this.disposals += 1;
         this.#order.push("dispose:animated");
       }
@@ -655,6 +891,7 @@ class RecoveryStaticStore implements IntegratedStaticSurfaceStore {
   public activePresentations = 0;
   public maximumActivePresentations = 0;
   public coverCalls = 0;
+  public coverFailuresRemaining = 0;
   public disposeCalls = 0;
   readonly #order: string[];
 
@@ -667,7 +904,7 @@ class RecoveryStaticStore implements IntegratedStaticSurfaceStore {
 
   public async presentState(
     state: string,
-    options: { readonly signal: AbortSignal }
+    options: { readonly signal: AbortSignal; readonly cover?: boolean }
   ): Promise<void> {
     this.activePresentations += 1;
     this.maximumActivePresentations = Math.max(
@@ -675,7 +912,7 @@ class RecoveryStaticStore implements IntegratedStaticSurfaceStore {
       this.activePresentations
     );
     this.presented.push(state);
-    this.#order.push(`present:${state}`);
+    this.#order.push(`${options.cover === false ? "stage" : "present"}:${state}`);
     const gate = this.nextGate;
     this.nextGate = null;
     try {
@@ -690,7 +927,15 @@ class RecoveryStaticStore implements IntegratedStaticSurfaceStore {
 
   public coverCurrent(): void {
     this.coverCalls += 1;
+    if (this.coverFailuresRemaining > 0) {
+      this.coverFailuresRemaining -= 1;
+      throw new Error("injected recovery cover failure");
+    }
     this.#order.push("draw:static");
+  }
+
+  public currentState(): string | null {
+    return this.committed.at(-1) ?? "idle";
   }
 
   public revealAnimated(): void {}

@@ -1,0 +1,146 @@
+{
+  "contractVersion": "0.1",
+  "cases": [
+    {
+      "id": "packed-geometry-overlapping-alpha-pane",
+      "owner": "format",
+      "operation": "deriveAvcRenditionGeometry",
+      "input": {
+        "profile": "avc-annexb-packed-alpha-v0",
+        "canvasWidth": 45,
+        "canvasHeight": 27,
+        "colorRect": [
+          0,
+          0,
+          45,
+          27
+        ],
+        "alphaRect": [
+          0,
+          18,
+          45,
+          27
+        ],
+        "codedWidth": 48,
+        "codedHeight": 64
+      },
+      "expected": {
+        "name": "FormatError",
+        "code": "PROFILE_INVALID"
+      }
+    },
+    {
+      "id": "packed-sps-crop-mismatch",
+      "owner": "format",
+      "operation": "inspectAvcAnnexBRendition",
+      "asset": "packed-alpha-loop.rma",
+      "rendition": "packed.1x",
+      "expectedDecodedStorageRect": [
+        0,
+        0,
+        46,
+        62
+      ],
+      "expected": {
+        "name": "FormatError",
+        "code": "PROFILE_INVALID"
+      }
+    },
+    {
+      "id": "packed-alpha-quality-over-limit",
+      "owner": "compiler",
+      "operation": "createAlphaQualityAccumulator.includeFrame",
+      "expectedAlpha": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "decodedAlpha": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "expected": {
+        "name": "CompilerError",
+        "code": "ALPHA_QUALITY_REJECTED",
+        "statistic": "mae"
+      }
+    },
+    {
+      "id": "strict-static-resource-cap-below-baseline",
+      "owner": "player-web",
+      "operation": "createStaticResourcePlan",
+      "asset": "packed-alpha-all-routes.rma",
+      "hostCapBytes": 1024,
+      "expected": {
+        "name": "RangeError"
+      }
+    },
+    {
+      "id": "strict-png-active-byte-budget",
+      "owner": "format",
+      "operation": "validatePngProfile",
+      "asset": "../png/dynamic-filter2.png",
+      "expectedWidth": 32,
+      "expectedHeight": 16,
+      "maximumPngBytes": 100,
+      "expected": {
+        "name": "FormatError",
+        "code": "BUDGET_EXCEEDED"
+      }
+    },
+    {
+      "id": "strict-png-combined-idat-limit",
+      "owner": "format",
+      "operation": "parseRestrictedPngChunksGenerated",
+      "expectedWidth": 32,
+      "expectedHeight": 16,
+      "idatLengths": [
+        2097152,
+        1
+      ],
+      "maximumPngBytes": 3145728,
+      "expected": {
+        "name": "FormatError",
+        "code": "PNG_ENVELOPE_INVALID"
+      }
+    },
+    {
+      "id": "strict-deflate-compressed-byte-limit",
+      "owner": "format",
+      "operation": "inflateDeflate",
+      "deflateBytes": 2097153,
+      "expectedOutputLength": 0,
+      "expected": {
+        "name": "FormatError",
+        "code": "PNG_DEFLATE_INVALID"
+      }
+    },
+    {
+      "id": "strict-deflate-output-byte-limit",
+      "owner": "format",
+      "operation": "inflateDeflate",
+      "deflate": [
+        3
+      ],
+      "expectedOutputLength": 1049089,
+      "expected": {
+        "name": "FormatError",
+        "code": "PNG_DEFLATE_INVALID"
+      }
+    },
+    {
+      "id": "strict-deflate-work-limit",
+      "owner": "format",
+      "operation": "inflateDeflateWithLimit",
+      "sourceUtf8": "bounded output",
+      "workLimit": 5,
+      "expected": {
+        "name": "FormatError",
+        "code": "PNG_DEFLATE_INVALID"
+      }
+    }
+  ]
+}

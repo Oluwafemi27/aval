@@ -227,6 +227,45 @@ describe("RealtimeDriver", () => {
     expect(onTick).not.toHaveBeenCalled();
   });
 
+  it("pauses for reduced-policy preparation and resumes without catch-up", () => {
+    const source = new FakeAnimationFrameSource();
+    const ordinals: bigint[] = [];
+    const driver = createDriver(source, {
+      numerator: 30,
+      onTick(context) {
+        ordinals.push(context.presentationOrdinal);
+        return { status: "advanced" };
+      }
+    });
+    driver.start();
+    const firstPending = source.pendingId;
+
+    driver.pauseForPolicy();
+    driver.pauseForPolicy();
+    expect(source.cancelled).toEqual([firstPending]);
+    expect(driver.snapshot()).toMatchObject({
+      running: false,
+      nextPresentationOrdinal: 1n,
+      advancedTicks: 0,
+      underflows: 0,
+      smoothSession: true
+    });
+
+    driver.start();
+    source.run(500);
+    expect(ordinals).toEqual([1n]);
+    expect(driver.snapshot()).toMatchObject({
+      running: true,
+      nextPresentationOrdinal: 2n,
+      advancedTicks: 1,
+      smoothSession: true
+    });
+    source.run(501);
+    expect(ordinals).toEqual([1n]);
+    source.run(533.334);
+    expect(ordinals).toEqual([1n, 2n]);
+  });
+
   it("rejects regressing callback clocks and malformed tick results", () => {
     const source = new FakeAnimationFrameSource();
     const driver = createDriver(source, {
@@ -263,6 +302,423 @@ describe("RealtimeDriver", () => {
       disposed: false
     });
   });
+
+  it("rejects a synchronous frame callback and cancels its returned handle", () => {
+    const cancelled: number[] = [];
+    let callbackFailure: unknown;
+    const driver = new RealtimeDriver({
+      frameRate: { numerator: 30, denominator: 1 },
+      requestFrame: (callback) => {
+        try {
+          callback(40);
+        } catch (error) {
+          callbackFailure = error;
+        }
+        return 17;
+      },
+      cancelFrame: (handle) => cancelled.push(handle),
+      now: () => 0,
+      tryContentTick: () => ({ status: "advanced" })
+    });
+
+    expect(() => driver.start()).toThrow("ran synchronously");
+    expect(callbackFailure).toBeInstanceOf(RangeError);
+    expect((callbackFailure as Error).message).toContain("ran synchronously");
+    expect(cancelled).toEqual([17]);
+    expect(driver.snapshot()).toMatchObject({
+      running: false,
+      disposed: false,
+      displayCallbacks: 0,
+      advancedTicks: 0,
+      smoothSession: false
+    });
+  });
+
+  it("cancels a returned frame handle when its request disposes the driver", () => {
+    const cancelled: number[] = [];
+    let driver!: RealtimeDriver;
+    driver = new RealtimeDriver({
+      frameRate: { numerator: 30, denominator: 1 },
+      requestFrame: () => {
+        driver.dispose();
+        return 23;
+      },
+      cancelFrame: (handle) => cancelled.push(handle),
+      now: () => 0,
+      tryContentTick: () => ({ status: "advanced" })
+    });
+
+    expect(() => driver.start()).toThrow("disposed");
+    expect(cancelled).toEqual([23]);
+    expect(driver.snapshot()).toMatchObject({
+      running: false,
+      disposed: true,
+      displayCallbacks: 0
+    });
+  });
+
+  it("cancels a returned frame handle when its request pauses ownership", () => {
+    const cancelled: number[] = [];
+    let driver!: RealtimeDriver;
+    driver = new RealtimeDriver({
+      frameRate: { numerator: 30, denominator: 1 },
+      requestFrame: () => {
+        driver.pauseForPolicy();
+        return 29;
+      },
+      cancelFrame: (handle) => cancelled.push(handle),
+      now: () => 0,
+      tryContentTick: () => ({ status: "advanced" })
+    });
+
+    expect(() => driver.start()).toThrow("ownership changed");
+    expect(cancelled).toEqual([29]);
+    expect(driver.snapshot()).toMatchObject({
+      running: false,
+      disposed: false,
+      displayCallbacks: 0
+    });
+  });
+
+  it.each(["pause", "stop"] as const)(
+    "does not let cancelFrame restart realtime during %s",
+    (operation) => {
+      let requests = 0;
+      let reentryFailure: unknown;
+      let driver!: RealtimeDriver;
+      driver = new RealtimeDriver({
+        frameRate: { numerator: 30, denominator: 1 },
+        requestFrame: () => {
+          requests += 1;
+          return requests;
+        },
+        cancelFrame: () => {
+          try {
+            driver.start();
+          } catch (error) {
+            reentryFailure = error;
+          }
+        },
+        now: () => 0,
+        tryContentTick: () => ({ status: "advanced" })
+      });
+      driver.start();
+
+      if (operation === "pause") driver.pauseForPolicy();
+      else driver.stopAfterFailure();
+
+      expect(reentryFailure).toBeInstanceOf(RangeError);
+      expect((reentryFailure as Error).message).toContain(
+        "frame cancellation is in progress"
+      );
+      expect(requests).toBe(1);
+      expect(driver.snapshot()).toMatchObject({
+        running: false,
+        disposed: false,
+        smoothSession: operation === "pause"
+      });
+    }
+  );
+
+  it("preserves a stable request failure when rollback cancellation throws", () => {
+    let cancellationAttempts = 0;
+    const driver = new RealtimeDriver({
+      frameRate: { numerator: 30, denominator: 1 },
+      requestFrame: (callback) => {
+        try {
+          callback(40);
+        } catch {
+          // Return the hostile host's handle so the driver must retire it.
+        }
+        return 31;
+      },
+      cancelFrame: () => {
+        cancellationAttempts += 1;
+        throw new Error("private cancelFrame failure");
+      },
+      now: () => 0,
+      tryContentTick: () => ({ status: "advanced" })
+    });
+
+    expect(() => driver.start()).toThrow("ran synchronously");
+    expect(cancellationAttempts).toBe(1);
+    expect(driver.snapshot()).toMatchObject({
+      running: false,
+      disposed: false,
+      displayCallbacks: 0,
+      smoothSession: false
+    });
+  });
+
+  it("does not resurrect when now disposes during clock initialization", () => {
+    let requests = 0;
+    let driver!: RealtimeDriver;
+    driver = new RealtimeDriver({
+      frameRate: { numerator: 30, denominator: 1 },
+      requestFrame: () => {
+        requests += 1;
+        return requests;
+      },
+      cancelFrame: () => undefined,
+      now: () => {
+        driver.dispose();
+        return 0;
+      },
+      tryContentTick: () => ({ status: "advanced" })
+    });
+
+    expect(() => driver.start()).toThrow("disposed");
+    expect(requests).toBe(0);
+    expect(driver.snapshot()).toMatchObject({
+      running: false,
+      disposed: true,
+      nextDeadlineMs: null,
+      displayCallbacks: 0
+    });
+  });
+
+  it.each(["pause", "stop"] as const)(
+    "does not start when now requests a lifecycle %s",
+    (operation) => {
+      let requests = 0;
+      let driver!: RealtimeDriver;
+      driver = new RealtimeDriver({
+        frameRate: { numerator: 30, denominator: 1 },
+        requestFrame: () => {
+          requests += 1;
+          return requests;
+        },
+        cancelFrame: () => undefined,
+        now: () => {
+          if (operation === "pause") driver.pauseForPolicy();
+          else driver.stopAfterFailure();
+          return 0;
+        },
+        tryContentTick: () => ({ status: "advanced" })
+      });
+
+      expect(() => driver.start()).toThrow(
+        "lifecycle changed during clock initialization"
+      );
+      expect(requests).toBe(0);
+      expect(driver.snapshot()).toMatchObject({
+        running: false,
+        disposed: false,
+        nextDeadlineMs: null,
+        smoothSession: operation === "pause"
+      });
+    }
+  );
+
+  it.each(["start", "tickOnce"] as const)(
+    "rejects recursive %s even when now catches the inner failure",
+    (operation) => {
+      let innerFailure: unknown;
+      let driver!: RealtimeDriver;
+      driver = new RealtimeDriver({
+        frameRate: { numerator: 30, denominator: 1 },
+        requestFrame: () => 1,
+        cancelFrame: () => undefined,
+        now: () => {
+          try {
+            driver[operation]();
+          } catch (error) {
+            innerFailure = error;
+          }
+          return 0;
+        },
+        tryContentTick: () => ({ status: "advanced" })
+      });
+
+      expect(() => driver[operation]()).toThrow(
+        "clock initialization reentered synchronously"
+      );
+      expect(innerFailure).toBeInstanceOf(RangeError);
+      expect((innerFailure as Error).message).toContain(
+        "clock initialization reentered synchronously"
+      );
+      expect(driver.snapshot()).toMatchObject({
+        running: false,
+        disposed: false,
+        nextDeadlineMs: null,
+        displayCallbacks: 0,
+        advancedTicks: 0
+      });
+    }
+  );
+
+  it.each(["start", "tickOnce"] as const)(
+    "rejects recursive %s from a content tick without duplicating its ordinal",
+    (operation) => {
+      const source = new FakeAnimationFrameSource();
+      let innerFailure: unknown;
+      let driver!: RealtimeDriver;
+      driver = new RealtimeDriver({
+        frameRate: { numerator: 30, denominator: 1 },
+        requestFrame: source.request,
+        cancelFrame: source.cancel,
+        now: () => 0,
+        tryContentTick: () => {
+          try {
+            driver[operation]();
+          } catch (error) {
+            innerFailure = error;
+          }
+          return { status: "advanced" };
+        }
+      });
+
+      expect(() => driver.tickOnce()).toThrow(
+        "content tick reentered synchronously"
+      );
+      expect(innerFailure).toBeInstanceOf(RangeError);
+      expect((innerFailure as Error).message).toContain(
+        "content tick reentered synchronously"
+      );
+      expect(source.requestCount).toBe(0);
+      expect(driver.snapshot()).toMatchObject({
+        running: false,
+        disposed: false,
+        nextPresentationOrdinal: 1n,
+        advancedTicks: 0,
+        underflows: 0
+      });
+    }
+  );
+
+  it.each([
+    {
+      operation: "dispose" as const,
+      expectedFailure: "disposed",
+      disposed: true,
+      smoothSession: true
+    },
+    {
+      operation: "pause" as const,
+      expectedFailure: "lifecycle changed during a content tick",
+      disposed: false,
+      smoothSession: true
+    },
+    {
+      operation: "stop" as const,
+      expectedFailure: "lifecycle changed during a content tick",
+      disposed: false,
+      smoothSession: false
+    }
+  ])(
+    "does not commit an advanced tick after callback lifecycle $operation",
+    ({ operation, expectedFailure, disposed, smoothSession }) => {
+      const source = new FakeAnimationFrameSource();
+      let driver!: RealtimeDriver;
+      driver = new RealtimeDriver({
+        frameRate: { numerator: 30, denominator: 1 },
+        requestFrame: source.request,
+        cancelFrame: source.cancel,
+        now: () => 0,
+        tryContentTick: () => {
+          if (operation === "dispose") driver.dispose();
+          else if (operation === "pause") driver.pauseForPolicy();
+          else driver.stopAfterFailure();
+          return { status: "advanced" };
+        }
+      });
+
+      expect(() => driver.tickOnce()).toThrow(expectedFailure);
+      expect(source.requestCount).toBe(0);
+      expect(driver.snapshot()).toMatchObject({
+        running: false,
+        disposed,
+        nextPresentationOrdinal: 1n,
+        advancedTicks: 0,
+        underflows: 0,
+        smoothSession
+      });
+    }
+  );
+
+  it("accepts the intentional failure stop paired with a stopped tick", () => {
+    const source = new FakeAnimationFrameSource();
+    let driver!: RealtimeDriver;
+    driver = new RealtimeDriver({
+      frameRate: { numerator: 30, denominator: 1 },
+      requestFrame: source.request,
+      cancelFrame: source.cancel,
+      now: () => 0,
+      tryContentTick: () => {
+        driver.stopAfterFailure();
+        return { status: "stopped" };
+      }
+    });
+
+    expect(driver.tickOnce()).toEqual({
+      status: "stopped",
+      presentationOrdinal: 1n
+    });
+    expect(driver.snapshot()).toMatchObject({
+      running: false,
+      disposed: false,
+      nextPresentationOrdinal: 1n,
+      advancedTicks: 0,
+      smoothSession: false
+    });
+  });
+
+  it("does not let an underflow observer take ownership of the frame loop", () => {
+    const source = new FakeAnimationFrameSource();
+    let observerFailure: unknown;
+    let driver!: RealtimeDriver;
+    driver = new RealtimeDriver({
+      frameRate: { numerator: 30, denominator: 1 },
+      requestFrame: source.request,
+      cancelFrame: source.cancel,
+      now: () => 0,
+      tryContentTick: () => ({ status: "underflow" }),
+      onUnderflow: () => {
+        try {
+          driver.start();
+        } catch (error) {
+          observerFailure = error;
+        }
+      }
+    });
+
+    expect(() => driver.tickOnce()).toThrow(
+      "content tick reentered synchronously"
+    );
+    expect(observerFailure).toBeInstanceOf(RangeError);
+    expect(source.requestCount).toBe(0);
+    expect(driver.snapshot()).toMatchObject({
+      running: false,
+      nextPresentationOrdinal: 1n,
+      advancedTicks: 0,
+      underflows: 0,
+      smoothSession: false
+    });
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+    "fails closed for malformed callback timestamp %s",
+    (timestamp) => {
+      const source = new FakeAnimationFrameSource();
+      const driver = createDriver(source, {
+        numerator: 30,
+        onTick: () => ({ status: "advanced" })
+      });
+      driver.start();
+
+      expect(() => source.run(timestamp)).toThrow(
+        "animation-frame timestamp must be finite and non-negative"
+      );
+      expect(source.hasPending).toBe(false);
+      expect(driver.snapshot()).toMatchObject({
+        running: false,
+        disposed: false,
+        displayCallbacks: 0,
+        advancedTicks: 0,
+        smoothSession: false
+      });
+    }
+  );
 });
 
 function createDriver(

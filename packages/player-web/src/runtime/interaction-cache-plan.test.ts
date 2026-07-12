@@ -51,6 +51,35 @@ describe("generalized interaction cache plan", () => {
     ]);
   });
 
+  it("charges packed-alpha interaction layers at their full coded geometry", () => {
+    const manifest = routeManifest({
+      renditions: [{
+        id: "opaque",
+        profile: "avc-annexb-packed-alpha-v0",
+        codec: "avc1.42E020",
+        codedWidth: 64,
+        codedHeight: 144,
+        alphaLayout: {
+          type: "stacked-v0",
+          colorRect: [0, 0, 64, 64],
+          alphaRect: [0, 72, 64, 64]
+        },
+        bitrate: { average: 100_000, peak: 200_000 },
+        capabilities: ["webcodecs", "webgl2"]
+      }]
+    });
+    const plan = createInteractionCachePlan({
+      manifest,
+      rendition: "opaque",
+      deviceLimits: device()
+    });
+
+    expect(plan.width).toBe(64);
+    expect(plan.height).toBe(144);
+    expect(plan.bytesPerFrame).toBe(64 * 144 * 4);
+    expect(plan.persistentBytes).toBe(plan.layerCount * 64 * 144 * 4);
+  });
+
   it("deduplicates only exact rendition, unit, and local-frame identities", () => {
     const repeatedKey = frame("shared", 0);
     const plan = semanticPlan({

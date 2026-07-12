@@ -289,7 +289,7 @@ describe("canonical asset layout", () => {
     expect(elementProbes).toBe(0);
   });
 
-  it("runs complete reference-frame and shallow PNG validation with absolute offsets", () => {
+  it("runs complete reference-frame and strict PNG validation with absolute offsets", () => {
     const fixture = canonicalAssetFixture();
     const badReference = fixture.bytes.slice();
     const firstSampleOffset = fixture.records[0]!.payloadOffset;

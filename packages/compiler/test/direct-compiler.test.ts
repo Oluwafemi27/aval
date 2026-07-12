@@ -72,10 +72,15 @@ describe.skipIf(!HAS_FFMPEG)("direct opaque compiler", () => {
     expect(first.buildDetails.invocations.map(({ operation }) => operation))
       .toEqual(expect.arrayContaining([
         "probe:direct",
-        "alpha-audit:direct",
         "materialize-rgba:direct",
-        "encode:opaque.1x:body.default"
+        "scale:avc.1x:body.default",
+        "encode:avc.1x:body.default"
       ]));
+    expect(first.buildDetails.alphaPolicy).toMatchObject({
+      requested: "auto",
+      selected: "opaque",
+      audit: { allOpaque: true, uniqueReferencedFrames: 8 }
+    });
     expect(JSON.stringify(first.buildDetails.invocations)).not.toContain(directory);
     expect(first.buildDetails.continuity).toMatchObject([
       { kind: "loop", status: "pass" }

@@ -190,6 +190,11 @@ export function cloneAvcProfile(
   requireAvc(profile !== undefined, "profile", "AVC profile is required");
   positiveInteger(profile.codedWidth, "profile.codedWidth", 2_048);
   positiveInteger(profile.codedHeight, "profile.codedHeight", 2_048);
+  const expectedDecodedStorageRect = cloneExpectedDecodedStorageRect(
+    profile.expectedDecodedStorageRect,
+    profile.codedWidth,
+    profile.codedHeight
+  );
   positiveInteger(profile.frameRate?.numerator, "profile.frameRate.numerator");
   positiveInteger(profile.frameRate?.denominator, "profile.frameRate.denominator");
   positiveInteger(profile.averageBitrate, "profile.averageBitrate", PROFILE_MAX_BITRATE);
@@ -208,11 +213,12 @@ export function cloneAvcProfile(
   requireAvc(
     profile.requireBt709LimitedRange === true,
     "profile.requireBt709LimitedRange",
-    "the M5 AVC profile requires BT.709 limited range"
+    "the AVC v0 profile requires BT.709 limited range"
   );
   return Object.freeze({
     codedWidth: profile.codedWidth,
     codedHeight: profile.codedHeight,
+    expectedDecodedStorageRect,
     frameRate: Object.freeze({
       numerator: profile.frameRate.numerator,
       denominator: profile.frameRate.denominator
@@ -222,6 +228,47 @@ export function cloneAvcProfile(
     cpbBufferBits: profile.cpbBufferBits,
     requireBt709LimitedRange: true
   });
+}
+
+function cloneExpectedDecodedStorageRect(
+  value: AvcConstrainedBaselineProfile["expectedDecodedStorageRect"],
+  codedWidth: number,
+  codedHeight: number
+): readonly [number, number, number, number] {
+  if (value === undefined) {
+    return Object.freeze([0, 0, codedWidth, codedHeight]);
+  }
+  requireAvc(
+    Array.isArray(value) && value.length === 4,
+    "profile.expectedDecodedStorageRect",
+    "expected decoded storage rectangle must contain four integers"
+  );
+  for (let index = 0; index < 4; index += 1) {
+    requireAvc(
+      Object.prototype.hasOwnProperty.call(value, String(index)),
+      "profile.expectedDecodedStorageRect",
+      "expected decoded storage rectangle must be dense"
+    );
+  }
+  const [x, y, width, height] = value;
+  requireAvc(
+    x === 0 && y === 0,
+    "profile.expectedDecodedStorageRect",
+    "expected decoded storage rectangle must begin at the coded origin"
+  );
+  positiveInteger(width, "profile.expectedDecodedStorageRect[2]", codedWidth);
+  positiveInteger(height, "profile.expectedDecodedStorageRect[3]", codedHeight);
+  requireAvc(
+    width % 2 === 0 && height % 2 === 0,
+    "profile.expectedDecodedStorageRect",
+    "expected decoded storage dimensions must be even for yuv420p"
+  );
+  requireAvc(
+    (codedWidth - width) % 2 === 0 && (codedHeight - height) % 2 === 0,
+    "profile.expectedDecodedStorageRect",
+    "expected decoded storage crop must use 4:2:0 crop units"
+  );
+  return Object.freeze([0, 0, width, height]);
 }
 
 function positiveInteger(value: unknown, path: string, maximum?: number): void {
@@ -470,7 +517,7 @@ function validateCanonicalAvcSubset(
   requireAvc(
     summary.sliceCount === 1,
     path,
-    "M5 AVC requires exactly one slice per access unit"
+    "AVC v0 requires exactly one slice per access unit"
   );
   requireAvc(
     first
@@ -488,27 +535,19 @@ function validateCanonicalAvcSubset(
   );
   const { sps } = parameterSets;
   requireAvc(
-    sps.crop.left === 0 &&
-      sps.crop.right === 0 &&
-      sps.crop.top === 0 &&
-      sps.crop.bottom === 0,
-    `${path}.sps`,
-    "M5 AVC forbids SPS cropping"
-  );
-  requireAvc(
     sps.squareSampleAspect,
     `${path}.sps`,
-    "M5 AVC requires square sample aspect"
+    "AVC v0 requires square sample aspect"
   );
   requireAvc(
     sps.timing.fixedFrameRate,
     `${path}.sps`,
-    "M5 AVC requires fixed_frame_rate_flag"
+    "AVC v0 requires fixed_frame_rate_flag"
   );
   requireAvc(
     !sps.hrdPresent,
     `${path}.sps`,
-    "M5 AVC forbids HRD syntax"
+    "AVC v0 forbids HRD syntax"
   );
 }
 
@@ -563,6 +602,18 @@ export function validateAvcSpsAgainstProfile(
     `SPS coded dimensions ${String(sps.codedWidth)}x${String(
       sps.codedHeight
     )} do not match the rendition`
+  );
+  const expectedCrop = profile.expectedDecodedStorageRect ??
+    ([0, 0, profile.codedWidth, profile.codedHeight] as const);
+  requireAvc(
+    sps.crop.left === expectedCrop[0] &&
+      sps.crop.top === expectedCrop[1] &&
+      sps.crop.right === profile.codedWidth - expectedCrop[0] - expectedCrop[2] &&
+      sps.crop.bottom === profile.codedHeight - expectedCrop[1] - expectedCrop[3] &&
+      sps.crop.visibleWidth === expectedCrop[2] &&
+      sps.crop.visibleHeight === expectedCrop[3],
+    path,
+    "SPS crop does not match the expected decoded storage rectangle"
   );
   const macroblocksPerFrame = (sps.codedWidth / 16) * (sps.codedHeight / 16);
   requireAvc(
@@ -619,7 +670,7 @@ export function validateAvcSpsAgainstProfile(
       sps.color.transferCharacteristics === 1 &&
       sps.color.matrixCoefficients === 1,
     path,
-    "M5 AVC requires BT.709 limited-range colour signalling"
+    "AVC v0 requires BT.709 limited-range colour signalling"
   );
   return macroblocksPerFrame;
 }

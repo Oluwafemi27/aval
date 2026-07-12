@@ -1,4 +1,5 @@
 import type {
+  AvcRenditionGeometry,
   AvcRenditionInspection,
   BindingV01,
   CanvasV01,
@@ -11,7 +12,7 @@ import type {
 
 export type { RationalV01 };
 
-export const COMPILER_PROJECT_VERSION = "0.1" as const;
+export const COMPILER_PROJECT_VERSION = "0.2" as const;
 export const MAX_SOURCE_DIMENSION = 4_096;
 export const MAX_SOURCE_DURATION_SECONDS = 30;
 export const MAX_SOURCE_FRAMES = 1_800;
@@ -91,6 +92,25 @@ export interface OpaqueRenditionTargetV01 {
   };
 }
 
+export type SourceAvcProfileV02 =
+  | "avc-annexb-auto-v0"
+  | "avc-annexb-opaque-v0"
+  | "avc-annexb-packed-alpha-v0";
+
+export type SourceAlphaPolicy = "auto" | "opaque" | "packed";
+
+export interface SourceRenditionTargetV02 {
+  readonly id: string;
+  /** Visible color-pane width. Storage and coded dimensions are derived. */
+  readonly width: number;
+  /** Visible color-pane height. Storage and coded dimensions are derived. */
+  readonly height: number;
+  readonly bitrate: {
+    readonly average: number;
+    readonly peak: number;
+  };
+}
+
 export interface SourceProjectV01 {
   readonly projectVersion: "0.1";
   readonly profile: "avc-annexb-opaque-v0";
@@ -103,6 +123,104 @@ export interface SourceProjectV01 {
   readonly states: readonly SourceStateV01[];
   readonly edges: readonly EdgeV01[];
   readonly bindings: readonly BindingV01[];
+}
+
+export interface SourceProjectV02 {
+  readonly projectVersion: "0.2";
+  readonly profile: SourceAvcProfileV02;
+  readonly canvas: CanvasV01;
+  readonly frameRate: RationalV01;
+  readonly sources: readonly SourceDescriptorV01[];
+  readonly renditions: readonly SourceRenditionTargetV02[];
+  readonly units: readonly SourceUnitV01[];
+  readonly initialState: string;
+  readonly states: readonly SourceStateV01[];
+  readonly edges: readonly EdgeV01[];
+  readonly bindings: readonly BindingV01[];
+}
+
+/**
+ * The sole compiler-internal project shape. Version-specific authoring fields
+ * are removed before media inspection or encoding begins.
+ */
+export interface NormalizedSourceProject {
+  readonly sourceProjectVersion: SourceProjectV01["projectVersion"] |
+    SourceProjectV02["projectVersion"];
+  readonly alphaPolicy: SourceAlphaPolicy;
+  /** Compatibility mapping selected only by the version adapter. */
+  readonly alphaPolicyRejectionCode:
+    | "OPAQUE_ONLY_M5"
+    | "ALPHA_POLICY_REJECTED";
+  readonly canvas: CanvasV01;
+  readonly frameRate: RationalV01;
+  readonly sources: readonly SourceDescriptorV01[];
+  readonly renditions: readonly SourceRenditionTargetV02[];
+  readonly units: readonly SourceUnitV01[];
+  readonly initialState: string;
+  readonly states: readonly SourceStateV01[];
+  readonly edges: readonly EdgeV01[];
+  readonly bindings: readonly BindingV01[];
+}
+
+export interface AlphaPixelLocation {
+  readonly source: string;
+  readonly frame: number;
+  readonly x: number;
+  readonly y: number;
+  readonly alpha: number;
+}
+
+export interface AlphaAuditSummary {
+  readonly uniqueReferencedFrames: number;
+  readonly minimumAlpha: number;
+  readonly allOpaque: boolean;
+  readonly firstNonopaque: Readonly<AlphaPixelLocation> | null;
+}
+
+export interface AlphaPolicyDecision {
+  readonly requested: SourceAlphaPolicy;
+  readonly selected: Exclude<SourceAlphaPolicy, "auto">;
+  readonly audit: Readonly<AlphaAuditSummary>;
+  readonly warnings: readonly string[];
+}
+
+export interface AlphaErrorStatistics {
+  readonly sampleCount: number;
+  readonly meanAbsoluteError: number;
+  readonly p99AbsoluteError: number;
+  readonly minimumDecodedAlpha: number;
+  readonly maximumDecodedAlpha: number;
+}
+
+export interface AlphaFrameQualitySummary extends AlphaErrorStatistics {
+  readonly rendition: string;
+  readonly unit: string;
+  readonly frameIndex: number;
+}
+
+export interface AlphaQualitySummary {
+  readonly rendition: string;
+  readonly frameCount: number;
+  readonly aggregate: Readonly<AlphaErrorStatistics>;
+  readonly worstFrame: Readonly<AlphaFrameQualitySummary>;
+}
+
+export type CompositeBackground = "black" | "white" | "magenta";
+
+export interface CompositeBackgroundQualitySummary {
+  readonly background: CompositeBackground;
+  readonly rgb: readonly [red: number, green: number, blue: number];
+  readonly sampleCount: number;
+  readonly meanAbsoluteError: number;
+  readonly p99AbsoluteError: number;
+}
+
+export interface CompositeQualitySummary {
+  /** Composite color statistics are evidence only and never reject output. */
+  readonly policy: "report-only";
+  readonly rendition: string;
+  readonly frameCount: number;
+  readonly backgrounds: readonly Readonly<CompositeBackgroundQualitySummary>[];
 }
 
 export interface MediaProbeFrame {
@@ -175,12 +293,16 @@ export interface CompileSourceDetails {
         readonly duplicatedSourceFrames: readonly number[];
         readonly droppedSourceFrames: readonly number[];
       };
-  readonly alphaAudit: "passed" | "skipped-no-alpha";
+  readonly alphaAudit: Readonly<AlphaAuditSummary>;
   readonly warnings: readonly string[];
 }
 
 export interface CompileRenditionDetails {
   readonly id: string;
+  readonly profile:
+    | "avc-annexb-opaque-v0"
+    | "avc-annexb-packed-alpha-v0";
+  readonly geometry: Readonly<AvcRenditionGeometry>;
   readonly codedWidth: number;
   readonly codedHeight: number;
   readonly bitrate: {
@@ -194,6 +316,12 @@ export interface CompileRenditionDetails {
     readonly unitId: string;
     readonly constraintSet2Canonicalized: boolean;
   }[];
+  readonly pixelPipeline: {
+    readonly yuvProfile: "bt709-limited-yuv420p-v0";
+    readonly dilation: "nearest-radius-4-v0";
+  };
+  readonly alphaQuality: Readonly<AlphaQualitySummary> | null;
+  readonly compositeQuality: Readonly<CompositeQualitySummary> | null;
 }
 
 export interface CompileStaticDetails {
@@ -201,6 +329,18 @@ export interface CompileStaticDetails {
   readonly bytes: number;
   readonly sha256: string;
   readonly states: readonly string[];
+  readonly validation: Readonly<CompileStaticValidationDetails>;
+}
+
+export interface CompileStaticValidationDetails {
+  readonly profile: "strict-rgba-png-v0";
+  readonly decoder: "format-pure-rfc1950-1951-v0";
+  readonly width: number;
+  readonly height: number;
+  readonly pngBytes: number;
+  readonly zlibBytes: number;
+  readonly filteredBytes: number;
+  readonly rgbaBytes: number;
 }
 
 export interface CompileContinuityDetails {
@@ -242,6 +382,7 @@ export interface CompileBuildDetails {
     readonly bytes: number;
     readonly sha256: string;
   } | null;
+  readonly alphaPolicy: Readonly<AlphaPolicyDecision>;
   readonly manifest: CompiledManifestInputV01;
   readonly sources: readonly CompileSourceDetails[];
   readonly renditions: readonly CompileRenditionDetails[];
@@ -285,6 +426,8 @@ export interface DirectCompileOptions {
     readonly average: number;
     readonly peak: number;
   };
+  /** Asset-wide alpha selection. Direct input defaults to `auto`. */
+  readonly alpha?: SourceAlphaPolicy;
   readonly ffmpegPath?: string;
   readonly ffprobePath?: string;
   /** Lower-only override for FFprobe operations (default/max 15 seconds). */

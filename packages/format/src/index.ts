@@ -29,6 +29,8 @@ export type {
 export {
   AvcIncrementalInspector,
   AVC_DECODER_SURFACE_PADDING,
+  deriveAvcRenditionGeometry,
+  deriveAvcRenditionGeometryFromVisible,
   inspectAvcAnnexBEncoderCandidateRendition,
   inspectAvcAnnexBRendition,
   maximumAvcDecodedRgbaBytes,
@@ -48,13 +50,28 @@ export type {
   AvcIncrementalAccessUnitInput,
   AvcIncrementalAccessUnitInspection,
   AvcParameterSetSummary,
+  AvcProductionRenditionProfileV01,
+  AvcRenditionGeometry,
+  AvcRenditionGeometryInput,
   AvcRenditionInspection,
   AvcRenditionInspectionInput,
   AvcUnitInput,
-  AvcUnitInspection
+  AvcUnitInspection,
+  AvcVisibleRenditionGeometryInput
 } from "./avc/index.js";
 export { adaptManifestToMotionGraph } from "./graph-adapter.js";
 export { parseHeader } from "./header.js";
+export { adler32, crc32 } from "./png/crc32.js";
+export {
+  decodePngRgba,
+  decodePngRgbaFromInflated
+} from "./png/decode.js";
+export { validatePngProfile } from "./png/profile.js";
+export type { PngRgbaDecodeResult } from "./png/decode.js";
+export type {
+  PngDecodePlan,
+  PngProfileValidationInput
+} from "./png/profile.js";
 export type {
   AccessUnitInputV01,
   AccessUnitRecord,
@@ -96,7 +113,8 @@ export type {
   UnitBlobRange,
   UnitInputV01,
   UnitV01,
-  ValidatedAssetLayout
+  ValidatedAssetLayout,
+  ValidatedStaticPngProfile
 } from "./model.js";
 export { parseFrontIndex, validateCompleteAsset } from "./parser.js";
 export {

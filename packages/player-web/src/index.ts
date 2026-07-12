@@ -242,12 +242,18 @@ export {
   type RuntimeCatalogStaticFrame
 } from "./runtime/asset-catalog.js";
 export {
+  createAvcRenditionCandidates,
   createOpaqueRenditionCandidates,
+  inspectAvcRenditionCandidate,
   inspectOpaqueRenditionCandidate,
+  type RuntimeAvcCanvas,
+  type RuntimeAvcRendition,
+  type RuntimeAvcRenditionCandidate,
+  type RuntimeAvcRenditionInspection,
   type RuntimeOpaqueRendition,
   type RuntimeOpaqueRenditionCandidate,
   type RuntimeOpaqueRenditionInspection
-} from "./runtime/rendition-selection.js";
+} from "./runtime/avc-rendition-selection.js";
 export {
   WorkerSampleFactory,
   type CreateWorkerSampleBatchInput,
@@ -294,10 +300,21 @@ export {
   MIN_RESOURCE_RING_CAPACITY,
   RESOURCE_DECODE_SURFACE_COUNT,
   createRuntimeResourcePlan,
+  createStaticRuntimeResourcePlan,
   maximumActualEncodedWindowBytes,
+  withRuntimeResourceRingCapacity,
+  type RuntimeCanvasBackingSize,
+  type RuntimeCanvasResourceHost,
+  type RuntimeCanvasResourceLease,
+  type RuntimeCanvasResourcePlan,
   type RuntimeResourceCatalogView,
+  type RuntimeResourceAllocationSnapshot,
   type RuntimeResourcePlan,
-  type RuntimeResourcePlanInput
+  type RuntimeResourcePlanInput,
+  type RuntimeStaticResourceCatalogView,
+  type StaticRuntimeResourceAllocationSnapshot,
+  type StaticRuntimeResourcePlan,
+  type StaticRuntimeResourcePlanInput
 } from "./runtime/resource-plan.js";
 export {
   DEFAULT_INTERACTION_CACHE_PREPARATION_TIMEOUT_MS,
@@ -312,6 +329,19 @@ export {
   type InteractionCachePreparationWorker,
   type PrepareInteractionCacheOptions
 } from "./runtime/interaction-cache-preparation.js";
+export {
+  FRAME_STREAMING_SLOT_COUNT,
+  FrameRenderer,
+  type FrameRendererOptions,
+  type FrameRendererSnapshot,
+  type FrameRendererTimerHost,
+  type FrameTextureKind
+} from "./runtime/frame-renderer.js";
+export {
+  BrowserFrameBackend,
+  FRAME_FRAGMENT_SHADER_SOURCE,
+  type BrowserFrameBackendOptions
+} from "./runtime/frame-renderer-browser.js";
 export {
   OPAQUE_STREAMING_SLOT_COUNT,
   OpaqueFrameRenderer,
@@ -338,6 +368,7 @@ export {
   asStaticSurfaceCatalog,
   type BrowserDecodedStaticSurface,
   type BrowserStaticSurfaceDecoderOptions,
+  type BrowserStaticSurfaceDecoderSnapshot,
   type BrowserStaticSurfaceTimerHost,
   type DecodedStaticSurface,
   type StaticPresentationPlane,
@@ -346,10 +377,35 @@ export {
   type StaticSurfaceDecoder,
   type StaticSurfacePresentationReport,
   type StaticSurfaceStoreSnapshot,
-  type StaticSurfaceValidationReport
+  type StaticSurfaceValidationReport,
+  type StaticPngInflatePath
 } from "./runtime/static-surfaces.js";
 export {
+  BrowserPresentationPlanes,
+  type BrowserPresentationPlanesOptions,
+  type BrowserPresentationPlanesSnapshot,
+  type BrowserPresentationResizeInput,
+  type PresentableFrameBackend
+} from "./runtime/browser-presentation-planes.js";
+export {
+  UNSUPPORTED_NATIVE_INFLATER,
+  createBrowserPngNativeInflater,
+  type BrowserDecompressionStreamFactory,
+  type BrowserPngNativeInflater
+} from "./runtime/png-inflate-browser.js";
+export {
+  createBrowserAvcCandidateComposition,
   createBrowserOpaqueCandidateComposition,
+  type BrowserAvcCandidateComposition,
+  type BrowserAvcCandidateCompositionOptions,
+  type BrowserAvcCandidateControls,
+  type BrowserAvcCandidateSnapshot,
+  type BrowserAvcCleanupSnapshot,
+  type BrowserAvcPlaybackSnapshot,
+  type BrowserAvcReadPixelsResult,
+  type BrowserAvcReadinessSnapshot,
+  type BrowserAvcRendererSnapshot,
+  type BrowserAvcWorkerSnapshot,
   type BrowserOpaqueCandidateComposition,
   type BrowserOpaqueCandidateCompositionOptions,
   type BrowserOpaqueCandidateControls,
@@ -360,7 +416,7 @@ export {
   type BrowserOpaqueReadinessSnapshot,
   type BrowserOpaqueRendererSnapshot,
   type BrowserOpaqueWorkerSnapshot
-} from "./runtime/browser-opaque-candidate.js";
+} from "./runtime/browser-avc-candidate.js";
 export {
   MAX_PRESENTATION_RING_CAPACITY,
   MIN_PRESENTATION_RING_CAPACITY,
@@ -494,6 +550,31 @@ export {
   type RealtimeUnderflowEvent
 } from "./runtime/realtime-driver.js";
 export {
+  MOTION_POLICIES,
+  MotionPolicyCoordinator,
+  type ActualMotionMode,
+  type EffectiveMotionMode,
+  type MotionFailureStaticOrigin,
+  type MotionPolicy,
+  type MotionPolicyCoordinatorOptions,
+  type MotionPolicySnapshot,
+  type MotionStaticOrigin,
+  type MotionPolicyTransition,
+  type MotionPolicyTransitionKind
+} from "./runtime/motion-policy.js";
+export {
+  MAX_PRESENTATION_BACKING_DIMENSION,
+  PRESENTATION_FIT_MODES,
+  computePresentationGeometry,
+  type PresentationClampReason,
+  type PresentationFit,
+  type PresentationGeometry,
+  type PresentationGeometryInput,
+  type PresentationPlaneMapping,
+  type PresentationRect,
+  type PresentationSize
+} from "./runtime/presentation-geometry.js";
+export {
   RUNTIME_READINESS_LADDER,
   RUNTIME_READINESS_LEVELS,
   RUNTIME_TRACE_CAPACITY,
@@ -544,8 +625,23 @@ export {
   type IntegratedTimerHost
 } from "./runtime/integrated-player.js";
 export {
+  AvcCandidateFactory,
   OpaqueCandidateFactory,
+  createAvcCandidateWorkerSetup,
   createOpaqueCandidateWorkerSetup,
+  type AvcCandidateActivationInput,
+  type AvcCandidateCachePreparer,
+  type AvcCandidateFactoryOptions,
+  type AvcCandidatePreparedMedia,
+  type AvcCandidateReadinessFactory,
+  type AvcCandidateReadinessSession,
+  type AvcCandidateReadinessSessionInput,
+  type AvcCandidateRendererFactory,
+  type AvcCandidateRendererReservation,
+  type AvcCandidateTimerHost,
+  type AvcCandidateWorker,
+  type AvcCandidateWorkerFactory,
+  type AvcCandidateWorkerSetup,
   type OpaqueCandidateActivationInput,
   type OpaqueCandidateCachePreparer,
   type OpaqueCandidateFactoryOptions,
@@ -559,7 +655,7 @@ export {
   type OpaqueCandidateWorker,
   type OpaqueCandidateWorkerFactory,
   type OpaqueCandidateWorkerSetup
-} from "./runtime/opaque-candidate-factory.js";
+} from "./runtime/avc-candidate-factory.js";
 export {
   CutPresentationCoordinator,
   CutPresentationInvariantError,
