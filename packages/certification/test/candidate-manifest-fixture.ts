@@ -1,11 +1,11 @@
 import type { CandidateArtifact } from "../src/model.js";
 
 const REQUIRED: readonly [role: string, path: string, mediaType: string][] = [
-  ["package", "packages/rendered-motion-graph-1.0.0.tgz", "application/gzip"],
-  ["package", "packages/rendered-motion-format-1.0.0.tgz", "application/gzip"],
-  ["package", "packages/rendered-motion-player-web-1.0.0.tgz", "application/gzip"],
-  ["package", "packages/rendered-motion-element-1.0.0.tgz", "application/gzip"],
-  ["package", "packages/rendered-motion-compiler-1.0.0.tgz", "application/gzip"],
+  ["package", "packages/aval-graph-1.0.0.tgz", "application/gzip"],
+  ["package", "packages/aval-format-1.0.0.tgz", "application/gzip"],
+  ["package", "packages/aval-player-web-1.0.0.tgz", "application/gzip"],
+  ["package", "packages/aval-element-1.0.0.tgz", "application/gzip"],
+  ["package", "packages/aval-compiler-1.0.0.tgz", "application/gzip"],
   ["package-index", "package-index.json", "application/json"],
   ["package-inspection", "package-inspection.json", "application/json"],
   ["sbom", "sbom/workspace.spdx.json", "application/json"],
@@ -20,7 +20,7 @@ const REQUIRED: readonly [role: string, path: string, mediaType: string][] = [
   ["api-report", "etc/api/element.api.md", "text/markdown"],
   ["api-report", "etc/api/compiler.api.md", "text/markdown"],
   ["schema", "schemas/candidate-manifest.schema.json", "application/json"],
-  ["fixture", "fixtures/conformance/example.rma", "application/octet-stream"],
+  ["fixture", "fixtures/conformance/example.avl", "application/octet-stream"],
   ["documentation", "docs/quick-start.md", "text/markdown"],
   ["example", "examples/plain-html/package.json", "application/json"],
   ["browser-harness", "certification.html", "text/html"],

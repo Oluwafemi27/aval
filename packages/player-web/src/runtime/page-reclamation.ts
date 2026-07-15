@@ -52,10 +52,7 @@ const OPTIONAL_CATEGORIES: ReadonlySet<RuntimeByteCategory> = new Set([
   "decoder-output",
   "persistent-animation",
   "streaming-texture",
-  "frame-staging",
-  "png-copy",
-  "png-zlib",
-  "png-scratch"
+  "frame-staging"
 ]);
 
 export interface RuntimeReclamationParticipant {
@@ -478,9 +475,6 @@ function classifyCandidate(
   requesterId: RuntimeParticipantId | null,
   policyReduction: boolean
 ): { readonly rank: number; readonly reason: Candidate["reason"] } | null {
-  if (category === "decoded-static-cache") {
-    return { rank: 1, reason: "decoded-static" };
-  }
   if (ABANDONED_CATEGORIES.has(category) && state.phase !== "animated") {
     return { rank: 2, reason: "abandoned-animation" };
   }

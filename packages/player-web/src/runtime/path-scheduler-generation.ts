@@ -64,18 +64,6 @@ export class PathSchedulerGeneration {
     return generation;
   }
 
-  public async replace(
-    path: string
-  ): Promise<Readonly<PathSchedulerGenerationReplacement>> {
-    const committed = this.commitReplacement(this.planReplacement(path));
-    await committed.activateWorker();
-    return Object.freeze({
-      retiredGeneration: committed.retiredGeneration,
-      generation: committed.generation,
-      path: committed.path
-    });
-  }
-
   /** Reserves identity only; the active generation remains unchanged. */
   public planReplacement(
     path: string

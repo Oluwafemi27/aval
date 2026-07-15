@@ -3,7 +3,7 @@ import type {
   MotionGraphEffect,
   MotionGraphResult,
   MotionGraphSnapshot
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import {
   RUNTIME_TRACE_CAPACITY,
@@ -327,7 +327,7 @@ export class EffectHost {
     }
   }
 
-  /** Terminalize a draw transaction whose replacement static surface failed. */
+  /** Terminalize a draw transaction whose replacement fallback failed. */
   public applyFailure(
     result: Readonly<MotionGraphResult>
   ): Readonly<MotionGraphResult> {

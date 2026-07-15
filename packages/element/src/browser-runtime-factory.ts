@@ -1,10 +1,8 @@
 import {
   BrowserPresentationPlanes,
-  BrowserStaticSurfaceDecoder,
   IntegratedPlayer,
   PlayerWebPageRuntime,
-  StaticSurfaceStore,
-  asStaticSurfaceCatalog,
+  StateFallbackStore,
   createBrowserAvcCandidateComposition,
   type BindingV01,
   type BrowserAvcCandidateComposition,
@@ -15,7 +13,7 @@ import {
   type RuntimeFailure,
   type RuntimeVisibilityState,
   type StaticReason
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import { ShadowLayerOwner } from "./shadow-layers.js";
 import type {
@@ -27,7 +25,7 @@ import {
   captureCleanupReceipt,
   settleCleanupOperation
 } from "./cleanup-receipt.js";
-import type { RenderedMotionCleanupReceipt } from "./public-types.js";
+import type { AvalCleanupReceipt } from "./public-types.js";
 import { RuntimeAcquisitionCleanupError } from "./runtime-acquisition-error.js";
 
 export type {
@@ -48,10 +46,16 @@ export interface BrowserRuntimeFactoryInput {
   readonly motionPolicy: MotionPolicy;
   readonly hostReducedMotion: boolean;
   readonly initialVisibility: RuntimeVisibilityState;
+  readonly initialPresentation?: Readonly<{
+    cssWidth: number;
+    cssHeight: number;
+    devicePixelRatio: number;
+    fit?: PresentationFit;
+  }>;
   readonly signal: AbortSignal;
   readonly eventSink: (event: Readonly<EffectHostEvent>) => void;
   readonly diagnosticsSink: (failure: Readonly<RuntimeFailure>) => void;
-  readonly cleanupSink: (receipt: Readonly<RenderedMotionCleanupReceipt>) => void;
+  readonly cleanupSink: (receipt: Readonly<AvalCleanupReceipt>) => void;
   readonly underflowSink: (ordinal: bigint) => void;
   readonly onMetadata: (metadata: Readonly<BrowserRuntimeMetadata>) => void;
 }
@@ -72,10 +76,7 @@ export async function createBrowserRuntimePlayer(
   let composition: Readonly<BrowserAvcCandidateComposition> | null = null;
   let player: IntegratedPlayer | null = null;
   let releaseOwnedPlayer: (() => void) | null = null;
-  const staticOwner: {
-    store: StaticSurfaceStore | null;
-    release: (() => void) | null;
-  } = { store: null, release: null };
+  let fallbackStore: StateFallbackStore | null = null;
   const disposeConstruction = async (): Promise<void> => {
     const failures: unknown[] = [];
     const participantDisposal = settleCleanupOperation(
@@ -89,9 +90,8 @@ export async function createBrowserRuntimePlayer(
     ]);
     await settleCleanupOperation(() => session?.dispose(), failures);
     await Promise.all([
-      settleCleanupOperation(() => staticOwner.release?.(), failures),
       settleCleanupOperation(() => releaseOwnedPlayer?.(), failures),
-      settleCleanupOperation(() => staticOwner.store?.dispose(), failures),
+      settleCleanupOperation(() => fallbackStore?.dispose(), failures),
       settleCleanupOperation(() => planes?.dispose(), failures)
     ]);
     const receipt = captureCleanupReceipt({
@@ -125,28 +125,20 @@ export async function createBrowserRuntimePlayer(
     const generation = input.generation;
     planes = await BrowserPresentationPlanes.create({
       animatedCanvas: input.layers.animatedCanvas,
-      staticCanvas: input.layers.staticCanvas,
       canvas: manifest.canvas,
       maxBackingBytes: manifest.limits.maxRuntimeBytes,
-      backingResources: participant.resources.canvasBacking,
-      setStaticVisible: (visible) => {
-        if (visible) {
-          input.layers.markStaticDrawn(generation);
-          input.layers.revealStatic(generation);
-        } else {
-          input.layers.markAnimatedDrawn(generation);
-          input.layers.revealAnimated(generation);
-        }
-      }
+      initialPresentation: input.initialPresentation ?? Object.freeze({
+        cssWidth: 1,
+        cssHeight: 1,
+        devicePixelRatio: 1
+      }),
+      backingResources: participant.resources.canvasBacking
     });
     composition = createBrowserAvcCandidateComposition({
       canvas: input.layers.animatedCanvas,
       presentationPlanes: planes,
       resourceAuthority: participant.resources.candidate,
       diagnosticsSink: input.diagnosticsSink
-    });
-    const decoder = new BrowserStaticSurfaceDecoder({
-      resourceHost: participant.resources.staticDecoder
     });
     const bufferedEvents: Readonly<EffectHostEvent>[] = [];
     let publishEvents = false;
@@ -155,17 +147,15 @@ export async function createBrowserRuntimePlayer(
       assetSessionOwnership: "external",
       candidateFactory: composition.factory,
       participantBinding: participant.resources.participant,
-      createStaticStore(runtimeCatalog) {
-        const created = new StaticSurfaceStore(
-          asStaticSurfaceCatalog(runtimeCatalog),
-          decoder,
-          planes!.staticPlane,
-          {
-            resourceHost: participant.resources.staticSurfaces,
-            retainOptionalSurfaces: true
+      createFallbackStore(runtimeCatalog) {
+        const created = new StateFallbackStore(runtimeCatalog, {
+          coverFallback: () => input.layers.coverFallback(generation),
+          revealAnimated: () => {
+            input.layers.markAnimatedDrawn(generation);
+            input.layers.revealAnimated(generation);
           }
-        );
-        staticOwner.store = created;
+        });
+        fallbackStore = created;
         return created;
       },
       motionPolicy: input.motionPolicy,
@@ -183,12 +173,9 @@ export async function createBrowserRuntimePlayer(
       },
       diagnosticsSink: input.diagnosticsSink
     });
-    if (staticOwner.store === null) {
-      throw new Error("integrated player did not create its strict static store");
+    if (fallbackStore === null) {
+      throw new Error("integrated player did not create its fallback store");
     }
-    staticOwner.release = participant.registerStaticSurfaceReclaimer(
-      staticOwner.store
-    );
     releaseOwnedPlayer = participant.ownPlayer(player);
     return new BrowserRuntimePlayerOwner({
       pageRuntime,
@@ -199,8 +186,7 @@ export async function createBrowserRuntimePlayer(
       player,
       metadata,
       releaseOwnedPlayer,
-      releaseStaticReclaimer: staticOwner.release,
-      staticStore: staticOwner.store,
+      fallbackStore,
       elementGeneration: input.elementGeneration,
       sourceGeneration: input.generation,
       cleanupSink: input.cleanupSink,

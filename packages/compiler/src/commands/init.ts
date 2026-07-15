@@ -7,7 +7,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { serializeCanonicalJson } from "@rendered-motion/format";
+import { serializeCanonicalJson } from "@aval/format";
 import type { InitCliArguments } from "../cli-args.js";
 import { sha256Hex } from "../compile/hash.js";
 import { encodeCanonicalRgbaPng } from "../compile/png.js";
@@ -47,7 +47,7 @@ export async function runInitCommand(
   await mkdir(parent, { recursive: true, mode: 0o755 });
   let temporary = "";
   try {
-    temporary = await mkdtemp(join(parent, `.${basename(directory)}.rma-init-`));
+    temporary = await mkdtemp(join(parent, `.${basename(directory)}.avl-init-`));
     const project = starterProject();
     validateSourceProject(project);
     const projectBytes = serializeCanonicalJson(project);
@@ -69,7 +69,7 @@ export async function runInitCommand(
     ]);
     const provenance = Object.freeze({
       provenanceVersion: "0.1",
-      generator: "@rendered-motion/compiler init idle-hover-v2",
+      generator: "@aval/compiler init idle-hover-v2",
       license: "CC0-1.0",
       project: Object.freeze({
         path: PROJECT_FILE,
@@ -143,8 +143,8 @@ async function writeSyncedFile(path: string, bytes: Uint8Array): Promise<void> {
 
 function starterProject(): Record<string, unknown> {
   return {
-    projectVersion: "0.2",
-    profile: "avc-annexb-auto-v0",
+    projectVersion: "0.3",
+    profile: "avc-annexb-auto-v1",
     canvas: {
       width: 48,
       height: 48,
@@ -167,7 +167,11 @@ function starterProject(): Record<string, unknown> {
       id: "avc.1x",
       width: 48,
       height: 48,
-      bitrate: { average: 400_000, peak: 800_000 }
+      encoding: {
+        codec: "h264",
+        preset: "slow",
+        rateControl: { mode: "crf", crf: 1, maxBitrate: 800_000 }
+      }
     }],
     units: [
       {
@@ -201,8 +205,8 @@ function starterProject(): Record<string, unknown> {
     ],
     initialState: "idle",
     states: [
-      { id: "idle", bodyUnit: "idle.body", poster: { source: "generated", frame: 0 } },
-      { id: "engaged", bodyUnit: "engaged.body", poster: { source: "generated", frame: 14 } }
+      { id: "idle", bodyUnit: "idle.body" },
+      { id: "engaged", bodyUnit: "engaged.body" }
     ],
     edges: [
       {
@@ -301,21 +305,21 @@ function text(value: string): Uint8Array {
 }
 
 const STARTER_PACKAGE = Object.freeze({
-  name: "rendered-motion-idle-hover-starter",
+  name: "aval-idle-hover-starter",
   private: true,
   type: "module",
   scripts: {
-    build: "rma compile motion.json --out starter.rma",
-    validate: "rma validate starter.rma",
-    dev: "rma dev motion.json --out starter.rma --force"
+    build: "avl compile motion.json --out starter.avl",
+    validate: "avl validate starter.avl",
+    dev: "avl dev motion.json --out starter.avl --force"
   },
   dependencies: {
-    "@rendered-motion/compiler": "1.0.0",
-    "@rendered-motion/element": "1.0.0"
+    "@aval/compiler": "1.0.0",
+    "@aval/element": "1.0.0"
   }
 });
 
-const README = `# Rendered Motion idle/hover starter
+const README = `# AVAL idle/hover starter
 
 The state names (\`idle\` and \`engaged\`) and event names
 (\`control.engage\` and \`control.release\`) are ordinary author data. The
@@ -342,12 +346,12 @@ required.
 
 const HTML_EXAMPLE = `<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Idle/hover rendered motion</title></head>
+<head><meta charset="UTF-8"><title>Idle/hover AVAL</title></head>
 <body>
   <button id="favorite" type="button">
-    <rendered-motion src="./starter.rma" interaction-for="favorite" aria-hidden="true">
+    <aval-player src="./starter.avl" interaction-for="favorite" aria-hidden="true">
       <img slot="fallback" src="./frames/frame-0000.png" alt="" width="48" height="48">
-    </rendered-motion>
+    </aval-player>
     <span>Favorite</span>
   </button>
   <script type="module" src="./main.js"></script>
@@ -355,13 +359,13 @@ const HTML_EXAMPLE = `<!doctype html>
 </html>
 `;
 
-const STARTER_SCRIPT = `import "@rendered-motion/element/auto";
+const STARTER_SCRIPT = `import "@aval/element/auto";
 `;
 
 const ASSET_LICENSE = `# Generated starter asset license
 
 The RGBA PNG frames in this directory are generated procedurally by the
-Rendered Motion compiler and contain no third-party artwork. To the extent
+AVAL compiler and contain no third-party artwork. To the extent
 possible under law, the generator's authors waive copyright and related rights
 in those generated example frames under CC0 1.0 Universal.
 

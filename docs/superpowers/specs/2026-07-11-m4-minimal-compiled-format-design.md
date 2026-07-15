@@ -2,13 +2,13 @@
 
 **Date:** 2026-07-11
 
-**Status:** Approved implementation slice derived from the committed web
-rendered-motion format design
+**Status:** Approved implementation slice derived from the committed AVAL
+format design
 
 ## 1. Objective
 
-M4 freezes the first byte-level container contract for a rendered-motion
-asset. It adds a browser-independent `@rendered-motion/format` package that can
+M4 freezes the first byte-level container contract for an AVAL
+asset. It adds a browser-independent `@aval/format` package that can
 write one canonical version-0.1 file, parse its bounded front index without
 copying media payloads, validate the layout of a complete file, and convert the
 compiled manifest into M3's validated motion graph.
@@ -20,8 +20,8 @@ remain in M5, M6, and M7.
 
 ## 2. Package Boundary
 
-Create `@rendered-motion/format` with exactly one production dependency:
-`@rendered-motion/graph`. Its production TypeScript project uses
+Create `@aval/format` with exactly one production dependency:
+`@aval/graph`. Its production TypeScript project uses
 `lib: ["ES2023"]` and no ambient types. Importing DOM, WebCodecs, Node,
 filesystem, network, timer, or platform cryptography APIs is a compile-time
 error.
@@ -69,7 +69,7 @@ zero padding before each PNG as needed
 end of file
 ```
 
-The private prototype extension remains `.rma`. It is not a product name or a
+The private prototype extension remains `.avl`. It is not a product name or a
 permanent public extension.
 
 ### 3.1 Header
@@ -78,7 +78,7 @@ The header is exactly 64 bytes:
 
 | Offset | Field | Type | Canonical 0.1 value |
 |---:|---|---|---|
-| 0 | magic | 8 bytes | `RMAF\r\n\x1a\n` |
+| 0 | magic | 8 bytes | `AVLF\r\n\x1a\n` |
 | 8 | major | `uint16` | `0` |
 | 10 | minor | `uint16` | `1` |
 | 12 | header length | `uint32` | `64` |
@@ -106,7 +106,7 @@ The index begins with this exact 16-byte header:
 
 | Offset | Field | Type | Canonical 0.1 value |
 |---:|---|---|---|
-| 0 | magic | 4 bytes | `RMAI` |
+| 0 | magic | 4 bytes | `AVLI` |
 | 4 | record size | `uint16` | `32` |
 | 6 | reserved | `uint16` | `0` |
 | 8 | sample count | `uint32` | number of following records |
@@ -255,7 +255,7 @@ type RenditionV01 =
   | {
       readonly id: Id;
       readonly profile: "reference-rgba-v0";
-      readonly codec: "rma.reference-rgba";
+      readonly codec: "aval.reference-rgba";
       readonly codedWidth: number;
       readonly codedHeight: number;
       readonly alphaLayout: { readonly type: "straight-rgba-v0" };
@@ -547,7 +547,7 @@ Each access unit is independently decodable and has this exact 24-byte header:
 
 | Offset | Field | Type | Value/rule |
 |---:|---|---|---|
-| 0 | magic | 4 bytes | `RMRF` |
+| 0 | magic | 4 bytes | `AVRF` |
 | 4 | major | `uint8` | `0` |
 | 5 | minor | `uint8` | `1` |
 | 6 | header length | `uint16` | `24` |

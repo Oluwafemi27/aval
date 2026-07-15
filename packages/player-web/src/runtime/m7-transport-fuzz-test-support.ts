@@ -171,7 +171,6 @@ export async function runM7IntegrityPromotionFuzz(
       maximumPlayerLogicalBytes: 4 * 1024 * 1024
     }));
     const account = new PlayerResourceAccount(manager);
-    let pngEntries = 0;
     const session = await openRuntimeAssetBytes(fixture, {
       resources: createPlayerRuntimeAssetSessionResources(account),
       generation: index + 1,
@@ -180,46 +179,25 @@ export async function runM7IntegrityPromotionFuzz(
           expect(bytes.byteLength).toBeGreaterThan(0);
           return new Uint8Array(32).fill(0xa5);
         }
-      },
-      validateStaticPng() {
-        pngEntries += 1;
-        throw new Error("corrupt bytes reached the browser PNG seam");
       }
     });
 
-    if (m7FuzzInteger(random, 2) === 0) {
-      const staticFrame = session.catalog.staticFrames.keys()[m7FuzzInteger(
-        random,
-        session.catalog.staticFrames.size
-      )]!;
-      await expect(session.ensureStatic(staticFrame)).rejects.toMatchObject({
-        code: "integrity-mismatch"
-      });
-      expect(() => session.catalog.copyStaticPng(staticFrame)).toThrow();
-      expect(pngEntries).toBe(0);
-      expect(session.snapshot().staticBlobs).toMatchObject({
-        loading: 0,
-        verified: 0,
-        verifiedBytes: 0
-      });
-    } else {
-      const record = session.catalog.records.values()[m7FuzzInteger(
-        random,
-        session.catalog.records.size
-      )]!;
-      await expect(session.ensureUnit(record.rendition, record.unit))
-        .rejects.toMatchObject({ code: "integrity-mismatch" });
-      expect(() => session.catalog.copySample(
-        record.rendition,
-        record.unit,
-        record.localFrame
-      )).toThrow();
-      expect(session.snapshot().unitBlobs).toMatchObject({
-        loading: 0,
-        verified: 0,
-        verifiedBytes: 0
-      });
-    }
+    const record = session.catalog.records.values()[m7FuzzInteger(
+      random,
+      session.catalog.records.size
+    )]!;
+    await expect(session.ensureUnit(record.rendition, record.unit))
+      .rejects.toMatchObject({ code: "integrity-mismatch" });
+    expect(() => session.catalog.copySample(
+      record.rendition,
+      record.unit,
+      record.localFrame
+    )).toThrow();
+    expect(session.snapshot().unitBlobs).toMatchObject({
+      loading: 0,
+      verified: 0,
+      verifiedBytes: 0
+    });
 
     expect(session.snapshot()).toMatchObject({
       activeTransportBodies: 0,

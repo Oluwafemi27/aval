@@ -7,9 +7,9 @@ import type {
   RuntimeReadinessResult,
   RuntimeVisibilitySnapshot,
   RuntimeVisibilityState
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
-import type { RenderedMotionRuntimeTraceRecord } from "./public-types.js";
+import type { AvalRuntimeTraceRecord } from "./public-types.js";
 
 export interface BrowserRuntimeMetadata {
   readonly initialState: string;
@@ -48,7 +48,7 @@ export interface BrowserRuntimePlayerSnapshot {
   readonly actualMotion: string;
   readonly contextLossCount: number;
   readonly contextRecoveryCount: number;
-  readonly runtimeTrace: readonly Readonly<RenderedMotionRuntimeTraceRecord>[];
+  readonly runtimeTrace: readonly Readonly<AvalRuntimeTraceRecord>[];
 }
 
 export interface BrowserRuntimePlayer {

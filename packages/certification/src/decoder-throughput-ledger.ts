@@ -1,3 +1,8 @@
+import {
+  isAvcCodec,
+  type AvcCodecV01
+} from "@aval/format";
+
 import { SHA256_PATTERN } from "./model.js";
 
 export interface DecoderThroughputOutput {
@@ -26,8 +31,12 @@ export interface DecoderThroughputLedger {
   readonly fixtureDigest: string;
   readonly selectedRendition: Readonly<{
     readonly id: string;
-    readonly profile: "avc-annexb-packed-alpha-v0" | "avc-annexb-opaque-v0";
-    readonly codec: "avc1.42E020";
+    readonly profile:
+      | "avc-annexb-packed-alpha-v0"
+      | "avc-annexb-opaque-v0"
+      | "avc-annexb-packed-alpha-v1"
+      | "avc-annexb-opaque-v1";
+    readonly codec: AvcCodecV01;
     readonly codedWidth: number;
     readonly codedHeight: number;
     readonly frameRateNumerator: number;
@@ -99,12 +108,19 @@ export function evaluateDecoderThroughputLedger(input: unknown, expected?: Reado
   const candidateManifestDigest = digest(root.candidateManifestDigest, "$throughput.candidateManifestDigest");
   const fixtureDigest = digest(root.fixtureDigest, "$throughput.fixtureDigest");
   const renditionInput = exactRecord(root.selectedRendition, EXACT_KEYS.rendition, "$throughput.selectedRendition");
-  const profile = enumeration(renditionInput.profile, ["avc-annexb-packed-alpha-v0", "avc-annexb-opaque-v0"] as const, "$throughput.selectedRendition.profile");
-  literal(renditionInput.codec, "avc1.42E020", "$throughput.selectedRendition.codec");
+  const profile = enumeration(renditionInput.profile, [
+    "avc-annexb-packed-alpha-v0",
+    "avc-annexb-opaque-v0",
+    "avc-annexb-packed-alpha-v1",
+    "avc-annexb-opaque-v1"
+  ] as const, "$throughput.selectedRendition.profile");
   const selectedRendition = Object.freeze({
     id: identifier(renditionInput.id, "$throughput.selectedRendition.id"),
     profile,
-    codec: "avc1.42E020" as const,
+    codec: supportedAvcCodec(
+      renditionInput.codec,
+      "$throughput.selectedRendition.codec"
+    ),
     codedWidth: positiveInteger(renditionInput.codedWidth, "$throughput.selectedRendition.codedWidth"),
     codedHeight: positiveInteger(renditionInput.codedHeight, "$throughput.selectedRendition.codedHeight"),
     frameRateNumerator: positiveInteger(renditionInput.frameRateNumerator, "$throughput.selectedRendition.frameRateNumerator"),
@@ -306,6 +322,15 @@ function literal<const T extends string | number | boolean>(value: unknown, expe
 function enumeration<const T extends readonly string[]>(value: unknown, values: T, path: string): T[number] {
   if (typeof value !== "string" || !values.includes(value)) throw new TypeError(`${path} is invalid`);
   return value as T[number];
+}
+
+function supportedAvcCodec(value: unknown, path: string): AvcCodecV01 {
+  if (!isAvcCodec(value)) {
+    throw new TypeError(
+      `${path} must be a supported Constrained Baseline codec`
+    );
+  }
+  return value;
 }
 
 function identifier(value: unknown, path: string): string {

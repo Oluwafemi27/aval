@@ -3,26 +3,26 @@
 ## Goal
 
 Add a permanent, immediately runnable example that lets a developer verify the
-Rendered Motion consumer experience locally. The example must use a real
-checked-in `.rma` asset, the public custom-element API, and an obvious
+AVAL consumer experience locally. The example must use a real
+checked-in `.avl` asset, the public custom-element API, and an obvious
 interaction without requiring published npm packages or an authoring toolchain.
 
 ## Approach
 
 Create `examples/end-user-playground` as a small Vite application inside the
 existing npm workspace. Add a root `playground` script that starts this example
-on a loopback address. The example will resolve Rendered Motion packages through
+on a loopback address. The example will resolve AVAL packages through
 workspace dependencies, so it exercises the same public exports a consumer uses
 while remaining runnable before the packages are published.
 
 The example will not compile assets during startup. A known-good, checked-in
-multi-state `.rma` fixture and its poster frame will make startup fast and avoid
+multi-state `.avl` fixture and its poster frame will make startup fast and avoid
 requiring FFmpeg for a runtime smoke test.
 
 ## User experience
 
 The page presents one compact favorite control containing a
-`<rendered-motion>` element. Its animation begins in `idle` and transitions to
+`<aval-player>` element. Its animation begins in `idle` and transitions to
 `engaged` on hover or keyboard focus, then reverses on release. A separate
 toggle button makes the same state change available on touch devices and makes
 the behavior easy to inspect deliberately.
@@ -34,7 +34,7 @@ controls found in `apps/playground`.
 
 ## Components and data flow
 
-- `package.json` declares Vite and `@rendered-motion/element`, plus `dev` and
+- `package.json` declares Vite and `@aval/element`, plus `dev` and
   `build` scripts.
 - `index.html` provides semantic controls, the custom element, and its slotted
   static fallback image.
@@ -42,7 +42,7 @@ controls found in `apps/playground`.
   readiness/state/error events, and connects the explicit toggle control.
 - `style.css` supplies a focused responsive presentation and clear focus,
   loading, ready, fallback, and error states.
-- `public/favorite.rma` is the real two-state asset fetched by the element.
+- `public/favorite.avl` is the real two-state asset fetched by the element.
 - `public/favorite.png` is the author-owned fallback shown before readiness or
   when runtime capability checks fail.
 

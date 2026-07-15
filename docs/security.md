@@ -10,4 +10,10 @@ events are bounded and secret-free. Release reports forbid personal paths,
 query-bearing URLs, serial-number fields, unsafe integers, non-finite values,
 unbounded attachments, and digest mismatches.
 
+Removing product-policy media ceilings does not remove structural defenses.
+Parsers still check integer representation, every byte range and product,
+canonical JSON, AVC profile consistency, and digests before
+use. Publishers are responsible for the resource cost of large trusted assets;
+hosts may configure an explicit lower policy for their deployment.
+
 See the repository [security policy](../SECURITY.md) and [threat model](../THREAT-MODEL.md).

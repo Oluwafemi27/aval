@@ -27,7 +27,7 @@ Move source controller/generation creation, configuration application,
 visibility/motion/resize effects, state intent, play intent, realm/input
 signals, diagnostics, and cleanup coordination behind the authority. Delete
 `ElementSourceOwner`, `ConfigurationQueue`, and the independent visibility and
-motion lanes. Reduce `RenderedMotionElementImpl` to reflection, lifecycle, and
+motion lanes. Reduce `AvalElementImpl` to reflection, lifecycle, and
 public delegation.
 
 ## 4. Make element ownership retryable and observable

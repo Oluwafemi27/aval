@@ -1,13 +1,15 @@
-import type { CanvasV01 } from "@rendered-motion/format";
+import type { CanvasV01 } from "@aval/format";
 
-import type { BrowserPresentationPlanesOptions } from "./browser-presentation-planes.js";
+import type {
+  BrowserPresentationPlanesOptions,
+  BrowserPresentationResizeInput
+} from "./browser-presentation-planes.js";
 import type {
   BrowserCanvasBackingResourceHost,
   BrowserCanvasBackingResourceInput,
   BrowserCanvasBackingResourceTransition
 } from "./browser-presentation-planes.js";
 import {
-  MAX_LOGICAL_CANVAS_DIMENSION,
   MAX_PRESENTATION_BACKING_DIMENSION,
   PRESENTATION_FIT_MODES,
   type PresentationFit
@@ -15,12 +17,11 @@ import {
 
 export interface CapturedBrowserPresentationPlanesOptions {
   readonly animatedCanvas: HTMLCanvasElement;
-  readonly staticCanvas: HTMLCanvasElement;
   readonly canvas: Readonly<CanvasV01>;
   readonly maxBackingWidth: number;
   readonly maxBackingHeight: number;
   readonly maxBackingBytes: number;
-  readonly setStaticVisible: (visible: boolean) => void;
+  readonly initialPresentation: Readonly<BrowserPresentationResizeInput> | null;
   readonly onClamp: BrowserPresentationPlanesOptions["onClamp"];
   readonly createBackend: BrowserPresentationPlanesOptions["createBackend"];
   readonly backingResources: Readonly<BrowserCanvasBackingResourceHost> | null;
@@ -34,7 +35,6 @@ export function capturePresentationPlaneOptions(
     throw new TypeError("browser presentation plane options are invalid");
   }
   let animatedCanvas: unknown;
-  let staticCanvas: unknown;
   let canvasValue: unknown;
   let width: unknown;
   let height: unknown;
@@ -46,13 +46,12 @@ export function capturePresentationPlaneOptions(
   let maximumWidthValue: unknown;
   let maximumHeightValue: unknown;
   let maximumBytes: unknown;
-  let setStaticVisible: unknown;
+  let initialPresentationValue: unknown;
   let onClamp: unknown;
   let createBackend: unknown;
   let backingResourcesValue: unknown;
   try {
     animatedCanvas = Reflect.get(options, "animatedCanvas");
-    staticCanvas = Reflect.get(options, "staticCanvas");
     canvasValue = Reflect.get(options, "canvas");
     if (canvasValue === null || typeof canvasValue !== "object") {
       throw new TypeError("canvas descriptor is invalid");
@@ -70,7 +69,7 @@ export function capturePresentationPlaneOptions(
     maximumWidthValue = Reflect.get(options, "maxBackingWidth");
     maximumHeightValue = Reflect.get(options, "maxBackingHeight");
     maximumBytes = Reflect.get(options, "maxBackingBytes");
-    setStaticVisible = Reflect.get(options, "setStaticVisible");
+    initialPresentationValue = Reflect.get(options, "initialPresentation");
     onClamp = Reflect.get(options, "onClamp");
     createBackend = Reflect.get(options, "createBackend");
     backingResourcesValue = Reflect.get(options, "backingResources");
@@ -80,10 +79,6 @@ export function capturePresentationPlaneOptions(
   if (
     animatedCanvas === null ||
     typeof animatedCanvas !== "object" ||
-    staticCanvas === null ||
-    typeof staticCanvas !== "object" ||
-    animatedCanvas === staticCanvas ||
-    typeof setStaticVisible !== "function" ||
     (onClamp !== undefined && typeof onClamp !== "function") ||
     (createBackend !== undefined && typeof createBackend !== "function")
   ) {
@@ -94,8 +89,6 @@ export function capturePresentationPlaneOptions(
     !Number.isSafeInteger(height) ||
     (width as number) < 1 ||
     (height as number) < 1 ||
-    (width as number) > MAX_LOGICAL_CANVAS_DIMENSION ||
-    (height as number) > MAX_LOGICAL_CANVAS_DIMENSION ||
     !PRESENTATION_FIT_MODES.includes(fit as PresentationFit) ||
     colorSpace !== "srgb" ||
     !Number.isSafeInteger(pixelAspectNumerator) ||
@@ -118,9 +111,9 @@ export function capturePresentationPlaneOptions(
       throw new RangeError(`browser presentation ${label} is invalid`);
     }
   }
-  if ((maximumBytes as number) < 8) {
+  if ((maximumBytes as number) < 4) {
     throw new RangeError(
-      "browser presentation maximum backing bytes cannot hold both planes"
+      "browser presentation maximum backing bytes cannot hold one pixel"
     );
   }
   const canvas = Object.freeze({
@@ -138,17 +131,62 @@ export function capturePresentationPlaneOptions(
     : captureBackingResources(
         backingResourcesValue as BrowserCanvasBackingResourceHost
       );
+  const initialPresentation = captureInitialPresentation(
+    initialPresentationValue
+  );
   return Object.freeze({
     animatedCanvas: animatedCanvas as HTMLCanvasElement,
-    staticCanvas: staticCanvas as HTMLCanvasElement,
     canvas,
     maxBackingWidth: maximumWidth as number,
     maxBackingHeight: maximumHeight as number,
     maxBackingBytes: maximumBytes as number,
-    setStaticVisible: setStaticVisible as (visible: boolean) => void,
+    initialPresentation,
     onClamp: onClamp as BrowserPresentationPlanesOptions["onClamp"],
     createBackend: createBackend as BrowserPresentationPlanesOptions["createBackend"],
     backingResources
+  });
+}
+
+function captureInitialPresentation(
+  value: unknown
+): Readonly<BrowserPresentationResizeInput> | null {
+  if (value === undefined) return null;
+  if (value === null || typeof value !== "object") {
+    throw new TypeError("browser initial presentation is invalid");
+  }
+  let cssWidth: unknown;
+  let cssHeight: unknown;
+  let devicePixelRatio: unknown;
+  let fit: unknown;
+  let maxBackingBytes: unknown;
+  try {
+    cssWidth = Reflect.get(value, "cssWidth");
+    cssHeight = Reflect.get(value, "cssHeight");
+    devicePixelRatio = Reflect.get(value, "devicePixelRatio");
+    fit = Reflect.get(value, "fit");
+    maxBackingBytes = Reflect.get(value, "maxBackingBytes");
+  } catch {
+    throw new TypeError("browser initial presentation is inaccessible");
+  }
+  if (
+    typeof cssWidth !== "number" || !Number.isFinite(cssWidth) || cssWidth <= 0 ||
+    typeof cssHeight !== "number" || !Number.isFinite(cssHeight) || cssHeight <= 0 ||
+    typeof devicePixelRatio !== "number" ||
+      !Number.isFinite(devicePixelRatio) || devicePixelRatio <= 0 ||
+    (fit !== undefined && !PRESENTATION_FIT_MODES.includes(fit as PresentationFit)) ||
+    (maxBackingBytes !== undefined &&
+      (!Number.isSafeInteger(maxBackingBytes) || (maxBackingBytes as number) < 1))
+  ) {
+    throw new RangeError("browser initial presentation is invalid");
+  }
+  return Object.freeze({
+    cssWidth,
+    cssHeight,
+    devicePixelRatio,
+    ...(fit === undefined ? {} : { fit: fit as PresentationFit }),
+    ...(maxBackingBytes === undefined
+      ? {}
+      : { maxBackingBytes: maxBackingBytes as number })
   });
 }
 

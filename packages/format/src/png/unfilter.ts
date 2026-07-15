@@ -1,12 +1,65 @@
+import { checkedAdd, checkedMultiply } from "../checked-integer.js";
 import { FormatError, isFormatError } from "../errors.js";
 
 const BYTES_PER_PIXEL = 4;
-const MAX_DIMENSION = 512;
+const UINT32_MAX = 0xffff_ffff;
+const VALID_LAYOUTS = new WeakSet<object>();
+
+export interface PngRgbaLayout {
+  readonly width: number;
+  readonly height: number;
+  readonly rowBytes: number;
+  readonly filteredRowBytes: number;
+  readonly filteredBytes: number;
+  readonly rgbaBytes: number;
+}
 
 export interface PngUnfilterInput {
   readonly filtered: Uint8Array;
-  readonly width: number;
-  readonly height: number;
+  readonly layout: Readonly<PngRgbaLayout>;
+}
+
+/** Derive all noninterlaced 8-bit RGBA storage using checked arithmetic once. */
+export function derivePngRgbaLayout(
+  widthValue: unknown,
+  heightValue: unknown
+): Readonly<PngRgbaLayout> {
+  const width = dimension(widthValue, "PNG width");
+  const height = dimension(heightValue, "PNG height");
+  const rowBytes = checkedMultiply(
+    width,
+    BYTES_PER_PIXEL,
+    Number.MAX_SAFE_INTEGER,
+    "PNG row bytes"
+  );
+  const filteredRowBytes = checkedAdd(
+    rowBytes,
+    1,
+    Number.MAX_SAFE_INTEGER,
+    "PNG filtered row bytes"
+  );
+  const filteredBytes = checkedMultiply(
+    height,
+    filteredRowBytes,
+    Number.MAX_SAFE_INTEGER,
+    "PNG filtered bytes"
+  );
+  const rgbaBytes = checkedMultiply(
+    height,
+    rowBytes,
+    Number.MAX_SAFE_INTEGER,
+    "PNG RGBA bytes"
+  );
+  const layout = Object.freeze({
+    width,
+    height,
+    rowBytes,
+    filteredRowBytes,
+    filteredBytes,
+    rgbaBytes
+  });
+  VALID_LAYOUTS.add(layout);
+  return layout;
 }
 
 /** Reconstruct exact noninterlaced 8-bit RGBA scanlines for filters 0-4. */
@@ -15,32 +68,52 @@ export function unfilterPngRgba(input: PngUnfilterInput): Uint8Array {
     if (typeof input !== "object" || input === null || Array.isArray(input)) {
       fail("PNG unfilter input must be an object");
     }
-    const width = dimension(input.width, "PNG width");
-    const height = dimension(input.height, "PNG height");
+    const { layout } = input;
+    if (
+      typeof layout !== "object" ||
+      layout === null ||
+      !VALID_LAYOUTS.has(layout)
+    ) {
+      fail("PNG RGBA layout must be an object");
+    }
+    const {
+      width,
+      height,
+      rowBytes,
+      filteredRowBytes,
+      filteredBytes,
+      rgbaBytes
+    } = layout;
     if (!(input.filtered instanceof Uint8Array)) {
       fail("filtered PNG bytes must be a Uint8Array");
     }
-    const stride = width * BYTES_PER_PIXEL;
-    const expectedFilteredBytes = height * (stride + 1);
-    if (input.filtered.byteLength !== expectedFilteredBytes) {
+    if (input.filtered.byteLength !== filteredBytes) {
       fail("filtered PNG length does not match its dimensions");
     }
-    const rgba = new Uint8Array(width * height * BYTES_PER_PIXEL);
+    let rgba: Uint8Array;
+    try {
+      rgba = new Uint8Array(rgbaBytes);
+    } catch {
+      throw new FormatError(
+        "PNG_SCANLINE_INVALID",
+        `PNG RGBA allocation failed for ${String(rgbaBytes)} bytes`
+      );
+    }
     for (let row = 0; row < height; row += 1) {
-      const sourceRow = row * (stride + 1);
-      const targetRow = row * stride;
+      const sourceRow = row * filteredRowBytes;
+      const targetRow = row * rowBytes;
       const filter = input.filtered[sourceRow]!;
       if (filter > 4) {
         fail("PNG scanline filter must be from 0 through 4", sourceRow);
       }
-      for (let column = 0; column < stride; column += 1) {
+      for (let column = 0; column < rowBytes; column += 1) {
         const encoded = input.filtered[sourceRow + 1 + column]!;
         const left = column >= BYTES_PER_PIXEL
           ? rgba[targetRow + column - BYTES_PER_PIXEL]!
           : 0;
-        const up = row > 0 ? rgba[targetRow - stride + column]! : 0;
+        const up = row > 0 ? rgba[targetRow - rowBytes + column]! : 0;
         const upperLeft = row > 0 && column >= BYTES_PER_PIXEL
-          ? rgba[targetRow - stride + column - BYTES_PER_PIXEL]!
+          ? rgba[targetRow - rowBytes + column - BYTES_PER_PIXEL]!
           : 0;
         const predictor = filter === 0
           ? 0
@@ -69,9 +142,9 @@ function dimension(value: unknown, label: string): number {
     typeof value !== "number" ||
     !Number.isSafeInteger(value) ||
     value < 1 ||
-    value > MAX_DIMENSION
+    value > UINT32_MAX
   ) {
-    fail(`${label} must be from 1 through ${String(MAX_DIMENSION)}`);
+    fail(`${label} must be from 1 through ${String(UINT32_MAX)}`);
   }
   return value;
 }

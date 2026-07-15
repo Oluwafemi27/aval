@@ -1,14 +1,16 @@
 import {
   FORMAT_DEFAULT_BUDGETS,
+  isAvcCodec,
   maximumAvcDecodedRgbaBytes,
   maximumAvcDecoderSurfaceDimension,
   validateCompleteAsset,
   type AccessUnitRecord,
+  type AvcCodecV01,
   type CompiledManifestV01,
   type ParsedFrontIndex,
   type RenditionV01,
   type UnitV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 import {
   createDecoderWorkerClient,
   durationForFrame,
@@ -18,7 +20,7 @@ import {
   type DecoderWorkerMetrics,
   type DecoderWorkerSample,
   type ManagedDecoderWorkerFrame
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 const GENERATION = 1;
 const IDLE_LOOP_OCCURRENCES = 1_001;
@@ -89,7 +91,7 @@ export type M5WorkerSupport =
   | {
       readonly supported: true;
       readonly formatVersion: "0.1";
-      readonly codec: "avc1.42E020";
+      readonly codec: AvcCodecV01;
       readonly codedWidth: number;
       readonly codedHeight: number;
       readonly assetBytes: number;
@@ -98,7 +100,7 @@ export type M5WorkerSupport =
       readonly supported: false;
       readonly reason: string;
       readonly formatVersion: "0.1";
-      readonly codec: "avc1.42E020";
+      readonly codec: AvcCodecV01;
       readonly codedWidth: number;
       readonly codedHeight: number;
       readonly assetBytes: number;
@@ -109,7 +111,7 @@ export interface M5WorkerProofReport {
     readonly formatVersion: "0.1";
     readonly bytes: number;
     readonly renditionId: string;
-    readonly codec: "avc1.42E020";
+    readonly codec: AvcCodecV01;
     readonly codedWidth: number;
     readonly codedHeight: number;
     readonly frameRate: {
@@ -212,7 +214,7 @@ export async function probeM5OpaqueAvcWorker(
           ? `browser changed the requested AVC configuration: ${JSON.stringify(
               support.config
             ).slice(0, 500)}`
-          : "exact Annex B avc1.42E020 configuration is unsupported",
+          : `exact Annex B ${fixture.rendition.codec} configuration is unsupported`,
         ...common
       };
     }
@@ -249,7 +251,9 @@ export async function runM5OpaqueAvcWorkerProof(
         averageBitrate: fixture.rendition.bitrate.average,
         peakBitrate: fixture.rendition.bitrate.peak,
         cpbBufferBits: fixture.rendition.bitrate.peak,
-        requireBt709LimitedRange: true
+        requireBt709LimitedRange: true,
+        // M5 is a frozen v0 compatibility proof, not a live candidate path.
+        quantizationPolicy: "fixed-qp26-v0"
       },
       expectedOutput: {
         codedWidth: fixture.rendition.codedWidth,
@@ -590,7 +594,9 @@ function avcProfile(
     averageBitrate: rendition.bitrate.average,
     peakBitrate: rendition.bitrate.peak,
     cpbBufferBits: rendition.bitrate.peak,
-    requireBt709LimitedRange: true
+    requireBt709LimitedRange: true,
+    // M5 fixtures intentionally retain the historical v0 quantizer contract.
+    quantizationPolicy: "fixed-qp26-v0"
   } as const;
 }
 
@@ -649,7 +655,7 @@ function readFixture(assetBase64: string): FixtureContract {
   const rendition = manifest.renditions[0];
   requireFixture(
     rendition?.profile === "avc-annexb-opaque-v0" &&
-      rendition.codec === "avc1.42E020",
+      isAvcCodec(rendition.codec),
     "fixture must have one opaque Annex B AVC rendition"
   );
   requireFixture(
@@ -688,7 +694,7 @@ function readReversibleFixture(
   const rendition = manifest.renditions[0];
   requireFixture(
     rendition?.profile === "avc-annexb-opaque-v0" &&
-      rendition.codec === "avc1.42E020",
+      isAvcCodec(rendition.codec),
     "reversible fixture must have one opaque AVC rendition"
   );
   const unitIndex = manifest.units.findIndex((candidate) => candidate.kind === "reversible");
@@ -949,7 +955,7 @@ function assertSettledMetrics(
 
 function decoderConfig(rendition: OpaqueRendition): DecoderWorkerAvcConfig {
   return {
-    codec: "avc1.42E020",
+    codec: rendition.codec,
     codedWidth: rendition.codedWidth,
     codedHeight: rendition.codedHeight,
     hardwareAcceleration: "no-preference",

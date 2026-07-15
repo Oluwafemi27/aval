@@ -1,4 +1,4 @@
-import { deriveAvcRenditionGeometry } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometry } from "@aval/format";
 import { describe, expect, it, vi } from "vitest";
 
 import type { IntegratedCandidateAttemptContext } from "./integrated-player-contracts.js";
@@ -14,10 +14,12 @@ import type {
   AvcCandidateActivationInput,
   AvcCandidateReadinessSessionInput
 } from "./avc-candidate-factory.js";
+import { BrowserProductionReadinessRehearsal } from "./browser-production-readiness-rehearsal.js";
 import type {
   BrowserTrackedRenderer,
   BrowserTrackedWorker
 } from "./browser-avc-candidate-hub.js";
+import { calculateReadinessMetrics } from "./readiness-metrics.js";
 import type {
   FrameRenderer,
   FrameRendererSnapshot,
@@ -137,6 +139,33 @@ describe("browser AVC candidate composition", () => {
     expect(backend.disposals).toBe(1);
   });
 
+  it("allocates the unchanged opaque renderer layout for AVC-v1", () => {
+    const canvas = fakeCanvas();
+    const backend = new FakeBackend();
+    const factory = new BrowserAvcCandidateRendererFactory({
+      canvas,
+      hub: new BrowserAvcCandidateHub(canvas),
+      createFrameBackend: () => backend
+    });
+    const reservation = factory.create(candidateContext());
+    const renderer = reservation.allocate({
+      geometry: deriveAvcRenditionGeometry({
+        profile: "avc-annexb-opaque-v1",
+        canvasWidth: 4,
+        canvasHeight: 2,
+        colorRect: [0, 0, 4, 2],
+        codedWidth: 16,
+        codedHeight: 16
+      }),
+      logicalWidth: 4,
+      logicalHeight: 2,
+      residentLayerCount: 0
+    });
+
+    expect(renderer.snapshot().state).toBe("active");
+    renderer.dispose();
+  });
+
   it("retains an older retired renderer until its native source copy settles", () => {
     const hub = new BrowserAvcCandidateHub(fakeCanvas());
     let oldCopies = 1;
@@ -173,6 +202,161 @@ describe("browser AVC candidate composition", () => {
       pendingOperations: 0,
       complete: true
     });
+  });
+
+  it("primes one cold upload outside the 24-output warm-cache measurement", async () => {
+    const controller = new AbortController();
+    const activations: number[] = [];
+    const submissionSizes: number[] = [];
+    const uploadTimes: number[] = [];
+    const queued: ProbeWorkerFrame[] = [];
+    let activeGeneration = 0;
+    let nextGeneration = 0;
+    let nextOrdinal = 0;
+    let probeNow = 0;
+    const manifest = {
+      frameRate: { numerator: 24, denominator: 1 },
+      units: [{
+        id: "idle-loop",
+        kind: "body",
+        playback: "loop",
+        frameCount: 70
+      }]
+    } as const;
+    const rehearsal = vi.spyOn(
+      BrowserProductionReadinessRehearsal.prototype,
+      "run"
+    ).mockResolvedValue(Object.freeze({}) as never);
+    const input = {
+      context: { catalog: { manifest } },
+      timeline: {
+        activateNextGeneration() {
+          nextGeneration += 1;
+          return nextGeneration;
+        }
+      },
+      worker: {
+        async activateGeneration(generation: number) {
+          activeGeneration = generation;
+          activations.push(generation);
+        },
+        async snapshotMetrics() {
+          return {
+            pendingSamples: 0,
+            submittedFrames: 0,
+            leasedFrames: 0
+          };
+        },
+        async submit(
+          generation: number,
+          samples: readonly Readonly<ProbeWorkerSample>[]
+        ) {
+          expect(generation).toBe(activeGeneration);
+          submissionSizes.push(samples.length);
+          queued.push(...samples.map((sample) => ({
+            generation,
+            ordinal: sample.ordinal,
+            unitId: sample.unitId,
+            unitInstance: sample.unitInstance,
+            unitFrame: sample.unitFrame
+          })));
+        },
+        async waitForFrames(count: number) {
+          expect(queued).toHaveLength(count);
+        },
+        takeFrame() {
+          return queued.shift();
+        }
+      },
+      samples: {
+        createBatch(batch: Readonly<{
+          readonly frames: readonly Readonly<{
+            readonly unitId: string;
+            readonly unitFrame: number;
+          }>[];
+        }>) {
+          const samples = batch.frames.map((frame) => ({
+            ordinal: nextOrdinal++,
+            unitId: frame.unitId,
+            unitInstance: 0,
+            unitFrame: frame.unitFrame,
+            unitFrameCount: 70,
+            type: "key" as const,
+            timestamp: 0,
+            duration: 1,
+            data: new ArrayBuffer(1)
+          }));
+          return {
+            generation: activeGeneration,
+            samples,
+            release() {}
+          };
+        }
+      },
+      renderer: {
+        async uploadStreaming(
+          _slot: number,
+          generation: number,
+          frame: Readonly<ProbeWorkerFrame>
+        ) {
+          expect(generation).toBe(frame.generation);
+          probeNow += uploadTimes.length === 0 ? 62 : 6;
+          uploadTimes.push(probeNow);
+          return Object.freeze({ kind: "stream" });
+        }
+      },
+      limits: {
+        maxPendingSamples: 24,
+        maxOutstandingFrames: 24
+      },
+      clock: { now: () => 0 },
+      signal: controller.signal,
+      deadlineMs: 10_000
+    } as unknown as AvcCandidateReadinessSessionInput;
+    const readiness = new BrowserAvcReadinessSession(
+      input,
+      new BrowserAvcCandidateHub(fakeCanvas()),
+      () => probeNow
+    );
+
+    try {
+      const warmup = await readiness.adapters.measureWarmup({
+        manifest,
+        graph: {}
+      } as never);
+      const metrics = calculateReadinessMetrics({
+        frameRate: manifest.frameRate,
+        measurements: warmup.measurements
+      });
+
+      expect(activations).toEqual([1, 2]);
+      expect(submissionSizes).toEqual([1, 24]);
+      expect(uploadTimes).toHaveLength(25);
+      expect(uploadTimes[0]).toBe(62);
+      expect(uploadTimes[0]).toBeGreaterThan(1_000 / 24);
+      expect(warmup.measurements).toHaveLength(24);
+      expect(warmup.measurements[0]).toMatchObject({
+        outputOrdinal: 1,
+        submitTimeMs: 62,
+        uploadReadyTimeMs: 68,
+        media: { path: "warmup:idle-loop", localFrame: 0 }
+      });
+      expect(warmup.measurements.every(({ media }) =>
+        media.path === "warmup:idle-loop"
+      )).toBe(true);
+      expect(metrics).toMatchObject({
+        passed: true,
+        sampleCount: 24,
+        failureReasons: [],
+        ringPassed: true,
+        ringCapacity: 6
+      });
+      expect(metrics.throughputMultiple).toBeGreaterThan(6);
+      expect(rehearsal).toHaveBeenCalledOnce();
+    } finally {
+      readiness.dispose();
+      rehearsal.mockRestore();
+    }
   });
 
   it("quarantines a playback session that resolves after readiness disposal", async () => {
@@ -283,6 +467,17 @@ function trackedWorker(pending: () => number): BrowserTrackedWorker {
       });
     }
   };
+}
+
+interface ProbeWorkerSample {
+  readonly ordinal: number;
+  readonly unitId: string;
+  readonly unitInstance: number;
+  readonly unitFrame: number;
+}
+
+interface ProbeWorkerFrame extends ProbeWorkerSample {
+  readonly generation: number;
 }
 
 function trackedRenderer(

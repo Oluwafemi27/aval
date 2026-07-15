@@ -1,11 +1,11 @@
-import type { RenderedMotionElement } from "@rendered-motion/element";
+import type { AvalElement } from "@aval/element";
 
 import { createPublicMotionElement, retirePublicMotion } from "./public-element-host.js";
 
 export const LOCAL_NETWORK_FAULTS = Object.freeze([
   "ignored-initial-range", "no-validator", "weak-etag", "changed-etag",
   "wrong-total", "truncated-body", "oversized-body", "compressed-body",
-  "stalled-body", "corrupt-unit", "corrupt-static", "nonzero-padding",
+  "stalled-body", "corrupt-unit", "corrupt-bootstrap-unit", "nonzero-padding",
   "valid-external-integrity", "invalid-external-integrity"
 ] as const);
 
@@ -13,7 +13,7 @@ export interface NetworkFaultResult {
   readonly scenario: typeof LOCAL_NETWORK_FAULTS[number];
   readonly status: "passed" | "failed" | "inconclusive";
   readonly terminalReadiness: string;
-  readonly staticPreserved: boolean;
+  readonly usablePresentationPreserved: boolean;
   readonly outstandingSettled: boolean;
   readonly failureCode: string | null;
 }
@@ -38,13 +38,13 @@ export async function runNetworkFaultStress(options: Readonly<{
     const terminal = await retirePublicMotion(element).catch(() => null);
     const settled = terminal !== null && Object.values(terminal.outstanding).every((value) => value === 0);
     const expectedUsable = scenario === "ignored-initial-range" || scenario === "no-validator" || scenario === "weak-etag" || scenario === "valid-external-integrity";
-    const staticPreserved = before.readiness === "staticReady" || before.readiness === "interactiveReady" || before.readiness === "error";
-    const passed = settled && staticPreserved && (expectedUsable ? outcome === "ready" : outcome !== "ready" || before.mode === "static");
+    const usablePresentationPreserved = before.readiness === "staticReady" || before.readiness === "interactiveReady" || before.readiness === "error";
+    const passed = settled && usablePresentationPreserved && (expectedUsable ? outcome === "ready" : outcome !== "ready" || before.mode === "static");
     results.push(Object.freeze({
       scenario,
       status: outcome === "timeout" ? "inconclusive" : passed ? "passed" : "failed",
       terminalReadiness: before.readiness,
-      staticPreserved,
+      usablePresentationPreserved,
       outstandingSettled: settled,
       failureCode: before.lastFailure?.code ?? null
     }));
@@ -52,7 +52,7 @@ export async function runNetworkFaultStress(options: Readonly<{
   return Object.freeze(results);
 }
 
-async function boundedPrepare(element: RenderedMotionElement, timeoutMs: number): Promise<"ready" | "rejected" | "timeout"> {
+async function boundedPrepare(element: AvalElement, timeoutMs: number): Promise<"ready" | "rejected" | "timeout"> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {

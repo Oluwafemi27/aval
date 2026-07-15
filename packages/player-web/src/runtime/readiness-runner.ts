@@ -1,5 +1,5 @@
-import type { UnitV01 } from "@rendered-motion/format";
-import type { GraphEdgeDefinition } from "@rendered-motion/graph";
+import type { UnitV01 } from "@aval/format";
+import type { GraphEdgeDefinition } from "@aval/graph";
 
 import {
   evaluateAllRoutesReadiness,

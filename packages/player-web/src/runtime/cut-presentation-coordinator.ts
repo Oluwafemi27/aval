@@ -3,7 +3,7 @@ import type {
   GraphEdgeDefinition,
   GraphPresentation,
   MotionGraphResult
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type {
   RenderFrameHandle,

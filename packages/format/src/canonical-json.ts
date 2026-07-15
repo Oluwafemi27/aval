@@ -38,9 +38,9 @@ type CanonicalJsonWriterBudgets = Pick<
 >;
 
 const MAX_CANONICAL_WRITE_LIMITS = Object.freeze({
-  maxBytes: 32 * 1024 * 1024,
+  maxBytes: Number.MAX_SAFE_INTEGER,
   maxDepth: 128,
-  maxNodes: 1_000_000,
+  maxNodes: Number.MAX_SAFE_INTEGER,
   maxStringBytes: 32 * 1024 * 1024
 });
 const WRITER_PAGE_BYTES = 64 * 1024;

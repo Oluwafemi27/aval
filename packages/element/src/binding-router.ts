@@ -1,7 +1,7 @@
 import type {
   BindingSourceV01,
   BindingV01
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 const BINDING_SOURCES: ReadonlySet<BindingSourceV01> = new Set([
   "activate",

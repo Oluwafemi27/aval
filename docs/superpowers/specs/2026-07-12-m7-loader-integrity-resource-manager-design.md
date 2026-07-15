@@ -2,13 +2,13 @@
 
 **Date:** 2026-07-12
 
-**Status:** Approved implementation slice derived from the committed web
-rendered-motion design and the approved M4-M6 contracts
+**Status:** Approved implementation slice derived from the committed AVAL
+design and the approved M4-M6 contracts
 
 **Authority:**
 
-- [Web Rendered Motion Format Design](2026-07-11-web-rendered-motion-format-design.md)
-- [Web Rendered Motion Implementation Plan](../plans/2026-07-11-web-rendered-motion-implementation.md)
+- [AVAL Format Design](2026-07-11-aval-format-design.md)
+- [AVAL Implementation Plan](../plans/2026-07-11-aval-implementation.md)
 - [M4 Minimal Compiled Format Design](2026-07-11-m4-minimal-compiled-format-design.md)
 - [M5.5 Integrated Scheduler and Readiness Design](2026-07-12-m55-integrated-scheduler-readiness-design.md)
 - [M6 Transparency and Static Fallback Design](2026-07-12-m6-transparency-static-fallback-design.md)
@@ -135,15 +135,15 @@ permission to own a decoder, not the decoder object itself.
 Package boundaries remain inward-facing:
 
 ```text
-@rendered-motion/format
+@aval/format
   owns header/front-index parsing, canonical byte geometry, and complete-file
   validation; it has no Fetch, Web Crypto, DOM, or page-manager dependency
 
-@rendered-motion/player-web
+@aval/player-web
   owns HTTP semantics, Web Crypto digest verification, sparse residency,
   resource leases, visibility/context recovery, and integration with M6
 
-@rendered-motion/graph
+@aval/graph
   remains unaware of loading, visibility, and memory
 ```
 
@@ -273,13 +273,13 @@ For a `206`, `Content-Encoding` must be absent or contain exactly one
 case-insensitive `identity` token after outer HTTP whitespace is removed. An
 empty present value, a comma-list, or any other coding is rejected. Range
 offsets describe representation octets, so transformed partial responses cannot
-be combined with authored RMA byte offsets.
+be combined with authored AVAL byte offsets.
 
 For a complete `200`, Fetch exposes the decoded stream while response headers
 still describe the encoded representation and may be hidden by CORS. The
 runtime therefore does not interpret `Content-Encoding` or `Content-Length` as
 decoded-byte facts. It reads the stream in bounded-unknown mode, applies the
-decoded file cap, and validates or hashes the decoded complete RMA bytes.
+decoded file cap, and validates or hashes the decoded complete AVAL bytes.
 
 For a `206`, `Content-Length`, when present, must be one canonical nonnegative
 decimal safe integer with no sign, list, or internal whitespace. It must equal
@@ -602,11 +602,12 @@ requesting a decoder lease.
 On return to visible under full-motion policy, the current static remains
 covered while the player obtains a fresh decoder lease, refetches any required
 evictable unit bytes under the same pinned entity, creates a fresh candidate,
-and reruns complete all-routes readiness. It activates the current semantic
-state at canonical body frame zero, does not replay its initial intro, and does
-not advance through elapsed wall time. Only a successful first animated draw
-reveals the animated plane and restarts logical time. Failure remains usable
-static mode under the M6 sticky-failure rules.
+and reruns complete all-routes readiness. If the initial intro has not yet
+joined its body, re-entry restarts that intro at frame zero. Otherwise it
+activates the current semantic state at canonical body frame zero without
+replaying the intro or advancing through elapsed wall time. Only a successful
+first animated draw reveals the animated plane and restarts logical time.
+Failure remains usable static mode under the M6 sticky-failure rules.
 
 Hide/show, reduced/full, context loss, and disposal races are latest-generation
 wins. At most one rebuild candidate exists.

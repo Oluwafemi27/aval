@@ -19,12 +19,11 @@ import {
   validateCompleteAsset,
   writeCanonicalAsset,
   type CanonicalAssetInputV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { parseCliArguments, type CompileCliArguments } from "../src/cli-args.js";
 import { runCompileCommand } from "../src/commands/compile.js";
-import { sha256Concat, sha256Hex } from "../src/compile/hash.js";
-import { encodeCanonicalRgbaPng } from "../src/compile/png.js";
+import { sha256Concat } from "../src/compile/hash.js";
 import { runInitCommand } from "../src/commands/init.js";
 import { inspectAssetFile, unpackAssetFile, validateAssetReport } from "../src/commands/asset.js";
 import { CompilerError } from "../src/diagnostics.js";
@@ -46,9 +45,11 @@ describe("compiler commands", () => {
       "--loop", "2:8",
       "--fps", "24/1",
       "--bitrate", "100000:200000",
+      "--preset", "slow",
+      "--media-timeout-ms", "900000",
       "--ffmpeg", "/tool/ffmpeg",
       "--ffprobe", "/tool/ffprobe",
-      "--out", "motion.rma"
+      "--out", "motion.avl"
     ]) as CompileCliArguments;
     let captured: unknown;
     const result = await runCompileCommand(arguments_, {
@@ -70,24 +71,76 @@ describe("compiler commands", () => {
       normalizeVfr: true,
       alpha: "auto",
       bitrate: { average: 100_000, peak: 200_000 },
+      preset: "slow",
+      mediaTimeoutMs: 900_000,
       ffmpegPath: "/tool/ffmpeg",
       ffprobePath: "/tool/ffprobe"
     });
-    expect(result.reportPath).toBe(join(root, "motion.rma.build.json"));
+    expect(result.reportPath).toBe(join(root, "motion.avl.build.json"));
     const reportBytes = new Uint8Array(await readFile(result.reportPath));
     expect(parseStrictJson(reportBytes)).toMatchObject({
       reportVersion: "0.1",
-      asset: { bytes: 123, sha256: "a".repeat(64) }
+      asset: { bytes: 123, sha256: "a".repeat(64) },
+      invocation: {
+        options: {
+          bitrate: { average: 100_000, peak: 200_000 },
+          preset: "slow",
+          mediaTimeoutMs: 900_000
+        }
+      }
     });
     expect(new TextDecoder().decode(reportBytes)).not.toContain("\n");
+  });
+
+  it("forwards capped CRF without exposing free-form FFmpeg arguments", async () => {
+    const root = await temporaryRoot();
+    const arguments_ = parseCliArguments([
+      "compile", "input.mov", "--loop", "0:12",
+      "--crf", "20", "--max-bitrate", "10000000",
+      "--preset", "veryslow", "--media-timeout-ms", "900000",
+      "--out", "motion.avl"
+    ]) as CompileCliArguments;
+    let captured: unknown;
+    await runCompileCommand(arguments_, {
+      cwd: root,
+      dependencies: {
+        buildDirectArtifact: async (options) => {
+          captured = options;
+          return compileArtifact();
+        },
+        buildProjectArtifact: async () => {
+          throw new Error("wrong compiler");
+        }
+      }
+    });
+    expect(captured).toMatchObject({
+      crf: 20,
+      maxBitrate: 10_000_000,
+      preset: "veryslow",
+      mediaTimeoutMs: 900_000
+    });
+    expect(captured).not.toHaveProperty("ffmpegArguments");
+    expect(parseStrictJson(new Uint8Array(
+      await readFile(join(root, "motion.avl.build.json"))
+    ))).toMatchObject({
+      invocation: {
+        options: {
+          crf: 20,
+          maxBitrate: 10_000_000,
+          preset: "veryslow",
+          mediaTimeoutMs: 900_000
+        }
+      }
+    });
   });
 
   it("dispatches JSON projects to the project compiler and refuses collisions", async () => {
     const root = await temporaryRoot();
     const arguments_ = parseCliArguments([
-      "compile", "motion.json", "--out", "motion.rma"
+      "compile", "motion.json", "--media-timeout-ms", "900000",
+      "--out", "motion.avl"
     ]) as CompileCliArguments;
-    let projectPath = "";
+    let projectOptions: unknown;
     await runCompileCommand(arguments_, {
       cwd: root,
       dependencies: {
@@ -95,16 +148,24 @@ describe("compiler commands", () => {
           throw new Error("wrong compiler");
         },
         buildProjectArtifact: async (options) => {
-          projectPath = options.projectPath;
+          projectOptions = options;
           return compileArtifact();
         }
       }
     });
-    expect(projectPath).toBe(join(root, "motion.json"));
+    expect(projectOptions).toMatchObject({
+      projectPath: join(root, "motion.json"),
+      mediaTimeoutMs: 900_000
+    });
+    expect(parseStrictJson(new Uint8Array(
+      await readFile(join(root, "motion.avl.build.json"))
+    ))).toMatchObject({
+      invocation: { options: { mediaTimeoutMs: 900_000 } }
+    });
 
-    await writeFile(join(root, "existing.rma"), "owned");
+    await writeFile(join(root, "existing.avl"), "owned");
     const collision = parseCliArguments([
-      "compile", "motion.json", "--out", "existing.rma"
+      "compile", "motion.json", "--out", "existing.avl"
     ]) as CompileCliArguments;
     await expect(runCompileCommand(collision, {
       cwd: root,
@@ -117,13 +178,13 @@ describe("compiler commands", () => {
 
   it("refuses a forced target that races during compilation", async () => {
     const root = await temporaryRoot();
-    const outputPath = join(root, "motion.rma");
+    const outputPath = join(root, "motion.avl");
     const reportPath = join(root, "motion.report.json");
     await writeFile(outputPath, "previous asset");
     await writeFile(reportPath, "previous report");
     const arguments_ = parseCliArguments([
       "compile", "motion.json",
-      "--out", "motion.rma",
+      "--out", "motion.avl",
       "--report", "motion.report.json",
       "--force"
     ]) as CompileCliArguments;
@@ -145,13 +206,13 @@ describe("compiler commands", () => {
 
   it("replaces an identity-scoped forced pair and cleans publication workspaces", async () => {
     const root = await temporaryRoot();
-    const outputPath = join(root, "motion.rma");
+    const outputPath = join(root, "motion.avl");
     const reportPath = join(root, "motion.report.json");
     await writeFile(outputPath, "previous asset");
     await writeFile(reportPath, "previous report");
     const arguments_ = parseCliArguments([
       "compile", "motion.json",
-      "--out", "motion.rma",
+      "--out", "motion.avl",
       "--report", "motion.report.json",
       "--force"
     ]) as CompileCliArguments;
@@ -178,7 +239,7 @@ describe("compiler commands", () => {
           ffprobe: { versionOutputSha256: "3".repeat(64) }
         },
         buildDetails: {
-          detailsVersion: "0.1",
+          detailsVersion: "0.2",
           invocations: [{
             operation: "probe:test",
             tool: "ffprobe",
@@ -193,10 +254,10 @@ describe("compiler commands", () => {
 
   it("never removes files raced into initially absent publication paths", async () => {
     const root = await temporaryRoot();
-    const outputPath = join(root, "motion.rma");
-    const reportPath = join(root, "motion.rma.build.json");
+    const outputPath = join(root, "motion.avl");
+    const reportPath = join(root, "motion.avl.build.json");
     const arguments_ = parseCliArguments([
-      "compile", "motion.json", "--out", "motion.rma"
+      "compile", "motion.json", "--out", "motion.avl"
     ]) as CompileCliArguments;
     await expect(runCompileCommand(arguments_, {
       cwd: root,
@@ -219,7 +280,7 @@ describe("compiler commands", () => {
     const root = await temporaryRoot();
     const controller = new AbortController();
     const arguments_ = parseCliArguments([
-      "compile", "motion.json", "--out", "motion.rma"
+      "compile", "motion.json", "--out", "motion.avl"
     ]) as CompileCliArguments;
     await expect(runCompileCommand(arguments_, {
       cwd: root,
@@ -234,10 +295,10 @@ describe("compiler commands", () => {
         }
       }
     })).rejects.toMatchObject({ code: "CANCELLED" });
-    await expect(readFile(join(root, "motion.rma"))).rejects.toMatchObject({
+    await expect(readFile(join(root, "motion.avl"))).rejects.toMatchObject({
       code: "ENOENT"
     });
-    await expect(readFile(join(root, "motion.rma.build.json")))
+    await expect(readFile(join(root, "motion.avl.build.json")))
       .rejects.toMatchObject({ code: "ENOENT" });
     expect((await readdir(root)).some((name) => name.includes(".publish-")))
       .toBe(false);
@@ -255,7 +316,7 @@ describe("compiler commands", () => {
       }) as unknown as CompileArtifact["buildDetails"]
     });
     const arguments_ = parseCliArguments([
-      "compile", "motion.json", "--out", "motion.rma"
+      "compile", "motion.json", "--out", "motion.avl"
     ]) as CompileCliArguments;
     await runCompileCommand(arguments_, {
       cwd: root,
@@ -267,7 +328,7 @@ describe("compiler commands", () => {
       }
     });
     const report = JSON.parse(
-      await readFile(join(root, "motion.rma.build.json"), "utf8")
+      await readFile(join(root, "motion.avl.build.json"), "utf8")
     ) as { buildDetails: { highCardinalityEvidence: number[] } };
     expect(report.buildDetails.highCardinalityEvidence).toHaveLength(25_000);
   });
@@ -313,13 +374,13 @@ describe("compiler commands", () => {
 
   it("refuses symbolic-link publication and unpack targets", async () => {
     const root = await temporaryRoot();
-    const owned = join(root, "owned.rma");
-    const linked = join(root, "linked.rma");
+    const owned = join(root, "owned.avl");
+    const linked = join(root, "linked.avl");
     await writeFile(owned, "owned");
     await symlink(owned, linked);
     const arguments_ = parseCliArguments([
       "compile", "source.mp4", "--loop", "0:2",
-      "--out", "linked.rma", "--force"
+      "--out", "linked.avl", "--force"
     ]) as CompileCliArguments;
     await expect(runCompileCommand(arguments_, {
       cwd: root,
@@ -356,10 +417,26 @@ describe("compiler commands", () => {
     }
     const projectBytes = new Uint8Array(await readFile(first.project));
     expect(parseSourceProject(projectBytes)).toMatchObject({
-      sourceProjectVersion: "0.2",
+      sourceProjectVersion: "0.3",
       alphaPolicy: "auto",
       initialState: "idle",
       sources: [{ type: "png-sequence", frameCount: 22 }],
+      renditions: [{
+        id: "avc.1x",
+        width: 48,
+        height: 48,
+        avcProfileVersion: "v1",
+        encoding: {
+          codec: "h264",
+          preset: "slow",
+          legacyZeroLatency: false,
+          rateControl: {
+            mode: "crf",
+            crf: 1,
+            maxBitrate: 800_000
+          }
+        }
+      }],
       units: [
         { id: "engage.shift", kind: "reversible", range: [8, 14] },
         { id: "engaged.body", kind: "body", range: [14, 22] },
@@ -386,9 +463,9 @@ describe("compiler commands", () => {
     expect(inspection).toMatchObject({
       formatVersion: "0.1",
       digestClaim: "all-internal-and-whole-file",
-      avcClaim: "not-applicable",
-      staticPngClaim: "strict-profile-fully-decoded"
+      avcClaim: "not-applicable"
     });
+    expect(inspection).not.toHaveProperty("staticPngClaim");
     expect(inspection.units[0]?.startTime).toMatch(/^\d+\/\d+$/u);
     await expect(validateAssetReport(fixture)).resolves.toMatchObject({
       command: "validate",
@@ -400,7 +477,7 @@ describe("compiler commands", () => {
     expect(unpacked.files).toContain("index.json");
     expect(unpacked.files).toContain("unpack-report.json");
     expect(unpacked.files.some((name) => name.endsWith(".au"))).toBe(true);
-    expect(unpacked.files.some((name) => name.endsWith(".png"))).toBe(true);
+    expect(unpacked.files.some((name) => name.endsWith(".png"))).toBe(false);
     expect(unpacked.accessUnits).toBe(3);
     const unpackReport = parseStrictJson(new Uint8Array(
       await readFile(join(root, "unpacked/unpack-report.json"))
@@ -482,7 +559,7 @@ describe("compiler commands", () => {
     expect(blob).toBeDefined();
     const offset = blob!.offset + blob!.length - 1;
     bytes[offset] = bytes[offset]! ^ 0x01;
-    const corrupted = join(root, "corrupt.rma");
+    const corrupted = join(root, "corrupt.avl");
     await writeFile(corrupted, bytes);
     try {
       await validateAssetReport(corrupted);
@@ -495,7 +572,7 @@ describe("compiler commands", () => {
 });
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "rma-commands-"));
+  const root = await mkdtemp(join(tmpdir(), "aval-commands-"));
   roots.push(root);
   return root;
 }
@@ -523,7 +600,7 @@ function compileArtifact(): Readonly<CompileArtifact> {
     }),
     warnings: Object.freeze(["one warning"]),
     buildDetails: Object.freeze({
-      detailsVersion: "0.1",
+      detailsVersion: "0.2",
       invocations: Object.freeze([Object.freeze({
         operation: "probe:test",
         tool: "ffprobe",
@@ -555,11 +632,6 @@ async function validReferenceAsset(root: string): Promise<string> {
       rgba: new Uint8Array(16).fill(40 + frameIndex)
     })
   );
-  const rgba = new Uint8Array(16);
-  for (let offset = 0; offset < rgba.length; offset += 4) {
-    rgba.set([40, 40, 40, 255], offset);
-  }
-  const staticPng = encodeCanonicalRgbaPng({ width: 2, height: 2, rgba });
   const input: CanonicalAssetInputV01 = {
     manifest: {
       formatVersion: "0.1",
@@ -575,7 +647,7 @@ async function validReferenceAsset(root: string): Promise<string> {
       renditions: [{
         id: "reference",
         profile: "reference-rgba-v0",
-        codec: "rma.reference-rgba",
+        codec: "aval.reference-rgba",
         codedWidth: 2,
         codedHeight: 2,
         alphaLayout: { type: "straight-rgba-v0" },
@@ -589,17 +661,10 @@ async function validReferenceAsset(root: string): Promise<string> {
         ports: [{ id: "default", entryFrame: 0, portalFrames: [2] }],
         samples: [{ rendition: "reference", sha256: sha256Concat(samples) }]
       }],
-      staticFrames: [{
-        id: "idle-static",
-        width: 2,
-        height: 2,
-        sha256: sha256Hex(staticPng)
-      }],
       initialState: "idle",
       states: [{
         id: "idle",
-        bodyUnit: "idle-body",
-        staticFrame: "idle-static"
+        bodyUnit: "idle-body"
       }],
       edges: [],
       bindings: [],
@@ -607,10 +672,6 @@ async function validReferenceAsset(root: string): Promise<string> {
         policy: "all-routes",
         bootstrapUnits: ["idle-body"],
         immediateEdges: []
-      },
-      fallback: {
-        unsupported: "per-state-static",
-        reducedMotion: "per-state-static"
       },
       limits: {
         maxCompiledBytes: 32 * 1024,
@@ -626,10 +687,9 @@ async function validReferenceAsset(root: string): Promise<string> {
       frameIndex,
       key: true,
       bytes
-    })),
-    staticPayloads: [{ staticFrame: "idle-static", bytes: staticPng }]
+    }))
   };
-  const path = join(root, "valid-reference.rma");
+  const path = join(root, "valid-reference.avl");
   await writeFile(path, writeCanonicalAsset(input));
   return path;
 }

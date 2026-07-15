@@ -21,9 +21,10 @@ raw byte payloads, frames, workers, decoders, GL objects, and resource
 capabilities. Numeric verified/resident byte counts remain available for
 resource diagnosis.
 
-A static prepare result is usable success. Inspect `staticReason` to distinguish
-reduced motion, unsupported animation, resource pressure, and failed readiness.
-Expected supersession/disconnect/disposal aborts are quiet.
+A `staticReady` prepare result means the host fallback remains usable. Inspect
+`staticReason` to distinguish reduced motion, unsupported animation, resource
+pressure, and failed readiness. Expected supersession/disconnect/disposal
+aborts are quiet.
 
 `cleanup` is either `null` or the immutable receipt for the most recently
 retired source and identifies both element and source generations. A receipt is

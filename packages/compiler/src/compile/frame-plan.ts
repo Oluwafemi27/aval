@@ -12,7 +12,6 @@ export interface PlannedUnitRange {
 export interface DirectFramePlan {
   readonly frameRate: RationalV01;
   readonly units: readonly PlannedUnitRange[];
-  readonly staticFrame: number;
   readonly unusedTrailingFrames: number;
   readonly warnings: readonly string[];
 }
@@ -30,12 +29,11 @@ export function buildDirectFramePlan(
     startFrame < 0 ||
     endFrame <= startFrame ||
     endFrame - startFrame < 2 ||
-    endFrame > 900 ||
     endFrame > probe.frameCount
   ) {
     throw new CompilerError(
       "FRAME_RANGE_INVALID",
-      `Loop must contain at least two frames and satisfy 0 <= start < end <= ${String(Math.min(probe.frameCount, 900))}`,
+      `Loop must contain at least two frames and satisfy 0 <= start < end <= ${String(probe.frameCount)}`,
       { field: "loop" }
     );
   }
@@ -90,7 +88,6 @@ export function buildDirectFramePlan(
   return Object.freeze({
     frameRate: Object.freeze({ ...frameRate }),
     units: Object.freeze(units),
-    staticFrame: startFrame,
     unusedTrailingFrames,
     warnings: Object.freeze(warnings)
   });

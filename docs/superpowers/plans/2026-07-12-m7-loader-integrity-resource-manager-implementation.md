@@ -21,9 +21,9 @@ one later intentional milestone commit after its complete evidence gate passes.
 - Write a failing focused test before every production slice.
 - Keep compiled format `0.1`; transport and page policy never enter the
   manifest or writer.
-- Keep `@rendered-motion/format` platform-free. Fetch, streams, Web Crypto,
+- Keep `@aval/format` platform-free. Fetch, streams, Web Crypto,
   DOM visibility, canvas context events, and page resources live only in
-  `@rendered-motion/player-web` or the browser proof.
+  `@aval/player-web` or the browser proof.
 - Use the existing `parseHeader()`, `parseFrontIndex()`, canonical layout, and
   `validateCompleteAsset()`; do not add a second header/index parser.
 - Only complete digest-bearing unit/static blobs enter persistent cache.
@@ -96,7 +96,7 @@ Run:
 
 ```text
 npx vitest run packages/player-web/src/runtime/model.test.ts
-npm run typecheck -w @rendered-motion/player-web
+npm run typecheck -w @aval/player-web
 ```
 
 ### 2. Implement exact HTTP header grammar
@@ -258,7 +258,7 @@ packages/player-web/src/runtime/blob-assembly.test.ts
 
 Consume only `ParsedFrontIndex.unitBlobs`, `.staticBlobs`, and canonical file
 geometry. Associate each blob with its immediately preceding alignment padding
-without changing `@rendered-motion/format`. Sort by canonical offset, validate
+without changing `@aval/format`. Sort by canonical offset, validate
 checked coverage, coalesce adjacent requested storage spans up to the 4 MiB
 target, and split larger legal spans into bounded exact requests.
 
@@ -657,7 +657,7 @@ Add:
 
 ```text
 fixtures/conformance/m7/README.md
-fixtures/conformance/m7/reference-packed.rma
+fixtures/conformance/m7/reference-packed.avl
 fixtures/conformance/m7/reference-packed.provenance.json
 fixtures/conformance/m7/network-scenarios.json
 ```
@@ -673,7 +673,7 @@ nonzero padding, and valid/invalid external integrity. Derive mutations in the
 test server so provenance remains clear.
 
 Add format/compiler tests proving fixture 0.1 canonicality and stable digests.
-Do not hand-edit `.rma` bytes.
+Do not hand-edit `.avl` bytes.
 
 Run:
 
@@ -838,10 +838,10 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @rendered-motion/graph
-npm pack --dry-run -w @rendered-motion/format
-npm pack --dry-run -w @rendered-motion/compiler
-npm pack --dry-run -w @rendered-motion/player-web
+npm pack --dry-run -w @aval/graph
+npm pack --dry-run -w @aval/format
+npm pack --dry-run -w @aval/compiler
+npm pack --dry-run -w @aval/player-web
 git diff --check
 ```
 

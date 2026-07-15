@@ -1,4 +1,4 @@
-import { deriveAvcRenditionGeometry } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometry } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -237,6 +237,34 @@ describe("browser profile-neutral frame backend", () => {
     );
     expect(FRAME_FRAGMENT_SHADER_SOURCE).toContain(
       "sample_uv = clamp(sample_uv, vec2(0.0), vec2(1.0))"
+    );
+  });
+
+  it("rejects a presentation backing that changes during texture allocation", () => {
+    const fixture = createRecordingCanvas();
+    const backend = new BrowserFrameBackend(fixture.canvas);
+    const geometry = computePresentationGeometry({
+      canvasWidth: 6,
+      canvasHeight: 2,
+      pixelAspectNumerator: 1,
+      pixelAspectDenominator: 1,
+      fit: "contain",
+      cssWidth: 12,
+      cssHeight: 4,
+      devicePixelRatio: 1,
+      maxBackingWidth: 2_048,
+      maxBackingHeight: 2_048,
+      maxBackingBytes: 1_024 * 1_024
+    });
+    backend.setPresentationGeometry(geometry);
+    fixture.canvas.height = 1;
+    fixture.ignoreHeightSetIn(1);
+
+    expect(() => backend.allocate(FULL_PACKED_LAYOUT, 3)).toThrow(
+      "browser did not allocate the exact frame backing"
+    );
+    expect(new Set(fixture.gl.deletedTextures)).toEqual(
+      new Set(fixture.gl.createdTextures)
     );
   });
 
@@ -630,12 +658,14 @@ function createRecordingCanvas(): {
   readonly gl: RecordingGl;
   readonly contextOptions: WebGLContextAttributes;
   readonly failWidthSetIn: (calls: number) => void;
+  readonly ignoreHeightSetIn: (calls: number) => void;
 } {
   const gl = new RecordingGl();
   let contextOptions: WebGLContextAttributes | undefined;
   let width = 0;
   let height = 0;
   let failWidthCountdown = 0;
+  let ignoreHeightCountdown = 0;
   const canvas = {
     get width() {
       return width;
@@ -653,6 +683,10 @@ function createRecordingCanvas(): {
       return height;
     },
     set height(value: number) {
+      if (ignoreHeightCountdown > 0) {
+        ignoreHeightCountdown -= 1;
+        if (ignoreHeightCountdown === 0) return;
+      }
       height = value;
     },
     getContext(_kind: string, options: WebGLContextAttributes) {
@@ -665,6 +699,9 @@ function createRecordingCanvas(): {
     gl,
     failWidthSetIn(calls: number) {
       failWidthCountdown = calls;
+    },
+    ignoreHeightSetIn(calls: number) {
+      ignoreHeightCountdown = calls;
     },
     get contextOptions() {
       if (contextOptions === undefined) throw new Error("context not requested");

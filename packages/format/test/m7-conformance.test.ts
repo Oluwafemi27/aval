@@ -7,8 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseFrontIndex,
-  validateCompleteAsset,
-  validatePngProfile
+  validateCompleteAsset
 } from "../src/index.js";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -17,7 +16,7 @@ const FIXTURE_ROOT = join(REPOSITORY_ROOT, "fixtures/conformance/m7");
 describe("M7 checked loader fixture format conformance", () => {
   it("retains canonical 0.1 geometry and every internal digest", async () => {
     const [raw, provenanceText] = await Promise.all([
-      readFile(join(FIXTURE_ROOT, "reference-packed.rma")),
+      readFile(join(FIXTURE_ROOT, "reference-packed.avl")),
       readFile(join(FIXTURE_ROOT, "reference-packed.provenance.json"), "utf8")
     ]);
     const bytes = new Uint8Array(raw);
@@ -36,25 +35,9 @@ describe("M7 checked loader fixture format conformance", () => {
     expect(validated.frontIndex.frontIndexRange)
       .toEqual(provenance.metadata.frontIndex);
 
-    for (const blob of [
-      ...validated.frontIndex.unitBlobs,
-      ...validated.frontIndex.staticBlobs
-    ]) {
+    for (const blob of validated.frontIndex.unitBlobs) {
       expect(sha256(bytes.subarray(blob.offset, blob.offset + blob.length)))
         .toBe(blob.sha256);
-    }
-    for (const [index, blob] of validated.frontIndex.staticBlobs.entries()) {
-      const descriptor = validated.frontIndex.manifest.staticFrames[index]!;
-      const profile = validatePngProfile({
-        png: bytes.subarray(blob.offset, blob.offset + blob.length),
-        expectedWidth: descriptor.width,
-        expectedHeight: descriptor.height
-      });
-      expect(profile).toMatchObject({
-        width: descriptor.width,
-        height: descriptor.height,
-        expectedRgbaBytes: descriptor.width * descriptor.height * 4
-      });
     }
   });
 });

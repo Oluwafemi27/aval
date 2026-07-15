@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import { createIntegratedPathTestAsset } from "./asset-test-fixture.js";
 import {
   Deferred,
+  ManualTimers,
   createPreparationHarness as createHarness,
   waitForCall,
   waitForLength
 } from "./integrated-player-preparation-test-support.js";
 
 describe("IntegratedPlayer visibility lifecycle", () => {
-  it("prepares initially hidden as strict static without a decoder", async () => {
+  it("prepares initially hidden with host fallback and no decoder", async () => {
     const harness = createHarness({ initialVisibility: "hidden" });
 
     await expect(harness.player.prepare()).resolves.toMatchObject({
@@ -30,9 +31,34 @@ describe("IntegratedPlayer visibility lifecycle", () => {
       staticOrigin: "visibility-suspended",
       stickyFailure: false
     });
+
+    await harness.player.setVisibility("visible");
+    expect(harness.factory.draws).toEqual([
+      expect.objectContaining({ kind: "intro", frameIndex: 0 })
+    ]);
+    expect(harness.factory.activationSnapshots.at(-1)).toMatchObject({
+      initialUnitPending: true,
+      visualState: "idle"
+    });
   });
 
-  it("rebuilds every route at body frame zero behind the cover on show", async () => {
+  it("reuses the initial preparation timeout for a visible rebuild", async () => {
+    const timers = new ManualTimers();
+    const harness = createHarness({
+      initialVisibility: "hidden",
+      timers,
+      behaviors: [{ kind: "success" }]
+    });
+
+    await harness.player.prepare({ timeoutMs: 12_345 });
+    timers.delays.length = 0;
+    await harness.player.setVisibility("visible");
+
+    expect(timers.delays).toContain(12_345);
+    expect(harness.player.snapshot().readiness).toBe("interactiveReady");
+  });
+
+  it("restarts an unfinished intro behind the cover on show", async () => {
     const harness = createHarness({
       behaviors: [{ kind: "success" }, { kind: "success" }]
     });
@@ -40,7 +66,7 @@ describe("IntegratedPlayer visibility lifecycle", () => {
 
     await harness.player.setVisibility("hidden");
 
-    expect(harness.staticStore.calls).toEqual(expect.arrayContaining([
+    expect(harness.fallbackStore.calls).toEqual(expect.arrayContaining([
       "stage:idle",
       "cover-current"
     ]));
@@ -56,7 +82,7 @@ describe("IntegratedPlayer visibility lifecycle", () => {
     expect(harness.factory.draws.map((presentation) => [
       presentation.kind,
       presentation.kind === "static" ? null : presentation.frameIndex
-    ])).toEqual([["intro", 0], ["body", 0]]);
+    ])).toEqual([["intro", 0], ["intro", 0]]);
     expect(harness.factory.calls.filter((call) =>
       call === "create:opaque-high"
     )).toHaveLength(2);
@@ -85,9 +111,30 @@ describe("IntegratedPlayer visibility lifecycle", () => {
     expect(harness.player.visibilitySnapshot().suspension).toBe("suspended");
   });
 
+  it("restarts an in-flight hidden preparation when visibility becomes active", async () => {
+    const gate = new Deferred<void>();
+    const harness = createHarness({
+      initialVisibility: "hidden",
+      staticBehavior: { kind: "gate-initial-install", gate },
+      behaviors: [{ kind: "success" }]
+    });
+    const preparing = harness.player.prepare();
+    await waitForCall(harness.fallbackStore.calls, "install:idle");
+
+    const showing = harness.player.setVisibility("visible");
+    gate.resolve(undefined);
+
+    await expect(preparing).resolves.toMatchObject({ mode: "animated" });
+    await showing;
+    expect(harness.player.visibilitySnapshot()).toMatchObject({
+      visibility: "visible",
+      suspension: "active"
+    });
+  });
+
   it.each([
     ["static install", "gate-initial-install"],
-    ["strict static validation", "gate-first-validation"]
+    ["host fallback validation", "gate-first-validation"]
   ] as const)("switches in-flight %s to the hidden generation", async (
     _label,
     kind
@@ -98,7 +145,7 @@ describe("IntegratedPlayer visibility lifecycle", () => {
     });
     const preparing = harness.player.prepare();
     await waitForCall(
-      harness.staticStore.calls,
+      harness.fallbackStore.calls,
       kind === "gate-initial-install" ? "install:idle" : "validate-all"
     );
 
@@ -140,7 +187,7 @@ describe("IntegratedPlayer visibility lifecycle", () => {
     });
     await harness.player.prepare();
     await harness.player.setVisibility("hidden");
-    const presentCallsBeforeRequests = harness.staticStore.calls.length;
+    const presentCallsBeforeRequests = harness.fallbackStore.calls.length;
 
     await Promise.all([
       harness.player.requestState("hover"),
@@ -149,11 +196,15 @@ describe("IntegratedPlayer visibility lifecycle", () => {
     ]);
     await harness.player.setVisibility("visible");
 
-    expect(harness.staticStore.calls.slice(presentCallsBeforeRequests).filter(
+    expect(harness.fallbackStore.calls.slice(presentCallsBeforeRequests).filter(
       (call) => call.startsWith("present:")
     )).toEqual(["present:hover"]);
     const draw = harness.factory.draws.at(-1);
     expect(draw).toMatchObject({ kind: "body", state: "hover", frameIndex: 0 });
+    expect(harness.factory.activationSnapshots.at(-1)).toMatchObject({
+      initialUnitPending: false,
+      visualState: "hover"
+    });
     expect(harness.player.snapshot()).toMatchObject({
       requestedState: "hover",
       visualState: "hover",
@@ -168,10 +219,10 @@ describe("IntegratedPlayer visibility lifecycle", () => {
     });
     await harness.player.prepare();
     await harness.player.setVisibility("hidden");
-    harness.staticStore.gateNextPresent(gate);
+    harness.fallbackStore.gateNextPresent(gate);
 
     const request = harness.player.requestState("hover");
-    await waitForCall(harness.staticStore.calls, "present:hover");
+    await waitForCall(harness.fallbackStore.calls, "present:hover");
     const showing = harness.player.setVisibility("visible");
     await Promise.resolve();
     expect(harness.factory.activeAttempts).toBe(0);
@@ -226,7 +277,7 @@ describe("IntegratedPlayer visibility lifecycle", () => {
     expect(harness.factory.maximumActiveAttempts).toBe(1);
     expect(harness.factory.activeAttempts).toBe(1);
     expect(harness.factory.draws.map((presentation) => presentation.kind))
-      .toEqual(["intro", "body"]);
+      .toEqual(["intro", "intro"]);
     expect(harness.player.visibilitySnapshot()).toMatchObject({
       visibility: "visible",
       suspension: "active"
@@ -251,7 +302,7 @@ describe("IntegratedPlayer visibility lifecycle", () => {
 
     await harness.player.setMotionPolicy("full");
     expect(harness.factory.draws.at(-1)).toMatchObject({
-      kind: "body",
+      kind: "intro",
       frameIndex: 0
     });
   });

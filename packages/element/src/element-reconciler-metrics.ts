@@ -1,7 +1,7 @@
 import { addElementCount, nextElementSequence } from "./element-sequence.js";
-import type { RenderedMotionDiagnosticsCounters } from "./public-types.js";
+import type { AvalDiagnosticsCounters } from "./public-types.js";
 
-export type ElementCounterName = keyof RenderedMotionDiagnosticsCounters;
+export type ElementCounterName = keyof AvalDiagnosticsCounters;
 export type ElementGenerationName = "input" | "motion" | "visibility" | "resize";
 
 export class ElementReconcilerMetrics {
@@ -33,7 +33,7 @@ export class ElementReconcilerMetrics {
     );
   }
 
-  public counters(): Readonly<RenderedMotionDiagnosticsCounters> {
+  public counters(): Readonly<AvalDiagnosticsCounters> {
     return this.#counters;
   }
 

@@ -3,7 +3,8 @@ export const BYTES_PER_RGBA_PIXEL = 4;
 export const GPU_OVERHEAD_NUMERATOR = 5;
 export const GPU_OVERHEAD_DENOMINATOR = 4;
 export const STREAMING_TEXTURE_LAYER_COUNT = 3;
-export const MAX_PLAYER_RUNTIME_BYTES = 64 * RUNTIME_MEBIBYTE;
+/** Default admission boundary: JavaScript's exact integer representation. */
+export const MAX_PLAYER_RUNTIME_BYTES = Number.MAX_SAFE_INTEGER;
 
 type ByteOperand = number | bigint;
 

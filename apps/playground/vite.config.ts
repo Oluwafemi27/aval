@@ -9,19 +9,19 @@ export default defineConfig({
   resolve: {
     // The local playground exercises workspace sources without a prior build.
     alias: {
-      "@rendered-motion/format": fileURLToPath(
+      "@aval/format": fileURLToPath(
         new URL("../../packages/format/src/index.ts", import.meta.url)
       ),
-      "@rendered-motion/graph": fileURLToPath(
+      "@aval/graph": fileURLToPath(
         new URL("../../packages/graph/src/index.ts", import.meta.url)
       ),
-      "@rendered-motion/player-web": fileURLToPath(
+      "@aval/player-web": fileURLToPath(
         new URL("../../packages/player-web/src/index.ts", import.meta.url)
       ),
-      "@rendered-motion/element/auto": fileURLToPath(
+      "@aval/element/auto": fileURLToPath(
         new URL("../../packages/element/src/auto.ts", import.meta.url)
       ),
-      "@rendered-motion/element": fileURLToPath(
+      "@aval/element": fileURLToPath(
         new URL("../../packages/element/src/index.ts", import.meta.url)
       )
     }

@@ -4,7 +4,7 @@ import type {
   GraphBodyDefinition,
   GraphEdgeDefinition,
   GraphStartPolicy
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import {
   planSubmissionHorizon,

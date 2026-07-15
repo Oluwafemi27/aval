@@ -1,7 +1,7 @@
 import type {
   GraphPresentation,
   MotionGraphSnapshot
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
 import {
@@ -18,7 +18,7 @@ import {
   type IntegratedPlaybackSession,
   type IntegratedPlayerSnapshot,
   type IntegratedRealtimeDriverOptions,
-  type IntegratedStaticSurfaceStore,
+  type IntegratedFallbackStore,
   type IntegratedTimerHost,
   type RuntimeVisibilityState
 } from "./integrated-player.js";
@@ -57,7 +57,7 @@ export function createPreparationHarness(
   options: PreparationHarnessOptions = {}
 ) {
   const order: string[] = [];
-  const staticStore = new FakeStaticStore(
+  const fallbackStore = new FakeStaticStore(
     options.staticBehavior ?? "immediate",
     order
   );
@@ -74,7 +74,7 @@ export function createPreparationHarness(
   let player: IntegratedPlayer | null = null;
   player = new IntegratedPlayer({
     bytes: options.bytes ?? createIntegratedOpaqueTestAsset(),
-    createStaticStore: () => staticStore,
+    createFallbackStore: () => fallbackStore,
     candidateFactory: factory,
     eventSink: (event) => {
       events.push(event);
@@ -97,7 +97,7 @@ export function createPreparationHarness(
   });
   return {
     player,
-    staticStore,
+    fallbackStore,
     factory,
     events,
     eventSnapshots,
@@ -127,7 +127,7 @@ export type StaticBehavior =
       readonly gate: Deferred<void>;
     };
 
-export class FakeStaticStore implements IntegratedStaticSurfaceStore {
+export class FakeStaticStore implements IntegratedFallbackStore {
   public readonly calls: string[] = [];
   public readonly committed: string[] = [];
   readonly #behavior: StaticBehavior;
@@ -363,9 +363,11 @@ const PREPARATION_PLAYBACK: IntegratedPlaybackSession = Object.freeze({
 export class ManualTimers {
   #next = 1;
   readonly #callbacks = new Map<number, () => void>();
+  public readonly delays: number[] = [];
 
-  public readonly setTimeout = (callback: () => void, _ms: number): number => {
+  public readonly setTimeout = (callback: () => void, ms: number): number => {
     const id = this.#next++;
+    this.delays.push(ms);
     this.#callbacks.set(id, callback);
     return id;
   };

@@ -10,7 +10,7 @@ import {
   crc32,
   deriveAvcRenditionGeometryFromVisible,
   prepareAvcEncoderRendition
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import {
   encodeAvcUnit,
@@ -44,7 +44,7 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
   let encoderSpool: Readonly<YuvUnitSpool> | undefined;
 
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), "rma-ffmpeg-test-"));
+    directory = await mkdtemp(join(tmpdir(), "aval-ffmpeg-test-"));
     source = join(directory, "source.mp4");
     const alphaDirectory = join(directory, "alpha");
     await mkdir(alphaDirectory);
@@ -133,7 +133,16 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
       endFrame: 10,
       codedWidth: 32,
       codedHeight: 32,
-      bitrate: { average: 300_000, peak: 600_000 }
+      encoding: {
+        codec: "h264" as const,
+        preset: "medium" as const,
+        legacyZeroLatency: true,
+        rateControl: {
+          mode: "abr" as const,
+          averageBitrate: 300_000,
+          maxBitrate: 600_000
+        }
+      }
     };
     const first = await encodeAvcUnit(input);
     const second = await encodeAvcUnit(input);
@@ -162,7 +171,16 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
       source: encoderSpool.input,
       codedWidth: 32,
       codedHeight: 32,
-      bitrate: { average: 300_000, peak: 600_000 }
+      encoding: {
+        codec: "h264" as const,
+        preset: "medium" as const,
+        legacyZeroLatency: true,
+        rateControl: {
+          mode: "abr" as const,
+          averageBitrate: 300_000,
+          maxBitrate: 600_000
+        }
+      }
     };
     const one = await encodeAvcUnit({
       ...common,
@@ -179,10 +197,11 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
         codedWidth: 32,
         codedHeight: 32,
         frameRate,
-        averageBitrate: common.bitrate.average,
-        peakBitrate: common.bitrate.peak,
-        cpbBufferBits: common.bitrate.peak,
-        requireBt709LimitedRange: true
+        averageBitrate: common.encoding.rateControl.averageBitrate,
+        peakBitrate: common.encoding.rateControl.maxBitrate,
+        cpbBufferBits: common.encoding.rateControl.maxBitrate,
+        requireBt709LimitedRange: true,
+        quantizationPolicy: "fixed-qp26-v0"
       },
       units: [
         { id: "intro", bytes: one, expectedAccessUnitCount: 1 },
@@ -198,7 +217,7 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
     ]);
   });
 
-  it("preserves one sparse transparent pal8 pixel through packed alpha", async () => {
+  it("preserves sparse pal8 alpha or rejects a tool that misses the quality gate", async () => {
     const frameRate = { numerator: 30, denominator: 1 };
     const probe = await probePngSequence(
       indexedAlphaPattern,
@@ -215,14 +234,25 @@ describe.skipIf(!HAS_FFMPEG)("real FFmpeg opaque pipeline", () => {
       hasAlpha: true
     });
 
-    await expect(compileDirectInput({
-      inputPath: indexedAlphaPattern,
-      outputPath: join(directory, "indexed-alpha.rma"),
-      loop: [0, 2],
-      fps: frameRate,
-      canvas: [32, 32],
-      frames: { firstNumber: 0, frameCount: 2 }
-    })).resolves.toMatchObject({
+    let result: Awaited<ReturnType<typeof compileDirectInput>>;
+    try {
+      result = await compileDirectInput({
+        inputPath: indexedAlphaPattern,
+        outputPath: join(directory, "indexed-alpha.avl"),
+        loop: [0, 2],
+        fps: frameRate,
+        canvas: [32, 32],
+        frames: { firstNumber: 0, frameCount: 2 }
+      });
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "ALPHA_QUALITY_REJECTED",
+        statistic: "mae",
+        limit: 2 / 255
+      });
+      return;
+    }
+    expect(result).toMatchObject({
       buildDetails: {
         alphaPolicy: {
           selected: "packed",

@@ -12,7 +12,6 @@ import {
   type FfmpegInvocation
 } from "../ffmpeg/encode-unit.js";
 import {
-  DEFAULT_MEDIA_TIMEOUT_MS,
   MAX_PROCESS_STDERR_BYTES,
   type AlphaAuditSummary,
   type MediaProbe,
@@ -21,7 +20,7 @@ import {
 import { runBoundedProcess } from "../process-runner.js";
 import { createCanonicalAlphaAuditor } from "./alpha-policy.js";
 
-const MAX_SPOOL_BYTES = 1024 * 1024 * 1024;
+const DISK_HEADROOM_BYTES = 64 * 1024 * 1024;
 
 export interface MaterializedRgbaSource {
   readonly input: Extract<FfmpegFrameInput, { readonly type: "raw-rgba" }>;
@@ -45,24 +44,28 @@ export async function materializeNormalizedRgbaSource(input: {
   readonly alphaReferences?: readonly {
     readonly source: string;
     readonly frame: number;
-    readonly role: "unit" | "poster";
   }[];
   readonly executable: string;
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
 }): Promise<Readonly<MaterializedRgbaSource>> {
-  const frameBytes = input.outputWidth * input.outputHeight * 4;
-  const outputBytes = frameBytes * input.sourceFrameByOutputFrame.length;
-  if (
-    input.sourceFrameByOutputFrame.length < 1 ||
-    !Number.isSafeInteger(outputBytes) ||
-    outputBytes > MAX_SPOOL_BYTES
-  ) {
+  if (input.sourceFrameByOutputFrame.length < 1) {
     throw new CompilerError(
-      "SOURCE_LIMIT",
-      "Normalized RGBA spool would exceed the 1 GiB limit"
+      "INPUT_INVALID",
+      "Normalized RGBA spool requires at least one frame"
     );
   }
+  const frameBytes = checkedProduct(
+    "normalized RGBA frame bytes",
+    input.outputWidth,
+    input.outputHeight,
+    4
+  );
+  const outputBytes = checkedProduct(
+    "normalized RGBA spool bytes",
+    frameBytes,
+    input.sourceFrameByOutputFrame.length
+  );
   for (let index = 1; index < input.sourceFrameByOutputFrame.length; index += 1) {
     if (
       input.sourceFrameByOutputFrame[index]! <
@@ -73,7 +76,7 @@ export async function materializeNormalizedRgbaSource(input: {
   }
   const temporaryRoot = tmpdir();
   const available = await availableScratchBytes(temporaryRoot);
-  if (available < outputBytes + 64 * 1024 * 1024) {
+  if (available < BigInt(outputBytes) + BigInt(DISK_HEADROOM_BYTES)) {
     throw new CompilerError(
       "SOURCE_LIMIT",
       "Insufficient temporary disk space for normalized RGBA spool"
@@ -119,10 +122,10 @@ export async function materializeNormalizedRgbaSource(input: {
   });
 }
 
-async function availableScratchBytes(root: string): Promise<number> {
+async function availableScratchBytes(root: string): Promise<bigint> {
   try {
     const filesystem = await statfs(root);
-    return filesystem.bavail * filesystem.bsize;
+    return BigInt(filesystem.bavail) * BigInt(filesystem.bsize);
   } catch (error) {
     throw new CompilerError("IO_FAILED", "Could not inspect RGBA scratch storage", {
       cause: error
@@ -132,7 +135,7 @@ async function availableScratchBytes(root: string): Promise<number> {
 
 async function createScratchDirectory(root: string): Promise<string> {
   try {
-    return await mkdtemp(join(root, "rma-rgba-"));
+    return await mkdtemp(join(root, "aval-rgba-"));
   } catch (error) {
     throw new CompilerError("IO_FAILED", "Could not create private RGBA spool", {
       cause: error
@@ -176,12 +179,15 @@ async function streamSelectedCanonicalFrames(
       "Normalization map references an unavailable source frame"
     );
   }
-  const expectedDecodedBytes = uniqueSourceFrames.length * frameBytes;
+  const expectedDecodedBytes = checkedProduct(
+    "selected RGBA decode bytes",
+    uniqueSourceFrames.length,
+    frameBytes
+  );
   const alphaReferences = input.alphaReferences ?? Object.freeze(
     input.sourceFrameByOutputFrame.map((_frame, index) => Object.freeze({
       source: "canonical",
-      frame: index,
-      role: "unit" as const
+      frame: index
     }))
   );
   if (alphaReferences.length !== input.sourceFrameByOutputFrame.length) {
@@ -191,7 +197,7 @@ async function streamSelectedCanonicalFrames(
     );
   }
   const alphaAuditor = createCanonicalAlphaAuditor(input.signal);
-  const frame = new Uint8Array(frameBytes);
+  const frame = allocateBytes(frameBytes, "canonical RGBA frame");
   let frameOffset = 0;
   let decodedIndex = 0;
   let outputIndex = 0;
@@ -299,20 +305,26 @@ export async function readCanonicalRgbaRange(input: {
       "Canonical RGBA read lies outside the private spool"
     );
   }
-  const frameBytes = input.source.width * input.source.height * 4;
+  const frameBytes = checkedProduct(
+    "canonical RGBA frame bytes",
+    input.source.width,
+    input.source.height,
+    4
+  );
   const count = input.endFrame - input.startFrame;
-  const length = frameBytes * count;
-  if (!Number.isSafeInteger(length) || length > MAX_SPOOL_BYTES) {
-    throw new CompilerError("SOURCE_LIMIT", "Canonical RGBA read is too large");
-  }
+  const length = checkedProduct("canonical RGBA read bytes", frameBytes, count);
   const handle = await open(input.source.path, "r").catch(() => {
     throw new CompilerError("IO_FAILED", "Could not open canonical RGBA spool");
   });
-  const bytes = new Uint8Array(length);
+  const bytes = allocateBytes(length, "canonical RGBA read");
   try {
     throwIfAborted(input.signal);
     let offset = 0;
-    const fileOffset = input.startFrame * frameBytes;
+    const fileOffset = checkedProduct(
+      "canonical RGBA read offset",
+      input.startFrame,
+      frameBytes
+    );
     while (offset < length) {
       throwIfAborted(input.signal);
       const result = await handle.read(
@@ -333,9 +345,17 @@ export async function readCanonicalRgbaRange(input: {
   } finally {
     await handle.close().catch(() => undefined);
   }
-  return Object.freeze(Array.from({ length: count }, (_, index) =>
-    bytes.slice(index * frameBytes, (index + 1) * frameBytes)
-  ));
+  try {
+    return Object.freeze(Array.from({ length: count }, (_, index) =>
+      bytes.slice(index * frameBytes, (index + 1) * frameBytes)
+    ));
+  } catch (error) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      `Could not materialize ${String(count)} canonical RGBA frame copies`,
+      { cause: error }
+    );
+  }
 }
 
 async function writeAll(
@@ -357,5 +377,32 @@ async function writeAll(
       throw new CompilerError("IO_FAILED", "RGBA spool write made no progress");
     }
     offset += result.bytesWritten;
+  }
+}
+
+function checkedProduct(label: string, ...values: number[]): number {
+  let result = 1;
+  for (const value of values) {
+    if (
+      !Number.isSafeInteger(value) ||
+      value < 0 ||
+      (value !== 0 && result > Math.floor(Number.MAX_SAFE_INTEGER / value))
+    ) {
+      throw new CompilerError("SOURCE_LIMIT", `${label} exceeds safe arithmetic`);
+    }
+    result *= value;
+  }
+  return result;
+}
+
+function allocateBytes(length: number, operation: string): Uint8Array {
+  try {
+    return new Uint8Array(length);
+  } catch (error) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      `Could not allocate ${String(length)} bytes for ${operation}`,
+      { cause: error }
+    );
   }
 }

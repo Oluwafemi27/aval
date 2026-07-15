@@ -37,6 +37,36 @@ describe("ElementRuntimeEffects", () => {
     expect(fixture.calls.visibility).toBe(0);
   });
 
+  it("does not serialize presentation behind motion-policy settlement", async () => {
+    const fixture = effectsFixture();
+    let releaseMotion: (() => void) | undefined;
+    let resizeCount = 0;
+    fixture.asset.setMotionPolicy = async () => {
+      await new Promise<void>((resolve) => { releaseMotion = resolve; });
+    };
+    fixture.asset.resize = () => { resizeCount += 1; };
+    const snapshot = desired({
+      box: Object.freeze({ width: 640, height: 360 }),
+      dpr: 2
+    });
+    fixture.current = snapshot;
+
+    const applying = fixture.effects.apply(
+      snapshot,
+      fixture.asset as unknown as ElementAssetGeneration,
+      configuration(),
+      fixture.authority
+    );
+    for (let attempt = 0; releaseMotion === undefined && attempt < 10; attempt += 1) {
+      await Promise.resolve();
+    }
+
+    expect(releaseMotion).toBeTypeOf("function");
+    expect(resizeCount).toBe(1);
+    releaseMotion!();
+    await applying;
+  });
+
   it("drops stale state/play phases after visibility awaits a newer pause and state", async () => {
     const fixture = effectsFixture();
     let releaseVisibility!: () => void;
@@ -187,6 +217,52 @@ describe("ElementRuntimeEffects", () => {
     releaseState();
     await expect(command.promise).resolves.toBeUndefined();
   });
+
+  it("does not report declarative state supersession as invalid configuration", async () => {
+    const fixture = effectsFixture();
+    fixture.asset.setState = async () => {
+      const error = new Error("state request was superseded");
+      error.name = "AbortError";
+      throw error;
+    };
+    const snapshot = desired({
+      revision: 6,
+      stateIntent: Object.freeze({ name: "hover", sequence: 6 })
+    });
+    fixture.current = snapshot;
+
+    await fixture.effects.apply(
+      snapshot,
+      fixture.asset as unknown as ElementAssetGeneration,
+      configuration(),
+      fixture.authority
+    );
+    await Promise.resolve();
+
+    expect(fixture.failures).toEqual([]);
+  });
+
+  it("reports a non-abort declarative state failure as invalid configuration", async () => {
+    const fixture = effectsFixture();
+    fixture.asset.setState = async () => {
+      throw new Error("state request failed");
+    };
+    const snapshot = desired({
+      revision: 7,
+      stateIntent: Object.freeze({ name: "hover", sequence: 7 })
+    });
+    fixture.current = snapshot;
+
+    await fixture.effects.apply(
+      snapshot,
+      fixture.asset as unknown as ElementAssetGeneration,
+      configuration(),
+      fixture.authority
+    );
+    await Promise.resolve();
+
+    expect(fixture.failures).toEqual(["invalid-configuration"]);
+  });
 });
 
 function effectsFixture(ready = true) {
@@ -215,6 +291,7 @@ function effectsFixture(ready = true) {
     resumeCommandIdentityEqual
   );
   const stateCalls: string[] = [];
+  const failures: unknown[] = [];
   const calls = { pause: 0, resume: 0, visibility: 0 };
   const asset = {
     generation: 1,
@@ -230,7 +307,8 @@ function effectsFixture(ready = true) {
     router: new BindingRouter(() => false),
     inputs: {
       metadataReady: () => undefined,
-      metadataUnready: () => undefined
+      metadataUnready: () => undefined,
+      setRuntimeVisible: () => undefined
     } as unknown as AutomaticInputs,
     state,
     stateCommand,
@@ -263,7 +341,7 @@ function effectsFixture(ready = true) {
       asset: candidate,
       key
     }),
-    runtimeEffectFailure: () => undefined,
+    runtimeEffectFailure: (error) => { failures.push(error); },
     runtimePresentationUnsupported: () => undefined
   };
   fixture.authority = authority;
@@ -274,6 +352,7 @@ function effectsFixture(ready = true) {
     asset,
     effects,
     stateCalls,
+    failures,
     calls
   }) as typeof fixture & {
     state: ElementPublicState;
@@ -282,6 +361,7 @@ function effectsFixture(ready = true) {
     asset: typeof asset;
     effects: ElementRuntimeEffects;
     stateCalls: string[];
+    failures: unknown[];
     calls: { pause: number; resume: number; visibility: number };
   };
 }
@@ -315,7 +395,7 @@ function desired(
 
 function configuration(): Readonly<ElementConfiguration> {
   return Object.freeze({
-    src: "asset.rma",
+    src: "asset.avl",
     integrity: "",
     crossOrigin: "anonymous",
     motion: "auto",

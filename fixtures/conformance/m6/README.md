@@ -4,17 +4,17 @@ This directory freezes the first web-only `projectVersion: 0.2` compiler
 outputs. The source is a deterministic 45×27 grayscale animation with a
 six-bit Gray-derived frame marker, authored alpha gradients and sharp edges,
 a moving transparent patch, and intentionally hostile magenta/green RGB below
-fully transparent pixels. The source artwork and PNG corpus are released under
+fully transparent pixels. The source artwork is released under
 CC0 in `fixtures/compiler/m6/source/ASSET-LICENSE.md`.
 
 The three checked assets have separate jobs:
 
-- `opaque-odd.rma` proves the opaque auto-policy and odd visible geometry;
-- `packed-alpha-loop.rma` proves auto-selection of packed alpha and a clean
+- `opaque-odd.avl` proves the opaque auto-policy and odd visible geometry;
+- `packed-alpha-loop.avl` proves auto-selection of packed alpha and a clean
   partial-range loop; and
-- `packed-alpha-all-routes.rma` proves explicit packed alpha at 15×9 and
-  45×27, every route class, readiness/cache metadata, shared and distinct
-  strict static PNGs, and deterministic alpha/composite quality evidence.
+- `packed-alpha-all-routes.avl` proves explicit packed alpha at 15×9 and
+  45×27, every route class, readiness/cache metadata, and deterministic
+  alpha/composite quality evidence.
 
 The high packed rendition has a 46×64 cropped decoder storage rectangle in a
 48×64 coded surface. The low rendition has a 16×28 cropped storage rectangle
@@ -24,16 +24,11 @@ black, white, and magenta; this fixture remains at or below 8/255 p99. Exact
 frame-marker readback is certified only at full resolution. The 15×9 rendition
 is intentionally a geometry and quality fixture, not an exact marker oracle.
 
-The `png/` corpus covers DEFLATE stored, fixed-Huffman, and dynamic-Huffman
-blocks plus PNG row filters 0–4. `malformed/corpus.json` inventories 59
-class-unique checked PNGs spanning every reachable strict envelope, zlib,
-stored/fixed/dynamic DEFLATE, Adler-32, and scanline rejection branch.
-`malformed/contracts.json` adds executed in-memory sentinels for byte, combined
-IDAT, output, and work limits that are impractical as checked files, plus the
-packed-geometry, SPS-crop, alpha-quality, and resource failures.
-`provenance.json` binds every source, asset, sample blob, static, strict
-inspection, quality result, inventory, and corpus file to path-free hashes and
-the reviewed FFmpeg/FFprobe pair.
+`reviewed-motion/reviewed-avc.bin` retains the deduplicated, reviewed motion
+sample blobs with no image payloads. `reviewed-motion/recipe.json` binds their
+access-unit boundaries, poster-free manifests, quality evidence, and original
+FFmpeg/FFprobe fingerprint. `provenance.json` then binds those inputs to the
+current canonical containers and source projects with path-free hashes.
 
 Regenerate from the repository root:
 
@@ -46,15 +41,20 @@ node fixtures/compiler/m6/update-provenance.mjs --check
 node fixtures/conformance/m6/update-provenance.mjs --check
 ```
 
-Regeneration is an intentional binary-review operation. The update script
-compiles each source project through the production compiler. Its `--check`
-mode rebuilds all three assets into a private temporary directory and compares
-the complete normalized provenance object, including toolchain, strict AVC
-inspections, alpha/composite quality, statics, continuity, and resource facts.
+Container regeneration is tool-free: the update script copies every reviewed
+AVC access unit byte-for-byte through the current format writer, then recomputes
+the complete asset, front-index, unit, inspection, and provenance hashes. Its
+`--check` mode performs the same assembly in memory and compares all three
+files exactly. Re-encoding the reviewed samples is a separate binary-review
+operation; it must produce new quality evidence and a new reviewed-motion
+recipe instead of silently replacing this toolchain record.
 
 ## Claim boundary
 
-These files prove deterministic authoring, strict asset structure, packed
-geometry, static decode, and compiler-side reconstruction metrics. They do not
+These files prove reviewed encoded samples, strict asset structure, packed
+geometry, tool-free poster-free container assembly, and recorded compiler-side
+reconstruction metrics. Current encoder-argument behavior is tested separately;
+these preserved samples are not claimed as byte output of the current encoder.
+They do not
 alone prove browser codec availability, compositor scan-out continuity, or
 device-specific GPU behavior; those claims belong to the real-browser gate.

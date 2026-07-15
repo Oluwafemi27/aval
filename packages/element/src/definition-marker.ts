@@ -1,28 +1,28 @@
-import { RENDERED_MOTION_ELEMENT_API_MAJOR } from "./public-types.js";
+import { AVAL_ELEMENT_API_MAJOR } from "./public-types.js";
 
-export const RENDERED_MOTION_DEFINITION_MARKER = Symbol.for(
-  "@rendered-motion/element/definition-api-major"
+export const AVAL_DEFINITION_MARKER = Symbol.for(
+  "@aval/element/definition-api-major"
 );
 
-export function markRenderedMotionConstructor(
+export function markAvalConstructor(
   constructor: CustomElementConstructor
 ): void {
-  Object.defineProperty(constructor, RENDERED_MOTION_DEFINITION_MARKER, {
-    value: RENDERED_MOTION_ELEMENT_API_MAJOR,
+  Object.defineProperty(constructor, AVAL_DEFINITION_MARKER, {
+    value: AVAL_ELEMENT_API_MAJOR,
     configurable: false,
     enumerable: false,
     writable: false
   });
 }
 
-export function isCompatibleRenderedMotionConstructor(
+export function isCompatibleAvalConstructor(
   constructor: CustomElementConstructor
 ): boolean {
   try {
     return Reflect.get(
       constructor,
-      RENDERED_MOTION_DEFINITION_MARKER
-    ) === RENDERED_MOTION_ELEMENT_API_MAJOR;
+      AVAL_DEFINITION_MARKER
+    ) === AVAL_ELEMENT_API_MAJOR;
   } catch {
     return false;
   }

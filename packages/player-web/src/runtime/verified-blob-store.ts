@@ -1,4 +1,4 @@
-import { FORMAT_DEFAULT_BUDGETS } from "@rendered-motion/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
 
 import {
   RuntimePlaybackError,
@@ -41,8 +41,8 @@ import {
 
 export type { VerifiedBlobAdmissionMode } from "./verified-blob-admission.js";
 
-export type VerifiedBlobKind = "unit" | "static";
-export type VerifiedBlobResourceCategory = "verified-unit" | "verified-static";
+export type VerifiedBlobKind = "unit";
+export type VerifiedBlobResourceCategory = "verified-unit";
 
 export interface VerifiedBlobDescriptor {
   readonly key: string;
@@ -93,7 +93,7 @@ export interface VerifiedBlobStoreSnapshot {
   readonly generation: number;
   readonly disposed: boolean;
   readonly verifiedBytes: number;
-  /** Exact bytes still backed by independent verified-unit/static leases. */
+  /** Exact bytes still backed by independent verified-unit leases. */
   readonly persistentBytes: number;
   readonly persistentLeaseCount: number;
   /** Reserved copied-promotion capacity not yet backed by a published copy. */
@@ -103,7 +103,6 @@ export interface VerifiedBlobStoreSnapshot {
   readonly interestedWaiterCount: number;
   readonly pendingLoadCount: number;
   readonly unitBlobs: Readonly<RuntimeBlobResidencySnapshot>;
-  readonly staticBlobs: Readonly<RuntimeBlobResidencySnapshot>;
 }
 
 export interface VerifiedBlobStoreOptions {
@@ -275,7 +274,7 @@ export class VerifiedBlobStore {
   }
 
   /**
-   * Allocate only the requested verified span. The transfer/PNG-copy lease is
+   * Allocate only the requested verified span. The transfer lease is
    * deliberately charged by the caller that owns the returned allocation.
    */
   public copyRange(
@@ -334,7 +333,6 @@ export class VerifiedBlobStore {
 
   public snapshot(): Readonly<VerifiedBlobStoreSnapshot> {
     const unitBlobs = this.#residencySnapshot("unit");
-    const staticBlobs = this.#residencySnapshot("static");
     let waiters = 0;
     let leaseCount = 0;
     let persistentBytes = 0;
@@ -360,7 +358,7 @@ export class VerifiedBlobStore {
     return Object.freeze({
       generation: this.#generation,
       disposed: this.#disposed,
-      verifiedBytes: unitBlobs.verifiedBytes + staticBlobs.verifiedBytes,
+      verifiedBytes: unitBlobs.verifiedBytes,
       persistentBytes,
       persistentLeaseCount: leaseCount,
       admittedBytes,
@@ -368,8 +366,7 @@ export class VerifiedBlobStore {
       pendingAdmissionCount: this.#pendingAdmissions.size,
       interestedWaiterCount: waiters,
       pendingLoadCount: this.#pendingLoads.size,
-      unitBlobs,
-      staticBlobs
+      unitBlobs
     });
   }
 
@@ -516,9 +513,7 @@ export class VerifiedBlobStore {
     if (load.admissionOperation !== null) return load.admissionOperation;
 
     const descriptor = load.entry.descriptor;
-    const category: VerifiedBlobResourceCategory = descriptor.kind === "unit"
-      ? "verified-unit"
-      : "verified-static";
+    const category: VerifiedBlobResourceCategory = "verified-unit";
     const pending = Promise.resolve()
       .then(() => this.#resources.reserve(category, descriptor.byteLength))
       .then((rawLease) => {
@@ -848,7 +843,7 @@ function captureDescriptors(
     if (typeof key !== "string" || key.length === 0 || key.length > 256) {
       throw new TypeError("verified blob key is invalid");
     }
-    if (value.kind !== "unit" && value.kind !== "static") {
+    if (value.kind !== "unit") {
       throw new TypeError("verified blob kind is invalid");
     }
     const byteLength = requirePositiveSafeInteger(

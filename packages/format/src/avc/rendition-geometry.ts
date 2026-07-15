@@ -1,14 +1,11 @@
-import type { Rect } from "../model.js";
+import type {
+  AvcProductionRenditionProfileV01,
+  Rect
+} from "../model.js";
 import { avcInvalid } from "./failure.js";
+import type { AvcQuantizationPolicy } from "./types.js";
 
-const MAX_CANVAS_DIMENSION = 512;
-const MAX_CODED_DIMENSION = 2_048;
-const MAX_CODED_PIXELS = 1_100_000;
 const PACKED_ALPHA_GUTTER = 8;
-
-export type AvcProductionRenditionProfileV01 =
-  | "avc-annexb-opaque-v0"
-  | "avc-annexb-packed-alpha-v0";
 
 interface AvcRenditionGeometryInputBase {
   readonly canvasWidth: number;
@@ -25,6 +22,14 @@ export type AvcRenditionGeometryInput =
     })
   | (AvcRenditionGeometryInputBase & {
       readonly profile: "avc-annexb-packed-alpha-v0";
+      readonly alphaRect: Rect;
+    })
+  | (AvcRenditionGeometryInputBase & {
+      readonly profile: "avc-annexb-opaque-v1";
+      readonly alphaRect?: never;
+    })
+  | (AvcRenditionGeometryInputBase & {
+      readonly profile: "avc-annexb-packed-alpha-v1";
       readonly alphaRect: Rect;
     });
 
@@ -46,6 +51,24 @@ export interface AvcRenditionGeometry {
   readonly visibleColorArea: number;
   readonly decodedRgbaBytes: number;
   readonly codedRgbaBytes: number;
+}
+
+export function avcQuantizationPolicyForRendition(
+  profile: AvcProductionRenditionProfileV01
+): AvcQuantizationPolicy {
+  switch (profile) {
+    case "avc-annexb-opaque-v0":
+    case "avc-annexb-packed-alpha-v0":
+      return "fixed-qp26-v0";
+    case "avc-annexb-opaque-v1":
+    case "avc-annexb-packed-alpha-v1":
+      return "bounded-qp-v1";
+    default:
+      return avcInvalid(
+        "rendition.profile",
+        "has an unsupported production AVC profile"
+      );
+  }
 }
 
 /**
@@ -73,27 +96,13 @@ export function deriveAvcRenditionGeometryAtPath(
   path: string
 ): AvcRenditionGeometry {
   requireInputObject(input, path);
-  const codedWidth = boundedPositiveInteger(
-    input.codedWidth,
-    MAX_CODED_DIMENSION,
-    `${path}.codedWidth`
-  );
-  const codedHeight = boundedPositiveInteger(
-    input.codedHeight,
-    MAX_CODED_DIMENSION,
-    `${path}.codedHeight`
-  );
+  const codedWidth = positiveInteger(input.codedWidth, `${path}.codedWidth`);
+  const codedHeight = positiveInteger(input.codedHeight, `${path}.codedHeight`);
   const codedPixels = checkedProduct(
     codedWidth,
     codedHeight,
     `${path}.codedWidth`
   );
-  if (codedPixels > MAX_CODED_PIXELS) {
-    avcInvalid(
-      `${path}.codedWidth`,
-      `coded pixel count must be at most ${String(MAX_CODED_PIXELS)}`
-    );
-  }
 
   const colorPath = `${path}.alphaLayout.colorRect`;
   const colorRect = cloneRect(input.colorRect, colorPath);
@@ -110,14 +119,14 @@ export function deriveAvcRenditionGeometryAtPath(
     colorPath,
     "visible color rectangle does not match the derived geometry"
   );
-  if (input.profile === "avc-annexb-opaque-v0") {
+  if (isOpaqueProfile(input.profile)) {
     if (Object.prototype.hasOwnProperty.call(input, "alphaRect")) {
       avcInvalid(
         `${path}.alphaLayout`,
         "opaque AVC geometry must not declare an alpha rectangle"
       );
     }
-  } else if (input.profile === "avc-annexb-packed-alpha-v0") {
+  } else if (isPackedAlphaProfile(input.profile)) {
     const alphaPath = `${path}.alphaLayout.alphaRect`;
     const visibleAlphaRect = cloneRect(input.alphaRect, alphaPath);
     const expectedAlphaRect = derived.visibleAlphaRect;
@@ -154,27 +163,11 @@ export function deriveAvcRenditionGeometryFromVisibleAtPath(
   path: string
 ): AvcRenditionGeometry {
   requireVisibleInputObject(input, path);
-  const canvasWidth = boundedPositiveInteger(
-    input.canvasWidth,
-    MAX_CANVAS_DIMENSION,
-    "canvas.width"
-  );
-  const canvasHeight = boundedPositiveInteger(
-    input.canvasHeight,
-    MAX_CANVAS_DIMENSION,
-    "canvas.height"
-  );
+  const canvasWidth = positiveInteger(input.canvasWidth, "canvas.width");
+  const canvasHeight = positiveInteger(input.canvasHeight, "canvas.height");
   const colorPath = `${path}.alphaLayout.colorRect`;
-  const visibleWidth = boundedPositiveInteger(
-    input.visibleWidth,
-    MAX_CANVAS_DIMENSION,
-    `${colorPath}[2]`
-  );
-  const visibleHeight = boundedPositiveInteger(
-    input.visibleHeight,
-    MAX_CANVAS_DIMENSION,
-    `${colorPath}[3]`
-  );
+  const visibleWidth = positiveInteger(input.visibleWidth, `${colorPath}[2]`);
+  const visibleHeight = positiveInteger(input.visibleHeight, `${colorPath}[3]`);
   if (visibleWidth > canvasWidth || visibleHeight > canvasHeight) {
     avcInvalid(colorPath, "visible color rectangle must fit the logical canvas");
   }
@@ -185,8 +178,8 @@ export function deriveAvcRenditionGeometryFromVisibleAtPath(
     avcInvalid(colorPath, "visible color rectangle must retain the canvas aspect");
   }
   if (
-    input.profile !== "avc-annexb-opaque-v0" &&
-    input.profile !== "avc-annexb-packed-alpha-v0"
+    !isOpaqueProfile(input.profile) &&
+    !isPackedAlphaProfile(input.profile)
   ) {
     avcInvalid(`${path}.profile`, "has an unsupported production AVC profile");
   }
@@ -201,7 +194,7 @@ export function deriveAvcRenditionGeometryFromVisibleAtPath(
   ]) as Rect;
   let storageHeight = paneHeight;
   let visibleAlphaRect: Rect | undefined;
-  if (input.profile === "avc-annexb-packed-alpha-v0") {
+  if (isPackedAlphaProfile(input.profile)) {
     const alphaPath = `${path}.alphaLayout.alphaRect`;
     visibleAlphaRect = Object.freeze([
       0,
@@ -217,17 +210,11 @@ export function deriveAvcRenditionGeometryFromVisibleAtPath(
   }
   const codedWidth = align16(paneWidth, `${path}.codedWidth`);
   const codedHeight = align16(storageHeight, `${path}.codedHeight`);
-  if (codedWidth > MAX_CODED_DIMENSION || codedHeight > MAX_CODED_DIMENSION) {
-    avcInvalid(path, "derived coded dimensions exceed the AVC profile");
-  }
   const codedPixels = checkedProduct(
     codedWidth,
     codedHeight,
     `${path}.codedWidth`
   );
-  if (codedPixels > MAX_CODED_PIXELS) {
-    avcInvalid(path, `coded pixel count must be at most ${String(MAX_CODED_PIXELS)}`);
-  }
   const decodedStorageRect = Object.freeze([
     0,
     0,
@@ -263,6 +250,22 @@ export function deriveAvcRenditionGeometryFromVisibleAtPath(
   });
 }
 
+function isOpaqueProfile(
+  profile: AvcProductionRenditionProfileV01
+): profile is "avc-annexb-opaque-v0" | "avc-annexb-opaque-v1" {
+  return profile === "avc-annexb-opaque-v0" ||
+    profile === "avc-annexb-opaque-v1";
+}
+
+function isPackedAlphaProfile(
+  profile: AvcProductionRenditionProfileV01
+): profile is
+  | "avc-annexb-packed-alpha-v0"
+  | "avc-annexb-packed-alpha-v1" {
+  return profile === "avc-annexb-packed-alpha-v0" ||
+    profile === "avc-annexb-packed-alpha-v1";
+}
+
 function requireInputObject(
   input: AvcRenditionGeometryInput,
   path: string
@@ -281,21 +284,13 @@ function requireVisibleInputObject(
   }
 }
 
-function boundedPositiveInteger(
-  value: unknown,
-  maximum: number,
-  path: string
-): number {
+function positiveInteger(value: unknown, path: string): number {
   if (
     typeof value !== "number" ||
     !Number.isSafeInteger(value) ||
-    value < 1 ||
-    value > maximum
+    value < 1
   ) {
-    avcInvalid(
-      path,
-      `must be a positive safe integer no greater than ${String(maximum)}`
-    );
+    avcInvalid(path, "must be a positive safe integer");
   }
   return value;
 }
@@ -311,16 +306,8 @@ function cloneRect(value: unknown, path: string): Rect {
   }
   const x = nonNegativeInteger(value[0], `${path}[0]`);
   const y = nonNegativeInteger(value[1], `${path}[1]`);
-  const width = boundedPositiveInteger(
-    value[2],
-    MAX_CANVAS_DIMENSION,
-    `${path}[2]`
-  );
-  const height = boundedPositiveInteger(
-    value[3],
-    MAX_CANVAS_DIMENSION,
-    `${path}[3]`
-  );
+  const width = positiveInteger(value[2], `${path}[2]`);
+  const height = positiveInteger(value[3], `${path}[3]`);
   return Object.freeze([x, y, width, height]);
 }
 

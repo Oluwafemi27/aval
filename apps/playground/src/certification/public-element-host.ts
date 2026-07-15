@@ -1,8 +1,8 @@
 import type {
-  RenderedMotionDiagnostics,
-  RenderedMotionElement,
-  RenderedMotionElementEventMap
-} from "@rendered-motion/element";
+  AvalDiagnostics,
+  AvalElement,
+  AvalElementEventMap
+} from "@aval/element";
 
 import type { RouteLedger } from "./route-ledger.js";
 
@@ -21,8 +21,8 @@ export function createPublicMotionElement(
   parent: HTMLElement,
   routeLedger?: RouteLedger,
   integrity?: string
-): RenderedMotionElement {
-  const element = document.createElement("rendered-motion");
+): AvalElement {
+  const element = document.createElement("aval-player");
   element.className = "certification-motion";
   element.autoplay = "visible";
   element.motion = "full";
@@ -30,7 +30,7 @@ export function createPublicMotionElement(
   if (integrity !== undefined) element.integrity = integrity;
   const fallback = document.createElement("span");
   fallback.slot = "fallback";
-  fallback.textContent = "Static motion fallback";
+  fallback.textContent = "Motion fallback";
   element.append(fallback);
   if (routeLedger !== undefined) attachRouteLedger(element, routeLedger);
   parent.append(element);
@@ -38,10 +38,10 @@ export function createPublicMotionElement(
 }
 
 export async function preparePublicMotion(
-  element: RenderedMotionElement,
+  element: AvalElement,
   timeoutMs = 20_000,
   signal?: AbortSignal
-): Promise<Readonly<RenderedMotionDiagnostics>> {
+): Promise<Readonly<AvalDiagnostics>> {
   await waitForEffectiveVisibility(element, Math.min(timeoutMs, 2_000), signal);
   await element.prepare({ timeoutMs, ...(signal === undefined ? {} : { signal }) });
   let diagnostics = element.getDiagnostics({ trace: true });
@@ -63,10 +63,10 @@ export async function preparePublicMotion(
 }
 
 async function waitForVisibilityRecovery(
-  element: RenderedMotionElement,
+  element: AvalElement,
   timeoutMs: number,
   signal?: AbortSignal
-): Promise<Readonly<RenderedMotionDiagnostics>> {
+): Promise<Readonly<AvalDiagnostics>> {
   const deadline = performance.now() + timeoutMs;
   for (;;) {
     signal?.throwIfAborted();
@@ -83,7 +83,7 @@ async function waitForVisibilityRecovery(
 }
 
 async function waitForEffectiveVisibility(
-  element: RenderedMotionElement,
+  element: AvalElement,
   timeoutMs: number,
   signal?: AbortSignal
 ): Promise<void> {
@@ -102,7 +102,7 @@ async function waitForEffectiveVisibility(
   }
 }
 
-export async function retirePublicMotion(element: RenderedMotionElement): Promise<Readonly<RenderedMotionDiagnostics>> {
+export async function retirePublicMotion(element: AvalElement): Promise<Readonly<AvalDiagnostics>> {
   element.remove();
   await element.dispose();
   const diagnostics = element.getDiagnostics({ trace: true });
@@ -112,9 +112,9 @@ export async function retirePublicMotion(element: RenderedMotionElement): Promis
   return diagnostics;
 }
 
-function attachRouteLedger(element: RenderedMotionElement, ledger: RouteLedger): void {
+function attachRouteLedger(element: AvalElement, ledger: RouteLedger): void {
   for (const type of PUBLIC_EVENT_NAMES) {
-    element.addEventListener(type, ((event: RenderedMotionElementEventMap[typeof type]) => {
+    element.addEventListener(type, ((event: AvalElementEventMap[typeof type]) => {
       const detail = event.detail as unknown as Record<string, unknown>;
       ledger.append({
         event: type,

@@ -5,11 +5,10 @@ import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
 import { RuntimePlaybackError, normalizeRuntimeFailure } from "./errors.js";
 import {
   IntegratedPlayer,
-  PlaybackFallbackError,
   type IntegratedCandidateAttempt,
   type IntegratedCandidateAttemptContext,
   type IntegratedCandidateFactory,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player.js";
 import {
   Deferred,
@@ -39,7 +38,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
       const store = new RecordingStaticStore(timeline);
       const factory = new RecordingCandidateFactory(timeline);
       let factoryCatalog: RuntimeAssetCatalog | null = null;
-      const createStaticStore = vi.fn((catalog: RuntimeAssetCatalog) => {
+      const createFallbackStore = vi.fn((catalog: RuntimeAssetCatalog) => {
         expect(catalog).toBe(session.catalog);
         return store;
       });
@@ -48,7 +47,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
       const player = new IntegratedPlayer({
         assetSession: session,
         assetSessionOwnership: "external",
-        createStaticStore,
+        createFallbackStore,
         candidateFactory: factory,
         timers: new ManualTimers()
       });
@@ -59,14 +58,10 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
 
       expect(player.catalog).toBe(session.catalog);
       expect(factoryCatalog).toBe(session.catalog);
-      expect(timeline.indexOf("session:static:idle-static"))
-        .toBeLessThan(timeline.indexOf("store:install:idle"));
-      expect(timeline.indexOf("session:all-statics"))
-        .toBeLessThan(timeline.indexOf("store:validate-all"));
       expect(timeline.indexOf("session:units:opaque-high"))
         .toBeLessThan(timeline.indexOf("candidate:create:opaque-high"));
       expect(copySample).not.toHaveBeenCalled();
-      expect(createStaticStore).toHaveBeenCalledOnce();
+      expect(createFallbackStore).toHaveBeenCalledOnce();
 
       await player.dispose();
       expect(session.disposeCalls).toBe(0);
@@ -76,29 +71,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
     }
   );
 
-  it("gates static decode and candidate inspection on verified residency", async () => {
-    const staticTimeline: string[] = [];
-    const staticSession = new FakeAssetSession("range", staticTimeline, {
-      rejectStatic: true
-    });
-    const staticStore = new RecordingStaticStore(staticTimeline);
-    const staticFactory = new RecordingCandidateFactory(staticTimeline);
-    const staticPlayer = new IntegratedPlayer({
-      assetSession: staticSession,
-      assetSessionOwnership: "external",
-      createStaticStore: () => staticStore,
-      candidateFactory: staticFactory,
-      timers: new ManualTimers()
-    });
-
-    await expect(staticPlayer.prepare()).rejects.toBeInstanceOf(
-      PlaybackFallbackError
-    );
-    expect(staticStore.calls).toEqual([]);
-    expect(staticFactory.calls).toEqual([]);
-    await staticPlayer.dispose();
-    await staticSession.dispose();
-
+  it("gates candidate inspection on verified unit residency", async () => {
     const unitTimeline: string[] = [];
     const unitSession = new FakeAssetSession("range", unitTimeline, {
       rejectedRendition: "opaque-high"
@@ -108,18 +81,22 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
     const unitPlayer = new IntegratedPlayer({
       assetSession: unitSession,
       assetSessionOwnership: "external",
-      createStaticStore: () => new RecordingStaticStore(unitTimeline),
+      createFallbackStore: () => new RecordingStaticStore(unitTimeline),
       candidateFactory: unitFactory,
       timers: new ManualTimers()
     });
 
     await expect(unitPlayer.prepare()).resolves.toMatchObject({
-      mode: "animated",
-      report: { selectedRendition: "opaque-low" }
+      mode: "static",
+      report: {
+        selectedRendition: null,
+        candidates: [{ rendition: "opaque-high", outcome: "rejected" }]
+      }
     });
     expect(copySample).not.toHaveBeenCalled();
     expect(unitSession.calls).toContain("evict:opaque-high");
     expect(unitFactory.calls).not.toContain("create:opaque-high");
+    expect(unitFactory.calls).not.toContain("create:opaque-low");
     await unitPlayer.dispose();
     await unitSession.dispose();
   });
@@ -133,7 +110,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
       assetSession: session,
       assetSessionOwnership: "external",
       initialVisibility: "hidden",
-      createStaticStore: () => new RecordingStaticStore(timeline),
+      createFallbackStore: () => new RecordingStaticStore(timeline),
       candidateFactory: factory,
       timers: new ManualTimers()
     });
@@ -167,7 +144,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
     const player = new IntegratedPlayer({
       assetSession: session,
       assetSessionOwnership: "player",
-      createStaticStore: () => new RecordingStaticStore(timeline),
+      createFallbackStore: () => new RecordingStaticStore(timeline),
       candidateFactory: factory,
       timers: new ManualTimers()
     });
@@ -188,7 +165,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
     const hidePlayer = new IntegratedPlayer({
       assetSession: hideSession,
       assetSessionOwnership: "external",
-      createStaticStore: () => new RecordingStaticStore(hideTimeline),
+      createFallbackStore: () => new RecordingStaticStore(hideTimeline),
       candidateFactory: new RecordingCandidateFactory(hideTimeline),
       timers: new ManualTimers()
     });
@@ -209,7 +186,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
     const contextPlayer = new IntegratedPlayer({
       assetSession: contextSession,
       assetSessionOwnership: "external",
-      createStaticStore: () => new RecordingStaticStore(contextTimeline),
+      createFallbackStore: () => new RecordingStaticStore(contextTimeline),
       candidateFactory: contextFactory,
       timers: new ManualTimers()
     });
@@ -225,7 +202,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
   it("rejects ambiguous or implicit session ownership", () => {
     const session = new FakeAssetSession("range", []);
     const common = {
-      createStaticStore: () => new RecordingStaticStore([]),
+      createFallbackStore: () => new RecordingStaticStore([]),
       candidateFactory: new RecordingCandidateFactory([])
     };
     expect(() => new IntegratedPlayer({
@@ -246,7 +223,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
     const options = () => ({
       assetSession: session,
       assetSessionOwnership: "external" as const,
-      createStaticStore: () => new RecordingStaticStore([]),
+      createFallbackStore: () => new RecordingStaticStore([]),
       candidateFactory: new RecordingCandidateFactory([]),
       timers: new ManualTimers()
     });
@@ -270,7 +247,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
 
     expect(() => new IntegratedPlayer({
       ...options(),
-      createStaticStore: () => { throw new Error("constructor seam"); }
+      createFallbackStore: () => { throw new Error("constructor seam"); }
     })).toThrow("constructor seam");
     await Promise.resolve();
     const afterFailure = new IntegratedPlayer(options());
@@ -279,7 +256,7 @@ describe("IntegratedPlayer sparse asset-session composition", () => {
   });
 });
 
-class RecordingStaticStore implements IntegratedStaticSurfaceStore {
+class RecordingStaticStore implements IntegratedFallbackStore {
   public readonly calls: string[] = [];
   readonly #timeline: string[];
   #state: string | null = null;
@@ -366,7 +343,6 @@ class FakeContextTarget implements BrowserContextRecoveryEventTarget {
 }
 
 interface FakeAssetSessionBehavior {
-  readonly rejectStatic?: boolean;
   readonly rejectedRendition?: string;
   readonly unitGate?: Deferred<void>;
 }
@@ -390,22 +366,6 @@ class FakeAssetSession implements RuntimeAssetSession {
     this.#behavior = behavior;
   }
   public get disposed(): boolean { return this.#disposed; }
-  public async ensureStatic(
-    staticFrame: string,
-    options: Readonly<RuntimeAssetEnsureOptions> = {}
-  ): Promise<Readonly<VerifiedBlobHandle>> {
-    this.#record(`static:${staticFrame}`);
-    throwIfAborted(options.signal);
-    if (this.#behavior.rejectStatic === true) throw integrityError();
-    return handle("static", staticFrame);
-  }
-  public async ensureAllStatics(
-    options: Readonly<RuntimeAssetEnsureOptions> = {}
-  ): Promise<readonly Readonly<VerifiedBlobHandle>[]> {
-    this.#record("all-statics");
-    throwIfAborted(options.signal);
-    return Object.freeze([]);
-  }
   public async ensureUnit(
     rendition: string,
     unit: string,
@@ -459,7 +419,7 @@ class FakeAssetSession implements RuntimeAssetSession {
 }
 
 function handle(
-  kind: "unit" | "static",
+  kind: "unit",
   key: string
 ): Readonly<VerifiedBlobHandle> {
   return Object.freeze({ key, kind, byteLength: 1, generation: 0 });

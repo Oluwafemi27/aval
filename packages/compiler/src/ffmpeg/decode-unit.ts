@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 
-import type { AvcRenditionGeometry } from "@rendered-motion/format";
+import type { AvcRenditionGeometry } from "@aval/format";
 
 import { revalidateAvcRenditionGeometry } from "../compile/validated-rendition-geometry.js";
 import { CompilerError } from "../diagnostics.js";
@@ -44,12 +44,11 @@ export function createDecodeAvcUnitInvocation(
   const { width, height } = validateGeometry(input.geometry);
   if (
     !Number.isSafeInteger(input.expectedFrameCount) ||
-    input.expectedFrameCount < 1 ||
-    input.expectedFrameCount > 900
+    input.expectedFrameCount < 1
   ) {
     throw new CompilerError(
       "FRAME_RANGE_INVALID",
-      "Decode-back frame count must fit the compiled frame budget"
+      "Decode-back frame count must be a positive safe integer"
     );
   }
   const expectedFrameBytes = checkedProduct(width, height, 4);
@@ -59,7 +58,6 @@ export function createDecodeAvcUnitInvocation(
       "-hide_banner",
       "-loglevel", "error",
       "-xerror",
-      "-max_alloc", String(64 * 1024 * 1024),
       "-protocol_whitelist", "pipe",
       "-f", "h264",
       "-i", "pipe:0",
@@ -95,7 +93,10 @@ export async function decodeAvcUnitFrames(
     invocation.expectedFrameBytes,
     input.expectedFrameCount
   );
-  const frame = new Uint8Array(invocation.expectedFrameBytes);
+  const frame = allocateBytes(
+    invocation.expectedFrameBytes,
+    "decode-back frame"
+  );
   let frameOffset = 0;
   let frameIndex = 0;
   const sink = new Writable({
@@ -174,4 +175,16 @@ function checkedProduct(...values: number[]): number {
     result *= value;
   }
   return result;
+}
+
+function allocateBytes(length: number, operation: string): Uint8Array {
+  try {
+    return new Uint8Array(length);
+  } catch (error) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      `Could not allocate ${String(length)} bytes for ${operation}`,
+      { cause: error }
+    );
+  }
 }

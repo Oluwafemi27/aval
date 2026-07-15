@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveAvcRenditionGeometry } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometry } from "@aval/format";
 
 import {
   createDecodeAvcUnitInvocation
@@ -26,7 +26,7 @@ describe("bounded AVC decode-back invocation", () => {
       cwd: ".",
       arguments: [
         "-nostdin", "-hide_banner", "-loglevel", "error", "-xerror",
-        "-max_alloc", "67108864", "-protocol_whitelist", "pipe",
+        "-protocol_whitelist", "pipe",
         "-f", "h264", "-i", "pipe:0",
         "-map", "0:v:0", "-an", "-sn", "-dn",
         "-map_metadata", "-1", "-map_chapters", "-1",
@@ -52,6 +52,10 @@ describe("bounded AVC decode-back invocation", () => {
       geometry,
       expectedFrameCount: 0
     })).toThrow();
+    expect(createDecodeAvcUnitInvocation({
+      geometry,
+      expectedFrameCount: 901
+    }).arguments).toContain("901");
     expect(() => createDecodeAvcUnitInvocation({
       geometry: { ...geometry, decodedStorageRect: [0, 0, 3, 2] },
       expectedFrameCount: 1

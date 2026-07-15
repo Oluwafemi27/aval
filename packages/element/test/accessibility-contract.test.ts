@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 describe("accessibility contract", () => {
   it("does not inject control semantics or keyboard activation", async () => {
     const source = await readFile(
-      resolve(process.cwd(), "packages/element/src/rendered-motion-element.ts"),
+      resolve(process.cwd(), "packages/element/src/aval-element.ts"),
       "utf8"
     );
     for (const prohibited of [

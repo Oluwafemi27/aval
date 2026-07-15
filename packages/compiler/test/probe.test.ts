@@ -43,7 +43,7 @@ function probeJson(
 }
 
 describe("FFprobe parser", () => {
-  it("parses and freezes a bounded CFR source", () => {
+  it("parses and freezes a CFR source", () => {
     const result = parseProbeJson(
       probeJson([0, 1, 2]),
       "clip.mp4"
@@ -119,31 +119,38 @@ describe("FFprobe parser", () => {
     )).variableFrameRate).toBe(false);
   });
 
-  it("does not round an over-limit exact duration down to thirty seconds", () => {
+  it("keeps exact large tick arithmetic without a duration policy ceiling", () => {
     const ticksPerSecond = 2 ** 49;
     const halfThirtySeconds = 15 * ticksPerSecond;
-    expect(() => parseProbeJson(probeJson(
+    expect(parseProbeJson(probeJson(
       [-halfThirtySeconds, halfThirtySeconds],
       {
         durationTicks: 1,
         frameRate: "1/1",
         timeBase: `1/${String(ticksPerSecond)}`
       }
-    ))).toThrowError(expect.objectContaining({ code: "SOURCE_LIMIT" }));
+    )).frameCount).toBe(2);
   });
 
-  it("rejects declared media beyond thirty seconds outside the probe window", () => {
+  it("accepts declared media beyond the former thirty-second ceiling", () => {
     const over = JSON.parse(probeJson([0]));
-    over.streams[0].duration = "30.0000001";
-    over.format.duration = "30.0000001";
-    expect(() => parseProbeJson(JSON.stringify(over), "sparse.mov"))
-      .toThrowError(expect.objectContaining({ code: "SOURCE_LIMIT" }));
+    over.streams[0].duration = "45.500000";
+    over.format.duration = "45.500000";
+    expect(parseProbeJson(JSON.stringify(over), "long.mov").durationMicros)
+      .toBe(45_500_000);
+  });
 
-    const exact = JSON.parse(probeJson([0]));
-    exact.streams[0].duration = "30.0000000";
-    exact.format.duration = "30.0000000";
-    expect(parseProbeJson(JSON.stringify(exact), "bounded.mov").durationMicros)
-      .toBe(30_000_000);
+  it("accepts dimensions and frame counts above former source ceilings", () => {
+    const timestamps = Array.from({ length: 1_801 }, (_, index) => index);
+    const value = JSON.parse(probeJson(timestamps));
+    value.streams[0].width = 4_097;
+    value.streams[0].height = 2_305;
+    const parsed = parseProbeJson(JSON.stringify(value));
+    expect(parsed).toMatchObject({
+      width: 4_097,
+      height: 2_305,
+      frameCount: 1_801
+    });
   });
 
   it("parses rational and decimal time without floating-point drift", () => {
@@ -160,11 +167,6 @@ describe("FFprobe parser", () => {
       (() => {
         const value = JSON.parse(probeJson([0]));
         value.format.format_name = "hls";
-        return value;
-      })(),
-      (() => {
-        const value = JSON.parse(probeJson([0]));
-        value.streams[0].width = 4097;
         return value;
       })(),
       JSON.parse(probeJson([0, 0])),

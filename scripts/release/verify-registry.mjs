@@ -8,7 +8,7 @@ import { loadPublicationAuthorization } from "./publication-support.mjs";
 export function verifyRegistryReleaseSet({ releaseSet, tag, readState }) {
   if (tag !== "next" && tag !== "latest") throw new Error("registry verification tag must be next or latest");
   if (releaseSet === null || typeof releaseSet !== "object" || !Array.isArray(releaseSet.packages) || releaseSet.packages.length !== 5) throw new Error("registry verification requires the exact five-package release set");
-  const expectedNames = ["@rendered-motion/graph", "@rendered-motion/format", "@rendered-motion/player-web", "@rendered-motion/element", "@rendered-motion/compiler"];
+  const expectedNames = ["@aval/graph", "@aval/format", "@aval/player-web", "@aval/element", "@aval/compiler"];
   if (releaseSet.packages.some((archive, index) => archive?.name !== expectedNames[index] || !isCanonicalIntegrity(archive.registryIntegrity))) throw new Error("registry verification release-set identity/order is invalid");
   const results = [];
   for (const archive of releaseSet.packages) {

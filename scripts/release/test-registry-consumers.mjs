@@ -26,7 +26,7 @@ verifyRegistryReleaseSet({
   tag: "next",
   readState: (name, version) => readStableRegistryState(name, version, { registry })
 });
-const temporary = await mkdtemp(join(tmpdir(), "rendered-motion-registry-consumers-"));
+const temporary = await mkdtemp(join(tmpdir(), "aval-registry-consumers-"));
 try {
   const exact = authorization.releaseSet.order.map((name) => `${name}@1.0.0`);
   for (const fixture of ["node-esm", "typescript-nodenext", "typescript-bundler", "browser-vite"]) {

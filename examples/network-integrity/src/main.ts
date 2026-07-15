@@ -1,11 +1,11 @@
 import {
-  defineRenderedMotionElement,
-  type RenderedMotionElement
-} from "@rendered-motion/element";
+  defineAvalElement,
+  type AvalElement
+} from "@aval/element";
 
-defineRenderedMotionElement();
+defineAvalElement();
 
-const motion = document.querySelector<RenderedMotionElement>("#motion");
+const motion = document.querySelector<AvalElement>("#motion");
 const status = document.querySelector<HTMLOutputElement>("#status");
 if (motion === null || status === null) throw new Error("example markup is incomplete");
 

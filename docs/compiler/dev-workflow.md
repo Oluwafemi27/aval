@@ -1,7 +1,7 @@
 # Local watch workflow
 
 ```sh
-rma dev motion.json --out motion.rma
+avl dev motion.json --out motion.avl
 ```
 
 The watcher debounces bursts for 100 ms and runs one abortable compile at a
@@ -15,7 +15,7 @@ replacement, multi-player stress, compiler summaries, and bounded public
 diagnostics. Open it explicitly when desired:
 
 ```sh
-rma dev motion.json --out motion.rma --open
+avl dev motion.json --out motion.avl --open
 ```
 
 Development servers bind loopback. They do not accept uploads, expose source

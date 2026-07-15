@@ -3,15 +3,18 @@ import {
   splitAnnexBAccessUnit
 } from "./annex-b.js";
 import { FORMAT_DEFAULT_BUDGETS } from "../constants.js";
+import { FormatError } from "../errors.js";
 import { requireAvc } from "./failure.js";
 import { parseSps } from "./parameter-sets.js";
 
 const CONSTRAINED_BASELINE_C0 = 0xc0;
+const CONSTRAINED_BASELINE_LEVEL_1B_D0 = 0xd0;
 const CONSTRAINED_BASELINE_E0 = 0xe0;
 
 /**
- * Canonicalizes libx264's valid `42 C0 20` SPS declaration to the format's
- * frozen `42 E0 20` codec declaration. Only constraint_set2_flag is changed.
+ * Canonicalizes libx264's valid `42 C0 xx` and Level-1b `42 D0 0B` SPS
+ * declarations to the format's `42 E0 xx` Constrained Baseline declaration.
+ * The authored level byte is preserved; Level 1b is promoted to Level 1.1.
  * Each SPS is fully parsed both before and after the rewrite.
  */
 export function canonicalizeAvcConstraintSet2(
@@ -29,21 +32,31 @@ export function canonicalizeAvcConstraintSet2(
     "access unit exceeds the sample budget"
   );
   const nals = splitAnnexBAccessUnit(accessUnitBytes, path);
-  const output = accessUnitBytes.slice();
+  let output: Uint8Array;
+  try {
+    output = accessUnitBytes.slice();
+  } catch {
+    throw new FormatError(
+      "PROFILE_INVALID",
+      `AVC canonicalization allocation of ${String(accessUnitBytes.byteLength)} bytes failed`,
+      { path }
+    );
+  }
   for (let index = 0; index < nals.length; index += 1) {
     const nal = nals[index];
     if (nal?.type !== AVC_NAL_TYPE_SPS) {
       continue;
     }
     const nalPath = `${path}.nals[${String(index)}]`;
-    parseSps(nal, nalPath);
+    parseSps(nal, nalPath, "encoder-candidate");
     const compatibilityOffset = nal.offset + 2;
     const compatibility = output[compatibilityOffset];
     requireAvc(
       compatibility === CONSTRAINED_BASELINE_C0 ||
+        compatibility === CONSTRAINED_BASELINE_LEVEL_1B_D0 ||
         compatibility === CONSTRAINED_BASELINE_E0,
       nalPath,
-      "only an SPS C0 to E0 constraint_set2 canonicalization is permitted",
+      "only an SPS C0/D0 to E0 constraint canonicalization is permitted",
       compatibilityOffset
     );
     output[compatibilityOffset] = CONSTRAINED_BASELINE_E0;

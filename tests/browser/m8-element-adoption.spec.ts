@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("public element loads the real M7 asset, exposes authored data, and cleans up", async ({ page }) => {
   await page.goto("/m8-dev-entry.html");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(
     () => motion.evaluate((element) =>
       (element as unknown as { readiness: string }).readiness

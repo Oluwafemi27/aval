@@ -8,6 +8,7 @@ import {
   generateReferenceGraphFixture,
   generateReferenceLoopFixture
 } from "./fixture-generator.js";
+import { canonicalAssetFixture } from "./asset-fixture.js";
 import { mutationSeeds } from "../../../tests/mutation/seed-profile.js";
 
 const SEEDS = mutationSeeds([1, 0x5eedc0de, 0xc0ffee, 0xffff_ffff]);
@@ -125,6 +126,23 @@ function withByte(source: Uint8Array, offset: number, value: number): Uint8Array
   return bytes;
 }
 
+function fixtureWithPadding(): Uint8Array {
+  for (let suffixLength = 0; suffixLength < 8; suffixLength += 1) {
+    const fixture = canonicalAssetFixture({
+      generatorSuffix: "x".repeat(suffixLength)
+    });
+    const layout = deriveCanonicalAssetLayout(
+      parseFrontIndex(fixture.bytes).header,
+      fixture.manifest,
+      fixture.records
+    );
+    if (layout.paddingRanges.some(({ length }) => length > 0)) {
+      return fixture.bytes;
+    }
+  }
+  throw new Error("could not construct a fixture with padding");
+}
+
 describe("M4 seeded complete-asset mutation fuzzing", () => {
   const sources = [generateReferenceLoopFixture(), generateReferenceGraphFixture()];
 
@@ -143,7 +161,7 @@ describe("M4 seeded complete-asset mutation fuzzing", () => {
   }
 
   it("maps structured header, index, padding, and profile mutations to stable outcomes", () => {
-    const source = generateReferenceGraphFixture();
+    const source = fixtureWithPadding();
     const front = parseFrontIndex(source);
     const index = front.header.indexOffset;
     const firstRecord = index + 16;
@@ -291,10 +309,6 @@ describe("M4 seeded complete-asset mutation fuzzing", () => {
       [
         "reference sample profile",
         () => withByte(source, front.records[0]!.payloadOffset + 4, 1)
-      ],
-      [
-        "static PNG profile",
-        () => withByte(source, front.manifest.staticFrames[0]!.offset + 25, 2)
       ]
     ];
 

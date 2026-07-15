@@ -1,8 +1,8 @@
-import type { CompiledManifestV01, EdgeV01 } from "@rendered-motion/format";
+import type { CompiledManifestV01, EdgeV01 } from "@aval/format";
 import type {
   GraphEdgeDefinition,
   ValidatedMotionGraph
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import { planEdgeLead } from "./edge-lead.js";
 import type {

@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const browserPort = process.env.RMA_PLAYWRIGHT_PORT ?? "4173";
+const browserPort = process.env.AVL_PLAYWRIGHT_PORT ?? "4173";
 const browserBaseUrl = `http://127.0.0.1:${browserPort}`;
 
 export default defineConfig({
@@ -20,11 +20,11 @@ export default defineConfig({
   use: {
     baseURL: browserBaseUrl,
     trace: "retain-on-failure",
-    screenshot: process.env.RMA_SCREENSHOTS === "off" ? "off" : "only-on-failure"
+    screenshot: process.env.AVL_SCREENSHOTS === "off" ? "off" : "only-on-failure"
   },
   webServer: {
     command:
-      `npm run dev -w @rendered-motion/playground -- --port ${browserPort} --strictPort`,
+      `npm run dev -w @aval/playground -- --port ${browserPort} --strictPort`,
     url: browserBaseUrl,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000

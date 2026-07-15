@@ -12,22 +12,22 @@ const UINT32_MAX = 0xffff_ffff;
 export function mutationSeeds(
   fallback: readonly number[]
 ): readonly number[] {
-  const encoded = process.env.RMA_MUTATION_SEEDS;
+  const encoded = process.env.AVL_MUTATION_SEEDS;
   if (encoded === undefined) return freezeValidated(fallback, "fallback");
   if (encoded.length === 0 || encoded.length > 1_024) {
-    throw new Error("RMA_MUTATION_SEEDS has an invalid encoded length");
+    throw new Error("AVL_MUTATION_SEEDS has an invalid encoded length");
   }
   const fields = encoded.split(",");
   if (fields.length > MAX_PROFILE_SEEDS) {
-    throw new Error(`RMA_MUTATION_SEEDS exceeds ${String(MAX_PROFILE_SEEDS)} seeds`);
+    throw new Error(`AVL_MUTATION_SEEDS exceeds ${String(MAX_PROFILE_SEEDS)} seeds`);
   }
   const seeds = fields.map((field) => {
     if (!/^(?:0|[1-9][0-9]*)$/u.test(field)) {
-      throw new Error(`RMA_MUTATION_SEEDS contains a non-canonical uint32: ${field}`);
+      throw new Error(`AVL_MUTATION_SEEDS contains a non-canonical uint32: ${field}`);
     }
     return Number(field);
   });
-  return freezeValidated(seeds, "RMA_MUTATION_SEEDS");
+  return freezeValidated(seeds, "AVL_MUTATION_SEEDS");
 }
 
 function freezeValidated(

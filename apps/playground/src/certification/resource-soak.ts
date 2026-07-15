@@ -3,7 +3,7 @@ import {
   DEFAULT_MAXIMUM_PAGE_PHYSICAL_BYTES,
   DEFAULT_MAXIMUM_PLAYER_LOGICAL_BYTES,
   createRuntimePageResourcePolicy
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import { BrowserResourceLedger } from "./resource-ledger.js";
 import { createPublicMotionElement, preparePublicMotion, retirePublicMotion } from "./public-element-host.js";

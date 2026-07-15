@@ -34,7 +34,6 @@ export interface RuntimeFailureContext {
   readonly unit?: string;
   readonly state?: string;
   readonly edge?: string;
-  readonly staticFrame?: string;
   readonly path?: string;
   readonly operation?: string;
   readonly sourceCode?: string;
@@ -184,7 +183,6 @@ function normalizeContext(
       unit?: string;
       state?: string;
       edge?: string;
-      staticFrame?: string;
       path?: string;
       operation?: string;
       sourceCode?: string;
@@ -214,7 +212,6 @@ function normalizeContext(
     copyText(context, normalized, "unit");
     copyText(context, normalized, "state");
     copyText(context, normalized, "edge");
-    copyText(context, normalized, "staticFrame");
     copyText(context, normalized, "path");
     copyText(context, normalized, "operation");
     copyText(context, normalized, "sourceCode");

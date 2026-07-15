@@ -1,7 +1,7 @@
 import { lstat, mkdir, open, opendir, rm, rmdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-import { serializeCanonicalJson } from "@rendered-motion/format";
+import { serializeCanonicalJson } from "@aval/format";
 
 import { throwIfAborted } from "../cancellation.js";
 import { CompilerError } from "../diagnostics.js";
@@ -94,16 +94,6 @@ export async function unpackAssetFile(
         );
       }
     }
-    for (const blob of layout.frontIndex.staticBlobs) {
-      throwIfAborted(signal);
-      await writeTracked(
-        target,
-        `${blob.staticFrame}.png`,
-        bytes.subarray(blob.offset, blob.offset + blob.length),
-        written,
-        signal
-      );
-    }
     throwIfAborted(signal);
     await writeTracked(
       target,
@@ -116,8 +106,7 @@ export async function unpackAssetFile(
           sha256: sourceSha256
         },
         accessUnits,
-        unitBlobs: layout.frontIndex.unitBlobs,
-        staticBlobs: layout.frontIndex.staticBlobs
+        unitBlobs: layout.frontIndex.unitBlobs
       }),
       written,
       signal
@@ -181,7 +170,7 @@ async function prepareUnpackDirectory(
       });
     }
   }
-  const lockPath = join(path, ".rma-unpack.lock");
+  const lockPath = join(path, ".avl-unpack.lock");
   let ownsLock = false;
   try {
     throwIfAborted(signal);
@@ -222,7 +211,7 @@ async function prepareUnpackDirectory(
     throwIfAborted(signal);
     const containsOnlyLock = await directoryContainsOnly(
       path,
-      ".rma-unpack.lock",
+      ".avl-unpack.lock",
       signal
     ).catch((error: unknown) => {
       if (error instanceof CompilerError) throw error;

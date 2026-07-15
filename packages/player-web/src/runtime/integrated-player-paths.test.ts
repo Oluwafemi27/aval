@@ -4,7 +4,7 @@ import {
   type MotionGraphResult,
   type MotionGraphSnapshot,
   type ValidatedMotionGraph
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 import { describe, expect, it } from "vitest";
 
 import { createIntegratedPathTestAsset } from "./asset-test-fixture.js";
@@ -19,7 +19,7 @@ import {
   type IntegratedPlaybackSession,
   type IntegratedPlaybackTraceState,
   type IntegratedPreparedContentTick,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player.js";
 import type {
   RuntimeMediaCursor,
@@ -363,7 +363,7 @@ async function createHarness(
   let player!: IntegratedPlayer;
   player = new IntegratedPlayer({
     bytes: createIntegratedPathTestAsset(),
-    createStaticStore: () => new ImmediateStaticStore(),
+    createFallbackStore: () => new ImmediateStaticStore(),
     candidateFactory: factory,
     eventSink(event) {
       events.push(event);
@@ -481,7 +481,7 @@ function expectTraceAgreement(harness: PathHarness): void {
 function presentationTag(presentation: Readonly<GraphPresentation>): string {
   switch (presentation.kind) {
     case "static":
-      return `static:${presentation.state}:${presentation.staticFrameId}`;
+      return `static:${presentation.state}`;
     case "intro":
     case "body":
       return `${presentation.kind}:${presentation.state}:${presentation.unitId}:${String(presentation.frameIndex)}`;
@@ -493,7 +493,7 @@ function presentationTag(presentation: Readonly<GraphPresentation>): string {
 
 function mediaTag(media: Readonly<RuntimeMediaPresentation>): string {
   if (media.kind === "static") {
-    return `static:${media.state}:${media.staticFrame}`;
+    return `static:${media.state}:${media.drawSource}`;
   }
   const owner = media.state ?? media.edge;
   return `${media.graphKind}:${owner}:${media.frame.unit}:${String(media.frame.localFrame)}`;
@@ -700,7 +700,7 @@ function schedulerSnapshot(
   });
 }
 
-class ImmediateStaticStore implements IntegratedStaticSurfaceStore {
+class ImmediateStaticStore implements IntegratedFallbackStore {
   #state = "idle";
   public async installInitial(options: {
     readonly state: string;

@@ -34,12 +34,12 @@ const output = immutableOutput.stagedOutput;
 const packageIndex = immutableOutput.stagedIndex;
 try {
   await buildFreshPublicDistributions(root);
-  const work = await mkdtemp(join(tmpdir(), "rma-pack-"));
+  const work = await mkdtemp(join(tmpdir(), "aval-pack-"));
   const reports = [];
   const packed = [];
   try {
     for (const name of policy.publicPackages) {
-    const short = name.slice("@rendered-motion/".length);
+    const short = name.slice("@aval/".length);
     const source = resolve(root, "packages", short);
     const manifest = JSON.parse(await readFile(join(source, "package.json"), "utf8"));
     if (manifest.name !== name || manifest.version !== policy.releaseVersion || manifest.private !== false) throw new Error(`${name} is not a publishable ${policy.releaseVersion} package`);
@@ -52,12 +52,12 @@ try {
     await copyDistribution(join(source, "dist"), join(staging, "dist"), copied);
     requireEntry(copied, "index.js", name);
     requireEntry(copied, "index.d.ts", name);
-    if (name === "@rendered-motion/compiler") {
+    if (name === "@aval/compiler") {
       requireEntry(copied, "cli.js", name);
       await chmod(join(staging, "dist", "cli.js"), 0o755);
     }
-    if (name === "@rendered-motion/element") requireEntry(copied, "auto.js", name);
-    if (name === "@rendered-motion/player-web") requireEntry(copied, "decoder-worker/entry.js", name);
+    if (name === "@aval/element") requireEntry(copied, "auto.js", name);
+    if (name === "@aval/player-web") requireEntry(copied, "decoder-worker/entry.js", name);
     const first = join(work, "first", short);
     const second = join(work, "second", short);
     await Promise.all([mkdir(first, { recursive: true }), mkdir(second, { recursive: true })]);

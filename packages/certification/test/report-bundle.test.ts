@@ -18,14 +18,14 @@ const policy = {
   allowedFixtureDigests: new Set([TEST_FIXTURE_DIGEST]),
   allowedFixtureModels: new Map([[TEST_FIXTURE_DIGEST, TEST_RUNTIME_FIXTURE]]),
   allowedDisplayPatterns: new Map([[TEST_DISPLAY_PATTERN_DIGEST, TEST_DISPLAY_PATTERN]]),
-  allowedDisplayCaptureExtractors: new Map([["rma-display-extractor", "1.0.0"]]),
+  allowedDisplayCaptureExtractors: new Map([["aval-display-extractor", "1.0.0"]]),
   allowedDisplayCaptureOperatorRoles: new Set(["qualified-display-capture-operator"]),
   allowedDisplayCaptureReviewerIds: new Set(["display-reviewer-1", "display-reviewer-2"])
 };
 
 describe("report bundle validation", () => {
   it("binds report attachment length and digest to actual bytes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-report-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-report-"));
     try {
       const evidence = new Map<string, Uint8Array>();
       const attached = await materializeRuntimeBundle(evidence);
@@ -60,7 +60,7 @@ describe("report bundle validation", () => {
   });
 
   it("rejects fabricated throughput counts and callback timings despite passed report flags", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-throughput-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-throughput-"));
     try {
       const evidence = new Map<string, Uint8Array>();
       const report = await materializeRuntimeBundle(evidence);
@@ -89,7 +89,7 @@ describe("report bundle validation", () => {
   });
 
   it("rejects fabricated boundary counts and raw content/terminal mutations", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-scenarios-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-scenarios-"));
     try {
       const evidence = new Map<string, Uint8Array>();
       const report = await materializeRuntimeBundle(evidence);
@@ -116,7 +116,7 @@ describe("report bundle validation", () => {
   });
 
   it("binds observed-display evidence to the exact passed runtime report bytes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-display-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-display-"));
     try {
       const evidence = new Map<string, Uint8Array>();
       const runtime = await materializeRuntimeBundle(evidence);
@@ -131,7 +131,7 @@ describe("report bundle validation", () => {
       const rawVideoDigest = createHash("sha256").update(rawVideo).digest("hex");
       const captureProvenance = {
         rawCaptureDigest: rawVideoDigest,
-        extractor: { tool: "rma-display-extractor", version: "1.0.0" },
+        extractor: { tool: "aval-display-extractor", version: "1.0.0" },
         operatorRole: "qualified-display-capture-operator",
         reviewerIds: ["display-reviewer-1", "display-reviewer-2"]
       };

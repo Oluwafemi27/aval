@@ -1,6 +1,5 @@
 import { CompilerError } from "../diagnostics.js";
 
-const MAX_VISIBLE_DIMENSION = 512;
 const DILATION_RADIUS = 4;
 const DILATION_RADIUS_SQUARED = DILATION_RADIUS * DILATION_RADIUS;
 
@@ -15,7 +14,16 @@ export function dilateTransparentRgba(
   input: Readonly<RgbaDilationInput>
 ): Uint8Array {
   const { width, height, rgba } = validateInput(input);
-  const output = new Uint8Array(rgba);
+  let output: Uint8Array;
+  try {
+    output = new Uint8Array(rgba);
+  } catch (error) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      `Could not allocate ${String(rgba.byteLength)} RGBA dilation bytes`,
+      { cause: error }
+    );
+  }
 
   for (let destinationY = 0; destinationY < height; destinationY += 1) {
     for (let destinationX = 0; destinationX < width; destinationX += 1) {
@@ -76,20 +84,21 @@ function validateInput(
     !Number.isSafeInteger(input.width) ||
     !Number.isSafeInteger(input.height) ||
     input.width < 1 ||
-    input.height < 1 ||
-    input.width > MAX_VISIBLE_DIMENSION ||
-    input.height > MAX_VISIBLE_DIMENSION
+    input.height < 1
   ) {
     throw new CompilerError(
       "INPUT_INVALID",
-      "RGBA dilation dimensions must be positive integers no greater than 512"
+      "RGBA dilation dimensions must be positive safe integers"
     );
   }
   if (!(input.rgba instanceof Uint8Array)) {
     throw new CompilerError("INPUT_INVALID", "RGBA dilation requires bytes");
   }
-  const expected = input.width * input.height * 4;
-  if (!Number.isSafeInteger(expected) || input.rgba.byteLength !== expected) {
+  const expectedBig = BigInt(input.width) * BigInt(input.height) * 4n;
+  if (
+    expectedBig > BigInt(Number.MAX_SAFE_INTEGER) ||
+    input.rgba.byteLength !== Number(expectedBig)
+  ) {
     throw new CompilerError(
       "SOURCE_LIMIT",
       "RGBA byte length does not match the dilation dimensions"

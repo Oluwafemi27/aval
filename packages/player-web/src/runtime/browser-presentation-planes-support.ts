@@ -15,18 +15,19 @@ import type { BrowserPresentationPlanesOptions } from "./browser-presentation-pl
 export function initialPresentationGeometry(
   options: Readonly<CapturedBrowserPresentationPlanesOptions>
 ): Readonly<PresentationGeometry> {
+  const initial = options.initialPresentation;
   return computePresentationGeometry({
     canvasWidth: options.canvas.width,
     canvasHeight: options.canvas.height,
     pixelAspectNumerator: options.canvas.pixelAspect[0],
     pixelAspectDenominator: options.canvas.pixelAspect[1],
-    fit: options.canvas.fit,
-    cssWidth: options.canvas.width,
-    cssHeight: options.canvas.height,
-    devicePixelRatio: 1,
+    fit: initial?.fit ?? options.canvas.fit,
+    cssWidth: initial?.cssWidth ?? options.canvas.width,
+    cssHeight: initial?.cssHeight ?? options.canvas.height,
+    devicePixelRatio: initial?.devicePixelRatio ?? 1,
     maxBackingWidth: options.maxBackingWidth,
     maxBackingHeight: options.maxBackingHeight,
-    maxBackingBytes: options.maxBackingBytes
+    maxBackingBytes: initial?.maxBackingBytes ?? options.maxBackingBytes
   });
 }
 
@@ -37,12 +38,13 @@ export function replayPresentationOptions(
 ): Readonly<BrowserPresentationPlanesOptions> {
   return Object.freeze({
     animatedCanvas: captured.animatedCanvas,
-    staticCanvas: captured.staticCanvas,
     canvas: captured.canvas,
     maxBackingWidth: captured.maxBackingWidth,
     maxBackingHeight: captured.maxBackingHeight,
     maxBackingBytes: captured.maxBackingBytes,
-    setStaticVisible: captured.setStaticVisible,
+    ...(captured.initialPresentation === null
+      ? {}
+      : { initialPresentation: captured.initialPresentation }),
     ...(captured.onClamp === undefined ? {} : { onClamp: captured.onClamp }),
     ...(captured.createBackend === undefined
       ? {}
@@ -63,7 +65,6 @@ export function createPrimedBackingResources(
     asynchronousAfterInitial: true,
     beginTransition(input: Readonly<{
       readonly animatedAllocationBytes: number;
-      readonly staticAllocationBytes: number;
     }>) {
       if (released) {
         throw new DOMException("canvas backing resources are released", "AbortError");
@@ -72,8 +73,7 @@ export function createPrimedBackingResources(
         const transition = first;
         first = null;
         if (
-          input.animatedAllocationBytes !== allocationBytes ||
-          input.staticAllocationBytes !== allocationBytes
+          input.animatedAllocationBytes !== allocationBytes
         ) {
           safelyRollbackBackingTransition(transition);
           throw new RangeError("initial canvas admission does not match geometry");

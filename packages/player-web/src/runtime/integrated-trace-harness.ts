@@ -1,4 +1,4 @@
-import type { MotionGraphResult } from "@rendered-motion/graph";
+import type { MotionGraphResult } from "@aval/graph";
 
 import type {
   IntegratedContentTickContext,

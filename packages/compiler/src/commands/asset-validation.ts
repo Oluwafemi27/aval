@@ -1,15 +1,13 @@
 import {
   FORMAT_DEFAULT_BUDGETS,
   FormatError,
-  decodePngRgba,
   deriveAvcRenditionGeometry,
   inspectAvcAnnexBRendition,
   validateCompleteAsset,
-  validatePngProfile,
   type AvcRenditionInspection,
   type ParsedFrontIndex,
   type ValidatedAssetLayout
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { readBoundedRegularFile } from "../bounded-file.js";
 import { throwIfAborted } from "../cancellation.js";
@@ -52,7 +50,6 @@ export async function readValidatedAsset(
     const layout = validateCompleteAsset({ bytes });
     throwIfAborted(signal);
     verifyBlobDigests(bytes, layout, signal);
-    decodeStaticPngs(bytes, layout.frontIndex, signal);
     const avc = inspectAvcRenditions(bytes, layout.frontIndex, signal);
     throwIfAborted(signal);
     return Object.freeze({ bytes, layout, avc });
@@ -76,30 +73,6 @@ export async function readValidatedAsset(
       cause: error
     });
   }
-}
-
-function decodeStaticPngs(
-  bytes: Uint8Array,
-  front: ParsedFrontIndex,
-  signal?: AbortSignal
-): void {
-  for (let index = 0; index < front.staticBlobs.length; index += 1) {
-    throwIfAborted(signal);
-    const blob = front.staticBlobs[index];
-    const descriptor = front.manifest.staticFrames[index];
-    if (blob === undefined || descriptor === undefined) {
-      throw new CompilerError(
-        "ASSET_INVALID",
-        "Static PNG descriptors are incomplete"
-      );
-    }
-    decodePngRgba(validatePngProfile({
-      png: bytes.subarray(blob.offset, blob.offset + blob.length),
-      expectedWidth: descriptor.width,
-      expectedHeight: descriptor.height
-    }));
-  }
-  throwIfAborted(signal);
 }
 
 export function describeAccessUnits(
@@ -165,10 +138,13 @@ function inspectAvcRenditions(
     const rendition = front.manifest.renditions[renditionIndex];
     if (
       rendition?.profile !== "avc-annexb-opaque-v0" &&
-      rendition?.profile !== "avc-annexb-packed-alpha-v0"
+      rendition?.profile !== "avc-annexb-packed-alpha-v0" &&
+      rendition?.profile !== "avc-annexb-opaque-v1" &&
+      rendition?.profile !== "avc-annexb-packed-alpha-v1"
     ) continue;
     const geometry = deriveAvcRenditionGeometry(
-      rendition.profile === "avc-annexb-opaque-v0"
+      rendition.profile === "avc-annexb-opaque-v0" ||
+        rendition.profile === "avc-annexb-opaque-v1"
         ? {
             canvasWidth: front.manifest.canvas.width,
             canvasHeight: front.manifest.canvas.height,
@@ -216,6 +192,9 @@ function inspectAvcRenditions(
         averageBitrate: rendition.bitrate.average,
         peakBitrate: rendition.bitrate.peak,
         cpbBufferBits: rendition.bitrate.peak,
+        quantizationPolicy: rendition.profile.endsWith("-v1")
+          ? "bounded-qp-v1"
+          : "fixed-qp26-v0",
         requireBt709LimitedRange: true
       },
       units
@@ -231,10 +210,7 @@ function verifyBlobDigests(
   layout: ValidatedAssetLayout,
   signal?: AbortSignal
 ): void {
-  for (const blob of [
-    ...layout.frontIndex.unitBlobs,
-    ...layout.frontIndex.staticBlobs
-  ]) {
+  for (const blob of layout.frontIndex.unitBlobs) {
     throwIfAborted(signal);
     const actual = sha256AssetBytes(
       bytes.subarray(blob.offset, blob.offset + blob.length),
@@ -243,7 +219,7 @@ function verifyBlobDigests(
     if (actual !== blob.sha256) {
       throw new CompilerError(
         "ASSET_INVALID",
-        `Digest mismatch for ${"unit" in blob ? blob.unit : blob.staticFrame}`
+        `Digest mismatch for ${blob.unit}`
       );
     }
   }

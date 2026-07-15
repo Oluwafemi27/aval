@@ -4,8 +4,8 @@ import type {
 } from "./model.js";
 
 export const DEFAULT_MAXIMUM_DECODER_LEASES = 2;
-export const DEFAULT_MAXIMUM_PAGE_PHYSICAL_BYTES = 192 * 1024 * 1024;
-export const DEFAULT_MAXIMUM_PLAYER_LOGICAL_BYTES = 64 * 1024 * 1024;
+export const DEFAULT_MAXIMUM_PAGE_PHYSICAL_BYTES = Number.MAX_SAFE_INTEGER;
+export const DEFAULT_MAXIMUM_PLAYER_LOGICAL_BYTES = Number.MAX_SAFE_INTEGER;
 
 const POLICY_FIELDS = new Set([
   "maximumDecoderLeases",

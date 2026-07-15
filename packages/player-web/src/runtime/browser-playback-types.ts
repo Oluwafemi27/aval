@@ -2,7 +2,7 @@ import type {
   GraphEdgeDefinition,
   GraphPresentation,
   GraphStateDefinition
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { ManagedDecoderWorkerFrame } from "../decoder-worker/client.js";
 import type { RuntimeMediaPresentation } from "./model.js";

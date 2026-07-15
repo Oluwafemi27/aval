@@ -1,4 +1,4 @@
-import type { ParsedFrontIndex } from "@rendered-motion/format";
+import type { ParsedFrontIndex } from "@aval/format";
 
 import {
   RuntimeBlobAssembly,
@@ -576,10 +576,7 @@ function requireBlobMember(
   members: readonly RegisteredBlobLoad[]
 ): RegisteredBlobLoad {
   const member = members.find(({ selection }) =>
-    blob.kind === "unit" && selection.kind === "unit"
-      ? blob.rendition === selection.rendition && blob.unit === selection.unit
-      : blob.kind === "static" && selection.kind === "static" &&
-        blob.staticFrame === selection.staticFrame
+    blob.rendition === selection.rendition && blob.unit === selection.unit
   );
   if (member === undefined) throw runtimeError("invalid-asset");
   return member;

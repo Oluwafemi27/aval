@@ -115,7 +115,7 @@ truthful. Raw DOM exceptions are never exposed.
 
 ## Closed readiness and browser proofs
 
-`RenderedMotionReadinessChangeDetail.reason` is `StaticReason`, never an open
+`AvalReadinessChangeDetail.reason` is `StaticReason`, never an open
 string.
 
 The one-state browser proof grades a fixed bounded content-tick window. It

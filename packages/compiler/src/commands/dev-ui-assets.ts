@@ -6,17 +6,17 @@ export const DEV_HTML = `<!doctype html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Rendered Motion dev</title>
+  <title>AVAL dev</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <h1>Rendered Motion dev</h1>
+  <h1>AVAL dev</h1>
   <p id="status" aria-live="polite">Waiting for a valid build…</p>
   <main>
     <section id="stage">
       <div class="preview">
         <button id="interaction" type="button">
-          <rendered-motion id="motion" interaction-for="interaction"><span slot="fallback">Compile to preview</span></rendered-motion>
+          <aval-player id="motion" interaction-for="interaction"><span slot="fallback">Compile to preview</span></aval-player>
           <span>Interaction target</span>
         </button>
       </div>
@@ -47,7 +47,7 @@ export const DEV_HTML = `<!doctype html>
 </body>
 </html>`;
 
-export const DEV_CSS = `:root{color-scheme:light dark}body{font:14px system-ui;margin:2rem;color:#172033;background:#fff}main{display:grid;grid-template-columns:minmax(280px,40vw) 1fr;gap:1.5rem}.preview{min-height:280px;display:grid;place-items:center;border:1px solid #d4d9e3;border-radius:.75rem;background:repeating-conic-gradient(#f7f8fb 0 25%,#eef1f6 0 50%) 0/24px 24px}.preview button{background:color-mix(in srgb,Canvas 88%,transparent);border:1px solid #7d8799;border-radius:.6rem;padding:.75rem}rendered-motion{display:block;width:256px;max-width:100%;aspect-ratio:1;border:1px solid #aab3c5;background:#f2f4f8}.hint{color:#566176}.controls{display:flex;flex-wrap:wrap;gap:.5rem;margin:.75rem 0}button,select,input{font:inherit}.summary{display:grid;grid-template-columns:max-content 1fr;gap:.3rem 1rem}.summary dt{font-weight:600}.summary dd{margin:0;font-variant-numeric:tabular-nums}.timeline{display:flex;min-height:3.25rem;border:1px solid #aab3c5;border-radius:.4rem;overflow:hidden;background:#f2f4f8}.unit{display:grid;place-items:center;min-width:2px;padding:.3rem;border-inline-end:1px solid #fff8;text-align:center;font-size:.75rem;overflow:hidden}.unit:nth-child(3n+1){background:#c5d8ff}.unit:nth-child(3n+2){background:#ccebdc}.unit:nth-child(3n){background:#f4d5af}pre{white-space:pre-wrap;max-height:70vh;overflow:auto;background:#f2f4f8;padding:1rem;border-radius:.5rem}@media(prefers-color-scheme:dark){body{color:#e9edf5;background:#11151c}.preview{border-color:#465063;background:repeating-conic-gradient(#1c222d 0 25%,#171c25 0 50%) 0/24px 24px}.hint{color:#aeb8c8}rendered-motion,pre,.timeline{background:#1c222d;border-color:#566176}.unit{color:#11151c}}@media(max-width:800px){main{grid-template-columns:1fr}}`;
+export const DEV_CSS = `:root{color-scheme:light dark}body{font:14px system-ui;margin:2rem;color:#172033;background:#fff}main{display:grid;grid-template-columns:minmax(280px,40vw) 1fr;gap:1.5rem}.preview{min-height:280px;display:grid;place-items:center;border:1px solid #d4d9e3;border-radius:.75rem;background:repeating-conic-gradient(#f7f8fb 0 25%,#eef1f6 0 50%) 0/24px 24px}.preview button{background:color-mix(in srgb,Canvas 88%,transparent);border:1px solid #7d8799;border-radius:.6rem;padding:.75rem}aval-player{display:block;width:256px;max-width:100%;aspect-ratio:1;border:1px solid #aab3c5;background:#f2f4f8}.hint{color:#566176}.controls{display:flex;flex-wrap:wrap;gap:.5rem;margin:.75rem 0}button,select,input{font:inherit}.summary{display:grid;grid-template-columns:max-content 1fr;gap:.3rem 1rem}.summary dt{font-weight:600}.summary dd{margin:0;font-variant-numeric:tabular-nums}.timeline{display:flex;min-height:3.25rem;border:1px solid #aab3c5;border-radius:.4rem;overflow:hidden;background:#f2f4f8}.unit{display:grid;place-items:center;min-width:2px;padding:.3rem;border-inline-end:1px solid #fff8;text-align:center;font-size:.75rem;overflow:hidden}.unit:nth-child(3n+1){background:#c5d8ff}.unit:nth-child(3n+2){background:#ccebdc}.unit:nth-child(3n){background:#f4d5af}pre{white-space:pre-wrap;max-height:70vh;overflow:auto;background:#f2f4f8;padding:1rem;border-radius:.5rem}@media(prefers-color-scheme:dark){body{color:#e9edf5;background:#11151c}.preview{border-color:#465063;background:repeating-conic-gradient(#1c222d 0 25%,#171c25 0 50%) 0/24px 24px}.hint{color:#aeb8c8}aval-player,pre,.timeline{background:#1c222d;border-color:#566176}.unit{color:#11151c}}@media(max-width:800px){main{grid-template-columns:1fr}}`;
 
 export const DEV_CLIENT = `import "./modules/element/auto.js";
 const byId=(id)=>document.getElementById(id);
@@ -67,7 +67,7 @@ byId("pause").onclick=()=>motion.pause();
 byId("resume").onclick=()=>{void motion.resume();};
 byId("replace").onclick=()=>{if(build){replacement+=1;motion.src=build.src.split("#")[0]+"#replace-"+String(replacement);}};
 byId("stress").onclick=()=>{if(!build)return;for(let index=0;index<6;index+=1){const copy=motion.cloneNode(true);copy.classList.add("stress-copy");copy.removeAttribute("id");copy.removeAttribute("interaction-for");copy.src=build.src.split("#")[0]+"#stress-"+String(replacement)+"-"+String(index);motion.parentElement.after(copy);void copy.prepare().then(()=>{const names=[...copy.stateNames];if(names.length>1)void copy.setState(names.at(-1));copy.pause();void copy.resume();}).catch(()=>undefined);}replacement+=1;};
-byId("clear-stress").onclick=()=>{for(const copy of document.querySelectorAll("rendered-motion.stress-copy")){void copy.dispose();copy.remove();}};
+byId("clear-stress").onclick=()=>{for(const copy of document.querySelectorAll("aval-player.stress-copy")){void copy.dispose();copy.remove();}};
 byId("capture-trace").onclick=()=>render(true);
 byId("motion-policy").onchange=e=>{motion.motion=e.target.value;};
 byId("fit").onchange=e=>{motion.fit=e.target.value;};

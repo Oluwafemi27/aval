@@ -8,7 +8,7 @@ const STATES = ["idle", "loading", "done"] as const;
 
 function App() {
   const [requestedState, setRequestedState] = useState<string>("idle");
-  const [status, setStatus] = useState("Waiting for rendered motion…");
+  const [status, setStatus] = useState("Waiting for AVAL…");
   const handleVisualState = useCallback((state: string | null) => {
     setStatus(state === null ? "Waiting for a visual state…" : `Visual state: ${state}`);
   }, []);
@@ -18,13 +18,13 @@ function App() {
 
   return (
     <main>
-      <h1>Rendered Motion React ref example</h1>
+      <h1>AVAL React ref example</h1>
       <p>
-        Replace <code>public/status.rma</code> with an asset that defines the
+        Replace <code>public/status.avl</code> with an asset that defines the
         states used by these controls.
       </p>
       <StatusMotion
-        src="/status.rma"
+        src="/status.avl"
         state={requestedState}
         onVisualState={handleVisualState}
         onError={handleError}

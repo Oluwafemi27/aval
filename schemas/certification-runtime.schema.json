@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rendered-motion.dev/schemas/certification-runtime.schema.json",
-  "title": "Rendered Motion runtime scheduling certification report",
+  "$id": "https://aval.dev/schemas/certification-runtime.schema.json",
+  "title": "AVAL runtime scheduling certification report",
   "type": "object",
   "additionalProperties": false,
   "required": [

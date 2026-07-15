@@ -1,8 +1,8 @@
 export {
-  defineRenderedMotionElement,
-  RENDERED_MOTION_TAG_NAME
-} from "@rendered-motion/element";
+  defineAvalElement,
+  AVAL_TAG_NAME
+} from "@aval/element";
 
-export async function importRenderedMotionAuto(): Promise<void> {
-  await import("@rendered-motion/element/auto");
+export async function importAvalAuto(): Promise<void> {
+  await import("@aval/element/auto");
 }

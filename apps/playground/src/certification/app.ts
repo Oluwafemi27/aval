@@ -1,13 +1,13 @@
 import {
-  defineRenderedMotionElement,
-  type RenderedMotionDiagnostics,
-  type RenderedMotionElement
-} from "@rendered-motion/element";
+  defineAvalElement,
+  type AvalDiagnostics,
+  type AvalElement
+} from "@aval/element";
 import {
   DEFAULT_MAXIMUM_DECODER_LEASES,
   DEFAULT_MAXIMUM_PAGE_PHYSICAL_BYTES,
   DEFAULT_MAXIMUM_PLAYER_LOGICAL_BYTES
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import { runDecoderThroughputProbe, type DecoderThroughputProbeResult } from "./decoder-throughput-probe.js";
 import { ForegroundMeasurementGuard, type MeasurementInterruption } from "./foreground-guard.js";
@@ -151,8 +151,8 @@ export class CertificationApp implements CertificationBrowserApi {
     const resourceLedger = new BrowserResourceLedger(10_000);
     let traceCollector = new PublicRuntimeTraceCollector(config.mode === "named" ? 2_000_000 : 100_000);
     const failures: string[] = [];
-    let element: RenderedMotionElement | null = null;
-    let readiness: Readonly<RenderedMotionDiagnostics> | null = null;
+    let element: AvalElement | null = null;
+    let readiness: Readonly<AvalDiagnostics> | null = null;
     let transitionsCompleted = 0;
     let rapidInputsSettled = 0;
     let decoderThroughput: DecoderThroughputProbeResult | null = null;
@@ -343,7 +343,7 @@ export class CertificationApp implements CertificationBrowserApi {
     });
     const scenarios = full
       ? LOCAL_NETWORK_FAULTS
-      : (["ignored-initial-range", "changed-etag", "corrupt-static"] as const);
+      : (["ignored-initial-range", "changed-etag", "corrupt-bootstrap-unit"] as const);
     const network = signal.aborted
       ? Object.freeze([])
       : await runNetworkFaultStress({ parent: this.#stage, scenarios, timeoutMs: full ? 20_000 : 8_000 });
@@ -372,7 +372,7 @@ export class CertificationApp implements CertificationBrowserApi {
   }
 
   async #initialize(): Promise<void> {
-    defineRenderedMotionElement();
+    defineAvalElement();
     this.#config = await loadRunConfig();
     this.#banner.textContent = this.#config.mode === "named"
       ? "Named browser runtime certification input — visible foreground required"
@@ -391,7 +391,7 @@ export class CertificationApp implements CertificationBrowserApi {
     });
     this.#root.querySelector<HTMLButtonElement>("[data-action='abort']")?.addEventListener("click", () => this.abort());
     this.#root.querySelector<HTMLButtonElement>("[data-action='export']")?.addEventListener("click", () => {
-      void this.exportLastReport().then((result) => offerReportDownload(result, "rendered-motion-certification-report.json")).catch((error: unknown) => this.#fatal(error));
+      void this.exportLastReport().then((result) => offerReportDownload(result, "aval-certification-report.json")).catch((error: unknown) => this.#fatal(error));
     });
   }
 
@@ -498,18 +498,18 @@ function bounded(value: number, minimum: number, maximum: number, name: string):
   return value;
 }
 
-function drainRuntimeTrace(element: RenderedMotionElement, collector: PublicRuntimeTraceCollector): void {
+function drainRuntimeTrace(element: AvalElement, collector: PublicRuntimeTraceCollector): void {
   const records = element.getDiagnostics({ trace: true }).runtimeTrace ?? [];
   collector.drain(records as unknown as readonly Readonly<Record<string, unknown>>[]);
 }
 
-function primeRuntimeTrace(element: RenderedMotionElement, collector: PublicRuntimeTraceCollector): void {
+function primeRuntimeTrace(element: AvalElement, collector: PublicRuntimeTraceCollector): void {
   const records = element.getDiagnostics({ trace: true }).runtimeTrace ?? [];
   collector.prime(records as unknown as readonly Readonly<Record<string, unknown>>[]);
 }
 
 async function waitForTraceFrames(
-  element: RenderedMotionElement,
+  element: AvalElement,
   collector: PublicRuntimeTraceCollector,
   minimumFrames: number,
   signal: AbortSignal,
@@ -544,7 +544,7 @@ async function waitForTraceFrames(
 }
 
 async function waitForTraceCoverage(
-  element: RenderedMotionElement,
+  element: AvalElement,
   collector: PublicRuntimeTraceCollector,
   predicate: (coverage: RuntimeTraceCollection["coverage"]) => boolean,
   description: string,
@@ -563,7 +563,7 @@ async function waitForTraceCoverage(
 }
 
 async function nextReadyTarget(
-  element: RenderedMotionElement,
+  element: AvalElement,
   states: readonly string[],
   sequence: number,
   signal: AbortSignal

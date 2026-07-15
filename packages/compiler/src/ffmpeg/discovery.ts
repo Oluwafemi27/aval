@@ -8,7 +8,7 @@ import {
 } from "node:path";
 import { cwd } from "node:process";
 
-import { deriveAvcRenditionGeometryFromVisible } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometryFromVisible } from "@aval/format";
 
 import { CompilerError } from "../diagnostics.js";
 import {
@@ -44,12 +44,12 @@ export async function discoverFfmpeg(
 ): Promise<Readonly<ToolProvenance>> {
   const ffmpeg = await resolveExecutable(
     executable,
-    process.env.RMA_FFMPEG,
+    process.env.AVL_FFMPEG,
     "ffmpeg"
   );
   const ffprobe = await resolveFfprobe(
     ffprobeExecutable,
-    process.env.RMA_FFPROBE,
+    process.env.AVL_FFPROBE,
     ffmpeg
   );
   const [versionResult, encodersResult, probeVersion, ffmpegFile, ffprobeFile] =
@@ -225,7 +225,7 @@ function createCalibrationPayload(executable: string) {
   const invocation = createEncodeAvcUnitInvocation({
     source: {
       type: "raw-yuv420p",
-      path: join(cwd(), "rma-compiler-packed-calibration.yuv"),
+      path: join(cwd(), "aval-compiler-packed-calibration.yuv"),
       width: geometry.codedWidth,
       height: geometry.codedHeight,
       frameRate: { numerator: 30, denominator: 1 },
@@ -236,7 +236,16 @@ function createCalibrationPayload(executable: string) {
     codedWidth: geometry.codedWidth,
     codedHeight: geometry.codedHeight,
     decodedStorageRect: geometry.decodedStorageRect,
-    bitrate: { average: 300_000, peak: 600_000 },
+    encoding: {
+      codec: "h264",
+      preset: "medium",
+      legacyZeroLatency: true,
+      rateControl: {
+        mode: "abr",
+        averageBitrate: 300_000,
+        maxBitrate: 600_000
+      }
+    },
     executable
   });
   return Object.freeze({ invocation, bytes });

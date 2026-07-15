@@ -14,9 +14,9 @@ test("missing animation capability stays strictly static without a branded-brows
     });
   });
   await page.goto("/certification.html");
-  await page.waitForFunction(() => customElements.get("rendered-motion") !== undefined);
+  await page.waitForFunction(() => customElements.get("aval-player") !== undefined);
   const result = await page.evaluate(async () => {
-    const element = document.createElement("rendered-motion") as HTMLElement & {
+    const element = document.createElement("aval-player") as HTMLElement & {
       src: string;
       prepare(): Promise<unknown>;
       dispose(): Promise<void>;

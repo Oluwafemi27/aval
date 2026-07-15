@@ -170,8 +170,8 @@ test("reverses the visible resident clip on the next content tick", async ({
   }
 
   const reversal = await page.evaluate(async () => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     const wait = async (
       predicate: (snapshot: M2Snapshot) => boolean,
       timeoutMs = 5_000
@@ -239,8 +239,8 @@ test("reverses the visible resident clip on the next content tick", async ({
     recoveredBeforeRunwayEnd: true
   });
   const stableCanvas = await page.evaluate(() => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     return { snapshot: api.snapshot(), identity: api.readCanvasIdentity() };
   });
   expect(stableCanvas.identity).toMatchObject({
@@ -259,8 +259,8 @@ test("draws and reads back 1,000 exact cached reversal changes", async ({
   await waitForM2Ready(page);
 
   const stress = await page.evaluate(async () => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     const beforeDraws = api.snapshot()?.renderer.draws ?? 0;
     const first = api.runStress();
     const second = api.runStress();
@@ -311,8 +311,8 @@ test("retains latest intent queued immediately before and during context loss", 
   await waitForM2Ready(page);
 
   const recovery = await page.evaluate(async () => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     const beforeGeneration = api.snapshot()?.sessionGeneration ?? 0;
     api.request("engaged");
     const restoring = api.loseAndRestoreContext();
@@ -382,8 +382,8 @@ test("recovers both bodies and retains intent across mid-clip context loss", asy
   });
 
   const restored = await page.evaluate(async () => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     api.request("engaged");
     const startedAt = performance.now();
     let before = api.snapshot();
@@ -443,8 +443,8 @@ test("recovers both bodies and retains intent across mid-clip context loss", asy
     .toBe("stable:engaged:engaged");
 
   const rebuilt = await page.evaluate(async () => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     return api.rebuild();
   });
   expect(rebuilt.sessionGeneration).toBeGreaterThan(
@@ -459,8 +459,8 @@ test("recovers both bodies and retains intent across mid-clip context loss", asy
     renderer: { uploadedResidentLayers: 28, errors: 0 }
   });
   const finalDisposal = await page.evaluate(() => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     api.dispose();
     return api.lastDisposedSession();
   });
@@ -514,8 +514,8 @@ async function requestAndWaitForStable(
   endpoint: "resting" | "engaged"
 ): Promise<void> {
   await page.evaluate((destination) => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     api.request(destination);
   }, endpoint);
   await expect
@@ -528,16 +528,16 @@ async function requestAndWaitForStable(
 
 async function waitForM2Ready(page: Page): Promise<M2CodecEvidence> {
   return page.evaluate(() => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     return api.ready;
   });
 }
 
 async function readM2Snapshot(page: Page): Promise<M2Snapshot | null> {
   return page.evaluate(() => {
-    const api = (window as unknown as { __renderedMotionM2: BrowserM2Api })
-      .__renderedMotionM2;
+    const api = (window as unknown as { __avalM2: BrowserM2Api })
+      .__avalM2;
     return api.snapshot();
   });
 }

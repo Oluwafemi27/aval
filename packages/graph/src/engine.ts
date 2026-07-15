@@ -50,13 +50,11 @@ export class MotionGraphEngine {
       );
     }
     const initial = this.#runtime.installMetadata(definition);
-    const state = this.#runtime.state(initial);
     this.#runtime.requestedState = initial;
     this.#runtime.visualState = initial;
     this.#runtime.presentation = freezeGraphPresentation({
       kind: "static",
-      state: initial,
-      staticFrameId: state.staticFrameId
+      state: initial
     });
     const effects: MotionGraphEffect[] = [];
     this.#changeReadiness("preparing", effects);
@@ -71,7 +69,7 @@ export class MotionGraphEngine {
     const initial = this.#runtime.definition().initialState;
     const state = this.#runtime.state(initial);
 
-    if (this.#runtime.requestedState === initial && state.initialUnit !== undefined) {
+    if (state.initialUnit !== undefined) {
       this.#runtime.phase = "intro";
       this.#runtime.presentation = freezeGraphPresentation({
         kind: "intro",
@@ -109,11 +107,27 @@ export class MotionGraphEngine {
         "resumeAnimated requires one settled static state"
       );
     }
-    const body = this.#runtime.bodyPresentation(visual, 0);
     const effects: MotionGraphEffect[] = [];
     this.#changeReadiness("animated", effects);
-    this.#runtime.presentation = body;
-    this.#runtime.phase = "stable";
+    const state = this.#runtime.state(visual);
+    const firstAnimatedActivation =
+      this.#runtime.initialUnitPending;
+    if (
+      firstAnimatedActivation &&
+      visual === this.#runtime.definition().initialState &&
+      state.initialUnit !== undefined
+    ) {
+      this.#runtime.presentation = freezeGraphPresentation({
+        kind: "intro",
+        state: visual,
+        unitId: state.initialUnit.unitId,
+        frameIndex: 0
+      });
+      this.#runtime.phase = "intro";
+    } else {
+      this.#runtime.presentation = this.#runtime.bodyPresentation(visual, 0);
+      this.#runtime.phase = "stable";
+    }
     return this.#runtime.record("resume-animated", effects);
   }
 
@@ -580,6 +594,10 @@ export class MotionGraphEngine {
       return;
     }
     this.#runtime.presentation = this.#runtime.bodyPresentation(state.id, 0);
+    // Consumption is a graph-timeline decision at the authored join. Hosts
+    // that fail to draw this result recover through their static-failure lane;
+    // they do not partially rewind an already committed graph tick.
+    this.#runtime.initialUnitPending = false;
     this.#runtime.phase = this.#runtime.routes.pending === null ? "stable" : "waiting";
   }
 
@@ -786,6 +804,14 @@ export class MotionGraphEngine {
     target: GraphStateId,
     effects: MotionGraphEffect[]
   ): void {
+    if (
+      this.#runtime.readiness === "static" &&
+      target !== this.#runtime.definition().initialState
+    ) {
+      // A deliberate static-state commit must not leave an intro armed to
+      // replay later if the host returns to the initial state before re-entry.
+      this.#runtime.initialUnitPending = false;
+    }
     const previous = this.#runtime.requireVisualState();
     if (previous === target) return;
     this.#runtime.visualState = target;

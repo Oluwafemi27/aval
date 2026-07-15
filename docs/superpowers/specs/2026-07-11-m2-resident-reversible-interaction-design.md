@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-11
 
-**Status:** Approved implementation slice of the [Web Rendered Motion Format Design](./2026-07-11-web-rendered-motion-format-design.md)
+**Status:** Approved implementation slice of the [AVAL Format Design](./2026-07-11-aval-format-design.md)
 
 ## 1. Objective
 

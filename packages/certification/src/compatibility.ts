@@ -1,17 +1,17 @@
 export const PUBLIC_RELEASE_PACKAGES = Object.freeze([
-  "@rendered-motion/graph",
-  "@rendered-motion/format",
-  "@rendered-motion/player-web",
-  "@rendered-motion/element",
-  "@rendered-motion/compiler"
+  "@aval/graph",
+  "@aval/format",
+  "@aval/player-web",
+  "@aval/element",
+  "@aval/compiler"
 ] as const);
 
 export const PUBLIC_RELEASE_DEPENDENCIES = Object.freeze({
-  "@rendered-motion/graph": Object.freeze([]),
-  "@rendered-motion/format": Object.freeze(["@rendered-motion/graph"]),
-  "@rendered-motion/player-web": Object.freeze(["@rendered-motion/graph", "@rendered-motion/format"]),
-  "@rendered-motion/element": Object.freeze(["@rendered-motion/player-web"]),
-  "@rendered-motion/compiler": Object.freeze(["@rendered-motion/graph", "@rendered-motion/format", "@rendered-motion/player-web", "@rendered-motion/element"])
+  "@aval/graph": Object.freeze([]),
+  "@aval/format": Object.freeze(["@aval/graph"]),
+  "@aval/player-web": Object.freeze(["@aval/graph", "@aval/format"]),
+  "@aval/element": Object.freeze(["@aval/player-web"]),
+  "@aval/compiler": Object.freeze(["@aval/graph", "@aval/format", "@aval/player-web", "@aval/element"])
 } as const satisfies Readonly<Record<(typeof PUBLIC_RELEASE_PACKAGES)[number], readonly (typeof PUBLIC_RELEASE_PACKAGES)[number][]>>);
 
 export type ApiClassification = "stable" | "experimental" | "deprecated" | "internal";

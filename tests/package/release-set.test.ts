@@ -20,11 +20,11 @@ const policy = { releaseVersion: "1.0.0" as const, publicPackages: RELEASE_PACKA
 describe("verified five-package release set", () => {
   it("derives the one safe publication order and rejects graph drift", () => {
     expect(RELEASE_PACKAGE_NAMES).toEqual([
-      "@rendered-motion/graph",
-      "@rendered-motion/format",
-      "@rendered-motion/player-web",
-      "@rendered-motion/element",
-      "@rendered-motion/compiler"
+      "@aval/graph",
+      "@aval/format",
+      "@aval/player-web",
+      "@aval/element",
+      "@aval/compiler"
     ]);
     expect(topologicalPackageOrder(RELEASE_PACKAGE_SPECS)).toEqual(RELEASE_PACKAGE_NAMES);
     expect(() => topologicalPackageOrder([
@@ -39,16 +39,16 @@ describe("verified five-package release set", () => {
     expect(validateReleasePackageManifests(manifests).map(({ name }) => name)).toEqual(RELEASE_PACKAGE_NAMES);
     expect(() => validateReleasePackageManifests([...manifests.slice(0, -1), manifests[0]!])).toThrow(/duplicate/u);
     expect(() => validateReleasePackageManifests(manifests.slice(0, -1))).toThrow(/exactly five/u);
-    expect(() => validateReleasePackageManifests(manifests.map((manifest) => manifest.name === "@rendered-motion/graph"
-      ? { ...manifest, dependencies: { "@rendered-motion/unknown": "1.0.0" } }
+    expect(() => validateReleasePackageManifests(manifests.map((manifest) => manifest.name === "@aval/graph"
+      ? { ...manifest, dependencies: { "@aval/unknown": "1.0.0" } }
       : manifest))).toThrow(/exact reviewed set/u);
-    expect(() => validateReleasePackageManifests(manifests.map((manifest) => manifest.name === "@rendered-motion/format"
-      ? { ...manifest, dependencies: { "@rendered-motion/graph": "^1.0.0" } }
+    expect(() => validateReleasePackageManifests(manifests.map((manifest) => manifest.name === "@aval/format"
+      ? { ...manifest, dependencies: { "@aval/graph": "^1.0.0" } }
       : manifest))).toThrow(/must be exactly/u);
   });
 
   it("opens and reconciles exactly five canonical archive instances", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-release-set-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-release-set-"));
     try {
       for (const { name, dependencies } of RELEASE_PACKAGE_SPECS) {
         await writeFile(join(root, filename(name)), packageArchive(packageManifest(name, dependencies)));
@@ -69,10 +69,10 @@ describe("verified five-package release set", () => {
   });
 
   it("rejects hidden and non-tarball package-directory entries", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-release-hidden-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-release-hidden-"));
     try {
       for (const { name, dependencies } of RELEASE_PACKAGE_SPECS) await writeFile(join(root, filename(name)), packageArchive(packageManifest(name, dependencies)));
-      await writeFile(join(root, ".swapped.tgz"), packageArchive(packageManifest("@rendered-motion/graph", [])));
+      await writeFile(join(root, ".swapped.tgz"), packageArchive(packageManifest("@aval/graph", [])));
       await expect(loadVerifiedReleaseSet({ directory: root, policy })).rejects.toThrow(/exactly five/u);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -80,11 +80,11 @@ describe("verified five-package release set", () => {
   });
 
   it("refuses a symlinked archive before parsing it", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-release-link-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-release-link-"));
     try {
       for (const { name, dependencies } of RELEASE_PACKAGE_SPECS) {
         const archive = packageArchive(packageManifest(name, dependencies));
-        if (name === "@rendered-motion/graph") {
+        if (name === "@aval/graph") {
           await writeFile(join(root, "outside.tgz"), archive);
           await symlink("outside.tgz", join(root, filename(name)));
         } else await writeFile(join(root, filename(name)), archive);
@@ -98,7 +98,7 @@ describe("verified five-package release set", () => {
 
 describe("bounded tar inspection", () => {
   it("rejects links, special entries, duplicate/case-colliding paths, and TypeScript source", () => {
-    const manifest = packageManifest("@rendered-motion/graph", []);
+    const manifest = packageManifest("@aval/graph", []);
     expect(() => inspectTarballBytes(tarGzip([
       ...baseEntries(manifest),
       { path: "package/link", bytes: Buffer.alloc(0), type: "2" }
@@ -115,18 +115,18 @@ describe("bounded tar inspection", () => {
 
   it("rejects lifecycle hooks, publish redirection, and decompression bombs", () => {
     expect(() => inspectTarballBytes(packageArchive({
-      ...packageManifest("@rendered-motion/graph", []),
+      ...packageManifest("@aval/graph", []),
       scripts: { install: "node surprise.js" }
     }))).toThrow(/forbidden publish manifest key/u);
     expect(() => inspectTarballBytes(packageArchive({
-      ...packageManifest("@rendered-motion/graph", []),
+      ...packageManifest("@aval/graph", []),
       publishConfig: { registry: "https://attacker.invalid/" }
     }))).toThrow(/forbidden publish manifest key/u);
-    expect(() => inspectTarballBytes(packageArchive(packageManifest("@rendered-motion/graph", [])), { maximumUnpackedBytes: 512 })).toThrow(/bounded gzip/u);
+    expect(() => inspectTarballBytes(packageArchive(packageManifest("@aval/graph", [])), { maximumUnpackedBytes: 512 })).toThrow(/bounded gzip/u);
   });
 
   it("rejects external dependencies, unexpected bins/exports, and native distribution payloads", () => {
-    const graph = packageManifest("@rendered-motion/graph", []);
+    const graph = packageManifest("@aval/graph", []);
     expect(() => validatePublishManifest({ ...graph, dependencies: { leftpad: "1.3.0" } })).toThrow(/exact reviewed set/u);
     expect(() => validatePublishManifest({ ...graph, bin: { surprise: "./dist/index.js" } })).toThrow(/bin map/u);
     expect(() => validatePublishManifest({ ...graph, exports: { ...graph.exports, "./private": "./dist/private.js" } })).toThrow(/reviewed public surface/u);
@@ -135,7 +135,7 @@ describe("bounded tar inspection", () => {
   });
 
   it("rejects path normalization collisions and non-zero data after the terminator", () => {
-    const manifest = packageManifest("@rendered-motion/graph", []);
+    const manifest = packageManifest("@aval/graph", []);
     expect(() => inspectTarballBytes(tarGzip([
       ...baseEntries(manifest),
       { path: "package/dist/caf\u00e9.js", bytes: Buffer.from("export {};\n") },
@@ -147,7 +147,7 @@ describe("bounded tar inspection", () => {
   });
 
   it("rejects non-USTAR headers and non-zero payload padding", () => {
-    const manifest = packageManifest("@rendered-motion/graph", []);
+    const manifest = packageManifest("@aval/graph", []);
     const wrongDialect = gunzip(packageArchive(manifest));
     wrongDialect.write("xxxxx\0", 257, 6, "ascii");
     rewriteChecksum(wrongDialect.subarray(0, 512));
@@ -186,16 +186,16 @@ function packageManifest(name: string, dependencies: readonly string[]): TestMan
     type: "module",
     license: "MIT",
     files: ["dist", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
-    sideEffects: name === "@rendered-motion/element" ? ["./dist/auto.js"] : false,
+    sideEffects: name === "@aval/element" ? ["./dist/auto.js"] : false,
     exports: { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } },
     dependencies: Object.fromEntries(dependencies.map((dependency) => [dependency, "1.0.0"])),
     engines: { node: ">=22.12.0" },
-    repository: { type: "git", url: "https://example.test/rendered-motion.git", directory: `packages/${name.slice("@rendered-motion/".length)}` },
-    homepage: "https://example.test/rendered-motion",
-    bugs: { url: "https://example.test/rendered-motion/issues" }
+    repository: { type: "git", url: "https://example.test/aval.git", directory: `packages/${name.slice("@aval/".length)}` },
+    homepage: "https://example.test/aval",
+    bugs: { url: "https://example.test/aval/issues" }
   };
-  if (name === "@rendered-motion/compiler") manifest.bin = { rma: "./dist/cli.js" };
-  if (name === "@rendered-motion/element") manifest.exports["./auto"] = { types: "./dist/auto.d.ts", import: "./dist/auto.js" };
+  if (name === "@aval/compiler") manifest.bin = { avl: "./dist/cli.js" };
+  if (name === "@aval/element") manifest.exports["./auto"] = { types: "./dist/auto.d.ts", import: "./dist/auto.js" };
   return manifest;
 }
 
@@ -212,9 +212,9 @@ function baseEntries(manifest: TestManifest): TarEntry[] {
     { path: "package/dist/index.js", bytes: Buffer.from("export {};\n") },
     { path: "package/dist/index.d.ts", bytes: Buffer.from("export {};\n") }
   ];
-  if (manifest.name === "@rendered-motion/compiler") entries.push({ path: "package/dist/cli.js", bytes: Buffer.from("#!/usr/bin/env node\n"), mode: 0o755 });
-  if (manifest.name === "@rendered-motion/player-web") entries.push({ path: "package/dist/decoder-worker/entry.js", bytes: Buffer.from("export {};\n") });
-  if (manifest.name === "@rendered-motion/element") entries.push(
+  if (manifest.name === "@aval/compiler") entries.push({ path: "package/dist/cli.js", bytes: Buffer.from("#!/usr/bin/env node\n"), mode: 0o755 });
+  if (manifest.name === "@aval/player-web") entries.push({ path: "package/dist/decoder-worker/entry.js", bytes: Buffer.from("export {};\n") });
+  if (manifest.name === "@aval/element") entries.push(
     { path: "package/dist/auto.js", bytes: Buffer.from("export {};\n") },
     { path: "package/dist/auto.d.ts", bytes: Buffer.from("export {};\n") }
   );
@@ -270,5 +270,5 @@ function gunzip(value: Buffer): Buffer {
 }
 
 function filename(name: string): string {
-  return `rendered-motion-${name.slice("@rendered-motion/".length)}-1.0.0.tgz`;
+  return `aval-${name.slice("@aval/".length)}-1.0.0.tgz`;
 }

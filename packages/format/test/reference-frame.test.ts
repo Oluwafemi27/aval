@@ -10,7 +10,7 @@ import {
 
 const RGBA = new Uint8Array([1, 2, 3, 4]);
 const GOLDEN_HEX =
-  "524d5246000118000000000001000100040302010400000001020304";
+  "41565246000118000000000001000100040302010400000001020304";
 
 function hex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -31,7 +31,7 @@ function expectFormatError(
 }
 
 describe("reference-rgba-v0 sample profile", () => {
-  it("encodes the exact 24-byte RMRF header and row-major RGBA payload", () => {
+  it("encodes the exact 24-byte AVRF header and row-major RGBA payload", () => {
     const sample = encodeReferenceFrame({
       width: 1,
       height: 1,
@@ -83,6 +83,33 @@ describe("reference-rgba-v0 sample profile", () => {
     });
     expect(Object.isFrozen(descriptor)).toBe(true);
     expect(Object.isFrozen(descriptor.rgbaRange)).toBe(true);
+  });
+
+  it("supports reference samples above the former 2 MiB ceiling", () => {
+    const width = 1_024;
+    const height = 513;
+    const rgba = new Uint8Array(width * height * 4).fill(0x7f);
+    const sample = encodeReferenceFrame({
+      width,
+      height,
+      frameIndex: 0,
+      rgba
+    });
+
+    expect(sample.byteLength).toBeGreaterThan(2 * 1024 * 1024);
+    expect(validateReferenceFrame({
+      sample,
+      expectedWidth: width,
+      expectedHeight: height,
+      expectedFrameIndex: 0
+    }).rgbaLength).toBe(rgba.byteLength);
+    expectFormatError(() => validateReferenceFrame({
+      sample,
+      expectedWidth: width,
+      expectedHeight: height,
+      expectedFrameIndex: 0,
+      options: { budgets: { maxSampleBytes: 2 * 1024 * 1024 } }
+    }), "BUDGET_EXCEEDED");
   });
 
   it("supports an unaligned sample view", () => {

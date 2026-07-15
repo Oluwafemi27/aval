@@ -33,10 +33,6 @@ function snapshotInput(input: CanonicalAssetInputV01): string {
     accessUnits: input.accessUnits.map(({ bytes, ...record }) => ({
       ...record,
       bytes: Array.from(bytes)
-    })),
-    staticPayloads: input.staticPayloads.map(({ bytes, ...record }) => ({
-      ...record,
-      bytes: Array.from(bytes)
     }))
   });
 }
@@ -46,13 +42,6 @@ function replaceAccess(
   accessUnits: CanonicalAssetInputV01["accessUnits"]
 ): CanonicalAssetInputV01 {
   return { ...input, accessUnits };
-}
-
-function replaceStatic(
-  input: CanonicalAssetInputV01,
-  staticPayloads: CanonicalAssetInputV01["staticPayloads"]
-): CanonicalAssetInputV01 {
-  return { ...input, staticPayloads };
 }
 
 function unreadHostileArray(length: number): {
@@ -111,7 +100,7 @@ describe("writeCanonicalAsset", () => {
     );
   });
 
-  it("rejects missing, duplicate, unknown, empty, and oversized access-unit payloads", () => {
+  it("rejects missing, duplicate, unknown, and empty access-unit payloads", () => {
     const missing = validWriterInput();
     expectFormatError(
       () => writeCanonicalAsset(replaceAccess(missing, missing.accessUnits.slice(1))),
@@ -145,65 +134,25 @@ describe("writeCanonicalAsset", () => {
       "WRITER_INVALID"
     );
 
-    const oversized = validWriterInput();
-    expectFormatError(
-      () => writeCanonicalAsset(replaceAccess(oversized, [
-        {
-          ...oversized.accessUnits[0]!,
-          bytes: new Uint8Array(FORMAT_DEFAULT_BUDGETS.maxSampleBytes + 1)
-        },
-        ...oversized.accessUnits.slice(1)
-      ])),
-      "BUDGET_EXCEEDED"
-    );
   });
 
-  it("rejects missing, duplicate, unknown, empty, and oversized static payloads", () => {
-    const missing = validWriterInput();
-    expectFormatError(
-      () => writeCanonicalAsset(replaceStatic(missing, missing.staticPayloads.slice(1))),
-      "WRITER_INVALID"
-    );
+  it("accepts media payloads above the former default byte ceilings", () => {
+    const sampleInput = avcWriterInput(2 * 1024 * 1024);
+    expect(sampleInput.accessUnits[0]!.bytes.byteLength)
+      .toBe(2 * 1024 * 1024 + 1);
+    expect(() => writeCanonicalAsset(sampleInput)).not.toThrow();
 
-    const duplicate = validWriterInput();
-    expectFormatError(
-      () => writeCanonicalAsset(replaceStatic(duplicate, [
-        ...duplicate.staticPayloads,
-        duplicate.staticPayloads[0]!
-      ])),
-      "WRITER_INVALID"
-    );
-
-    const extra = validWriterInput();
-    expectFormatError(
-      () => writeCanonicalAsset(replaceStatic(extra, [
-        ...extra.staticPayloads,
-        { staticFrame: "unknown", bytes: extra.staticPayloads[0]!.bytes }
-      ])),
-      "WRITER_INVALID"
-    );
-
-    const empty = validWriterInput();
-    expectFormatError(
-      () => writeCanonicalAsset(replaceStatic(empty, [
-        { ...empty.staticPayloads[0]!, bytes: new Uint8Array() },
-        ...empty.staticPayloads.slice(1)
-      ])),
-      "WRITER_INVALID"
-    );
-
-    const oversized = validWriterInput();
-    expectFormatError(
-      () => writeCanonicalAsset(replaceStatic(oversized, [
-        {
-          ...oversized.staticPayloads[0]!,
-          bytes: new Uint8Array(FORMAT_DEFAULT_BUDGETS.maxStaticPngBytes + 1)
-        },
-        ...oversized.staticPayloads.slice(1)
-      ])),
-      "BUDGET_EXCEEDED"
-    );
   });
+
+  it("round-trips an actual compiled file above the former 32 MiB ceiling", () => {
+    const input = avcWriterInput(33 * 1024 * 1024);
+    const bytes = writeCanonicalAsset(input);
+    const validated = validateCompleteAsset({ bytes });
+
+    expect(bytes.byteLength).toBeGreaterThan(32 * 1024 * 1024);
+    expect(validated.fileRange.length).toBe(bytes.byteLength);
+    expect(validated.frontIndex.records).toHaveLength(input.accessUnits.length);
+  }, 20_000);
 
   it("enforces frame-zero and reference-rendition key rules", () => {
     const frameZero = validWriterInput();
@@ -226,7 +175,7 @@ describe("writeCanonicalAsset", () => {
     );
   });
 
-  it("self-validates reference sample identity and the strict PNG profile", () => {
+  it("self-validates reference sample identity", () => {
     const badReference = validWriterInput();
     const referenceBytes = badReference.accessUnits[0]!.bytes.slice();
     referenceBytes[0] = 0;
@@ -236,17 +185,6 @@ describe("writeCanonicalAsset", () => {
         ...badReference.accessUnits.slice(1)
       ])),
       "REFERENCE_FRAME_INVALID"
-    );
-
-    const badPng = validWriterInput();
-    const pngBytes = badPng.staticPayloads[0]!.bytes.slice();
-    pngBytes[0] = 0;
-    expectFormatError(
-      () => writeCanonicalAsset(replaceStatic(badPng, [
-        { ...badPng.staticPayloads[0]!, bytes: pngBytes },
-        ...badPng.staticPayloads.slice(1)
-      ])),
-      "PNG_ENVELOPE_INVALID"
     );
   });
 
@@ -266,45 +204,54 @@ describe("writeCanonicalAsset", () => {
     expect([...seenManifestResidues].sort()).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   });
 
-  it("converges when a derived static offset crosses a decimal digit boundary", () => {
-    const below = parseFrontIndex(
-      writeCanonicalAsset(validWriterInput({ staticLength: (index) => index === 0 ? 3_000 : 33 }))
-    );
-    const above = parseFrontIndex(
-      writeCanonicalAsset(validWriterInput({ staticLength: (index) => index === 0 ? 8_000 : 33 }))
-    );
-
-    expect(below.manifest.staticFrames[1]!.offset).toBeLessThan(10_000);
-    expect(above.manifest.staticFrames[1]!.offset).toBeGreaterThanOrEqual(10_000);
-    for (const front of [below, above]) {
-      for (let index = 1; index < front.manifest.staticFrames.length; index += 1) {
-        expect(front.manifest.staticFrames[index]!.offset % 8).toBe(0);
-      }
-    }
+  it("ends exactly after the final access-unit payload", () => {
+    const bytes = writeCanonicalAsset(validWriterInput());
+    const front = parseFrontIndex(bytes);
+    const final = front.records.at(-1)!;
+    expect(final.payloadOffset + final.payloadLength).toBe(bytes.byteLength);
   });
 
-  it("converges at every larger decimal offset-width transition below 32 MiB", () => {
-    const baseOffset = parseFrontIndex(
-      writeCanonicalAsset(avcWriterInput(0))
-    ).manifest.staticFrames[0]!.offset;
-    for (const threshold of [100_000, 1_000_000, 10_000_000]) {
-      const belowExtra = Math.max(0, threshold - baseOffset - 512);
-      const aboveExtra = threshold - baseOffset + 512;
-      const belowOffset = parseFrontIndex(
-        writeCanonicalAsset(avcWriterInput(belowExtra))
-      ).manifest.staticFrames[0]!.offset;
-      const aboveOffset = parseFrontIndex(
-        writeCanonicalAsset(avcWriterInput(aboveExtra))
-      ).manifest.staticFrames[0]!.offset;
-
-      expect(belowOffset).toBeLessThan(threshold);
-      expect(aboveOffset).toBeGreaterThanOrEqual(threshold);
-      expect(belowOffset % 8).toBe(0);
-      expect(aboveOffset % 8).toBe(0);
+  it("round-trips AVC-v1 profiles and rejects profiles outside the allowlist", () => {
+    for (const profile of [
+      "avc-annexb-opaque-v1",
+      "avc-annexb-packed-alpha-v1"
+    ] as const) {
+      const input = avcWriterInput(0);
+      const base = input.manifest.renditions[0]!;
+      const packed = profile === "avc-annexb-packed-alpha-v1";
+      const manifest = {
+        ...input.manifest,
+        renditions: [{
+          ...base,
+          profile,
+          codedHeight: 16,
+          alphaLayout: packed
+            ? {
+                type: "stacked-v0" as const,
+                colorRect: [0, 0, 2, 2] as const,
+                alphaRect: [0, 10, 2, 2] as const
+              }
+            : {
+                type: "opaque-v0" as const,
+                colorRect: [0, 0, 2, 2] as const
+              }
+        }],
+        limits: {
+          ...input.manifest.limits,
+          decodedPixelBytes: 1_024,
+          runtimeWorkingSetBytes: 1_024
+        }
+      } as CanonicalAssetInputV01["manifest"];
+      const bytes = writeCanonicalAsset({ ...input, manifest });
+      expect(parseFrontIndex(bytes).manifest.renditions[0]?.profile).toBe(profile);
     }
+
+    const unknown: any = avcWriterInput(0);
+    unknown.manifest.renditions[0]!.profile = "avc-annexb-opaque-v2";
+    expectFormatError(() => writeCanonicalAsset(unknown), "WRITER_INVALID");
   });
 
-  it("honors lower file, manifest, index, sample, static, and count budgets", () => {
+  it("honors lower file, manifest, index, sample, and count budgets", () => {
     const input = validWriterInput();
     const bytes = writeCanonicalAsset(input);
     const front = parseFrontIndex(bytes);
@@ -323,10 +270,8 @@ describe("writeCanonicalAsset", () => {
       ["manifest", { maxManifestBytes: front.header.manifestLength - 1 }],
       ["index", { maxIndexBytes: front.header.indexLength - 1 }],
       ["sample", { maxSampleBytes: input.accessUnits[0]!.bytes.byteLength - 1 }],
-      ["static", { maxStaticPngBytes: input.staticPayloads[0]!.bytes.byteLength - 1 }],
       ["record count", { maxSampleRecords: input.accessUnits.length - 1 }],
-      ["unit count", { maxUnits: input.manifest.units.length - 1 }],
-      ["static count", { maxStaticFrames: input.manifest.staticFrames.length - 1 }]
+      ["unit count", { maxUnits: input.manifest.units.length - 1 }]
     ] as const;
     for (const [label, budgets] of cases) {
       const error = expectFormatError(() => writeCanonicalAsset(input, { budgets }));
@@ -430,7 +375,8 @@ describe("writeCanonicalAsset", () => {
       1,
       "asset",
       {},
-      { manifest: {}, accessUnits: [], staticPayloads: [] },
+      { manifest: {}, accessUnits: [] },
+      { ...validWriterInput(), staticPayloads: [] },
       { ...validWriterInput(), extra: true },
       new Proxy(validWriterInput(), {
         ownKeys() { throw new RangeError("hostile ownKeys trap"); }

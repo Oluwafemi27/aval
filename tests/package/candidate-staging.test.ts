@@ -9,7 +9,7 @@ const execute = promisify(execFile);
 
 describe("self-contained candidate staging", () => {
   it("copies the production harness and its absolute-root assets into one candidate root", async () => {
-    const temp = await mkdtemp(join(tmpdir(), "rma-candidate-stage-"));
+    const temp = await mkdtemp(join(tmpdir(), "aval-candidate-stage-"));
     try {
       const source = join(temp, "dist");
       const output = join(temp, "candidate");
@@ -29,7 +29,7 @@ describe("self-contained candidate staging", () => {
   });
 
   it("rejects symlinks instead of letting staged bytes escape provenance", async () => {
-    const temp = await mkdtemp(join(tmpdir(), "rma-candidate-link-"));
+    const temp = await mkdtemp(join(tmpdir(), "aval-candidate-link-"));
     try {
       const source = join(temp, "source");
       await mkdir(source);
@@ -46,7 +46,7 @@ describe("self-contained candidate staging", () => {
   });
 
   it("rejects non-canonical destination mappings while preserving the intentional root mapping", async () => {
-    const temp = await mkdtemp(join(tmpdir(), "rma-candidate-path-"));
+    const temp = await mkdtemp(join(tmpdir(), "aval-candidate-path-"));
     try {
       const source = join(temp, "source");
       await mkdir(source);

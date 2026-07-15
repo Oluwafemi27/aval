@@ -1,4 +1,4 @@
-import type { RenditionV01 } from "@rendered-motion/format";
+import type { RenditionV01 } from "@aval/format";
 import { describe, expect, it, vi } from "vitest";
 
 import { installRuntimeAssetCatalog } from "./asset-catalog.js";
@@ -13,13 +13,15 @@ import {
   inspectAvcRenditionCandidate,
   inspectOpaqueRenditionCandidate
 } from "./avc-rendition-selection.js";
+import { createAvcCandidateWorkerSetup } from "./avc-candidate-factory-config.js";
+import type { IntegratedCandidateAttemptContext } from "./integrated-player-contracts.js";
 
 describe("deterministic AVC rendition selection", () => {
   it("accepts exact packed alpha and records visible color area separately", () => {
     const packed: RenditionV01 = {
       id: "packed",
       profile: "avc-annexb-packed-alpha-v0",
-      codec: "avc1.42E020",
+      codec: "avc1.42E028",
       codedWidth: 64,
       codedHeight: 144,
       alphaLayout: {
@@ -40,7 +42,7 @@ describe("deterministic AVC rendition selection", () => {
       rank: 0,
       visibleColorArea: 4_096,
       codedArea: 9_216,
-      rendition: { id: "packed" },
+      rendition: { id: "packed", codec: "avc1.42E028" },
       geometry: {
         profile: "avc-annexb-packed-alpha-v0",
         decodedStorageRect: [0, 0, 64, 136]
@@ -80,7 +82,7 @@ describe("deterministic AVC rendition selection", () => {
     const reference: RenditionV01 = {
       id: "reference",
       profile: "reference-rgba-v0",
-      codec: "rma.reference-rgba",
+      codec: "aval.reference-rgba",
       codedWidth: 64,
       codedHeight: 64,
       alphaLayout: { type: "straight-rgba-v0" },
@@ -123,7 +125,7 @@ describe("deterministic AVC rendition selection", () => {
     expect(() => createAvcRenditionCandidates(
       [opaque, packed],
       { width: 64, height: 64 }
-    )).toThrow("cannot be mixed");
+    )).toThrow("one exact profile and version");
     expect(Object.isFrozen(createAvcRenditionCandidates([reference]))).toBe(
       true
     );
@@ -244,6 +246,29 @@ describe("deterministic AVC rendition selection", () => {
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.report)).toBe(true);
     expect(Object.isFrozen(result.inspection)).toBe(true);
+  });
+
+  it("propagates AVC-v1 bounded quantization from catalog inspection to worker setup", () => {
+    const catalog = installRuntimeAssetCatalog(createOpaqueTestAsset({
+      profile: "avc-annexb-opaque-v1"
+    }));
+    const candidate = createAvcRenditionCandidates(
+      catalog.manifest.renditions
+    )[0]!;
+    expect(candidate.rendition.profile).toBe("avc-annexb-opaque-v1");
+
+    const result = inspectAvcRenditionCandidate(catalog, candidate);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("valid AVC-v1 fixture failed inspection");
+
+    const setup = createAvcCandidateWorkerSetup({
+      catalog,
+      candidate: result.candidate,
+      inspection: result.inspection
+    } as unknown as IntegratedCandidateAttemptContext);
+    expect(setup.configure.avcProfile.quantizationPolicy)
+      .toBe("bounded-qp-v1");
+    catalog.dispose();
   });
 
   it("inspects borrowed backing without allocating samples or mutating residency", () => {

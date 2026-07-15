@@ -162,6 +162,7 @@ function frozenSnapshot(
   return Object.freeze({
     readiness: "animated",
     phase: "stable",
+    initialUnitPending: false,
     requestedState: "idle",
     visualState: "idle",
     prospectiveState: "idle",

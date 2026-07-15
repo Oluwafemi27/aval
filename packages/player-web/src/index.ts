@@ -11,8 +11,8 @@ export type {
   BindingV01,
   CanvasV01,
   CompiledManifestV01
-} from "@rendered-motion/format";
-export { IDENTIFIER_PATTERN } from "@rendered-motion/format";
+} from "@aval/format";
+export { IDENTIFIER_PATTERN } from "@aval/format";
 export {
   createEncodedLoopUnit,
   validateEncodedLoopUnit,
@@ -249,8 +249,7 @@ export {
   type RuntimeCatalogIdIndex,
   type RuntimeCatalogPortEntry,
   type RuntimeCatalogPortIndex,
-  type RuntimeCatalogRecordIndex,
-  type RuntimeCatalogStaticFrame
+  type RuntimeCatalogRecordIndex
 } from "./runtime/asset-catalog.js";
 export {
   createAvcRenditionCandidates,
@@ -312,22 +311,21 @@ export {
   MAX_RESOURCE_RING_CAPACITY,
   MIN_RESOURCE_RING_CAPACITY,
   RESOURCE_DECODE_SURFACE_COUNT,
+  createCanvasRuntimeResourcePlan,
   createRuntimeResourcePlan,
-  createStaticRuntimeResourcePlan,
   maximumActualEncodedWindowBytes,
   withRuntimeResourceRingCapacity,
   type RuntimeCanvasBackingSize,
+  type RuntimeCanvasResourceAllocationSnapshot,
+  type RuntimeCanvasResourceCatalogView,
   type RuntimeCanvasResourceHost,
   type RuntimeCanvasResourceLease,
   type RuntimeCanvasResourcePlan,
+  type RuntimeCanvasResourcePlanInput,
   type RuntimeResourceCatalogView,
   type RuntimeResourceAllocationSnapshot,
   type RuntimeResourcePlan,
-  type RuntimeResourcePlanInput,
-  type RuntimeStaticResourceCatalogView,
-  type StaticRuntimeResourceAllocationSnapshot,
-  type StaticRuntimeResourcePlan,
-  type StaticRuntimeResourcePlanInput
+  type RuntimeResourcePlanInput
 } from "./runtime/resource-plan.js";
 export {
   DEFAULT_INTERACTION_CACHE_PREPARATION_TIMEOUT_MS,
@@ -372,35 +370,6 @@ export {
   type BrowserOpaqueFrameBackendOptions
 } from "./runtime/opaque-frame-renderer-browser.js";
 export {
-  BrowserStaticCanvasPlane,
-  BrowserStaticSurfaceDecoder,
-  StaticSurfaceDecodeTimeoutError,
-  StaticSurfaceStore,
-  StaticSurfaceStoreDisposedError,
-  StaticSurfaceUnavailableError,
-  asStaticSurfaceCatalog,
-  type BrowserDecodedStaticSurface,
-  type BrowserStaticDecoderResourceCategory,
-  type BrowserStaticDecoderResourceHost,
-  type BrowserStaticDecoderResourceLease,
-  type BrowserStaticSurfaceDecoderOptions,
-  type BrowserStaticSurfaceDecoderSnapshot,
-  type BrowserStaticSurfaceTimerHost,
-  type DecodedStaticSurface,
-  type StaticPresentationPlane,
-  type StaticSurfaceCatalogView,
-  type StaticSurfaceDecodeOptions,
-  type StaticSurfaceDecoder,
-  type StaticSurfacePresentationReport,
-  type StaticSurfaceStoreOptions,
-  type StaticSurfaceStoreResourceHost,
-  type StaticSurfaceStoreResourceLease,
-  type StaticSurfaceStoreSnapshot,
-  type StaticSurfaceStoreSurfaceRole,
-  type StaticSurfaceValidationReport,
-  type StaticPngInflatePath
-} from "./runtime/static-surfaces.js";
-export {
   BrowserPresentationPlanes,
   type BrowserCanvasBackingResourceHost,
   type BrowserCanvasBackingResourceInput,
@@ -410,12 +379,6 @@ export {
   type BrowserPresentationResizeInput,
   type PresentableFrameBackend
 } from "./runtime/browser-presentation-planes.js";
-export {
-  UNSUPPORTED_NATIVE_INFLATER,
-  createBrowserPngNativeInflater,
-  type BrowserDecompressionStreamFactory,
-  type BrowserPngNativeInflater
-} from "./runtime/png-inflate-browser.js";
 export {
   createBrowserAvcCandidateComposition,
   createBrowserOpaqueCandidateComposition,
@@ -642,9 +605,7 @@ export {
   type RuntimeAssetEnsureOptions,
   type RuntimeAssetSession,
   type RuntimeAssetSessionResources,
-  type RuntimeAssetSessionSnapshot,
-  type RuntimeStaticPngValidationInput,
-  type RuntimeStaticPngValidator
+  type RuntimeAssetSessionSnapshot
 } from "./runtime/runtime-asset-session.js";
 export {
   createPlayerRuntimeAssetSessionResources
@@ -663,8 +624,7 @@ export {
   type PlayerWebParticipantRegistration,
   type PlayerWebReclamationParticipant,
   type PlayerWebRuntimeParticipant,
-  type PlayerWebRuntimeParticipantSnapshot,
-  type PlayerWebStaticSurfaceReclaimer
+  type PlayerWebRuntimeParticipantSnapshot
 } from "./runtime/player-web-page-runtime.js";
 export {
   RUNTIME_SESSION_CLEANUP_PHASES,
@@ -779,9 +739,13 @@ export {
   type IntegratedPreparedContentTick,
   type IntegratedPrepareOptions,
   type IntegratedPrepareResult,
-  type IntegratedStaticSurfaceStore,
+  type IntegratedFallbackStore,
   type IntegratedTimerHost
 } from "./runtime/integrated-player.js";
+export {
+  StateFallbackStore,
+  type StateFallbackStoreOptions
+} from "./runtime/state-fallback-store.js";
 export {
   AvcCandidateFactory,
   OpaqueCandidateFactory,

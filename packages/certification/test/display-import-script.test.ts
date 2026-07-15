@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 
 describe("display observation import", () => {
   it("imports only raw bounded capture fields into a canonical ledger", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-observations-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-observations-"));
     try {
       const input = join(root, "input.csv");
       const metadataPath = join(root, "metadata.json");
@@ -32,7 +32,7 @@ describe("display observation import", () => {
   });
 
   it("rejects the retired producer-authored expectation columns", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-observations-hostile-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-observations-hostile-"));
     try {
       const input = join(root, "input.csv");
       const metadataPath = join(root, "metadata.json");

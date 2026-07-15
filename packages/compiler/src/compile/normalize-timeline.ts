@@ -11,8 +11,7 @@ export interface NormalizedTimeline {
 export function normalizeHoldTimeline(
   frames: readonly MediaProbeFrame[],
   frameRate: RationalV01,
-  timeBase: RationalV01,
-  maximumFrames = 1_800
+  timeBase: RationalV01
 ): Readonly<NormalizedTimeline> {
   if (frames.length < 1) {
     throw new CompilerError("VFR_UNSUPPORTED", "Cannot normalize an empty timeline");
@@ -21,16 +20,33 @@ export function normalizeHoldTimeline(
   const last = frames.at(-1)!;
   const endTicks =
     BigInt(last.timestampTicks) - firstPts + BigInt(last.durationTicks);
-  const mapping: number[] = [];
+  const targetStep =
+    BigInt(frameRate.denominator) * BigInt(timeBase.denominator);
+  const sourceScale =
+    BigInt(timeBase.numerator) * BigInt(frameRate.numerator);
+  const outputCountBig = (endTicks * sourceScale + targetStep - 1n) / targetStep;
+  if (outputCountBig < 1n || outputCountBig > 0xffff_ffffn) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      "Normalized timeline cannot be represented by a JavaScript array"
+    );
+  }
+  const outputCount = Number(outputCountBig);
+  let mapping: number[];
+  try {
+    mapping = new Array<number>(outputCount);
+  } catch (error) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      `Could not allocate normalized timeline for ${String(outputCount)} frames`,
+      { cause: error }
+    );
+  }
   let sourceIndex = 0;
-  for (let outputIndex = 0; outputIndex < maximumFrames; outputIndex += 1) {
+  for (let outputIndex = 0; outputIndex < outputCount; outputIndex += 1) {
     const targetScale =
       BigInt(outputIndex) *
-      BigInt(frameRate.denominator) *
-      BigInt(timeBase.denominator);
-    const sourceScale =
-      BigInt(timeBase.numerator) * BigInt(frameRate.numerator);
-    if (targetScale >= endTicks * sourceScale) break;
+      targetStep;
     while (
       sourceIndex + 1 < frames.length &&
       (BigInt(frames[sourceIndex + 1]!.timestampTicks) - firstPts) * sourceScale <=
@@ -38,21 +54,7 @@ export function normalizeHoldTimeline(
     ) {
       sourceIndex += 1;
     }
-    mapping.push(sourceIndex);
-  }
-  if (mapping.length === maximumFrames) {
-    const nextScale =
-      BigInt(maximumFrames) *
-      BigInt(frameRate.denominator) *
-      BigInt(timeBase.denominator);
-    const sourceScale =
-      BigInt(timeBase.numerator) * BigInt(frameRate.numerator);
-    if (nextScale < endTicks * sourceScale) {
-      throw new CompilerError(
-        "SOURCE_LIMIT",
-        `Normalized timeline exceeds ${String(maximumFrames)} frames`
-      );
-    }
+    mapping[outputIndex] = sourceIndex;
   }
   const counts = new Map<number, number>();
   for (const source of mapping) counts.set(source, (counts.get(source) ?? 0) + 1);

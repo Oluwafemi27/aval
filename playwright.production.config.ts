@@ -1,10 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 import base from "./playwright.config.js";
 
-const productionBaseUrl = `http://127.0.0.1:${process.env.RMA_PLAYWRIGHT_PORT ?? "4173"}`;
+const productionBaseUrl = `http://127.0.0.1:${process.env.AVL_PLAYWRIGHT_PORT ?? "4173"}`;
 
 const chromiumProductionTests = [
   "**/m9-alpha-sizing.spec.ts",
+  "**/m9-author-dimensions.spec.ts",
   "**/m9-capability-fallback.spec.ts",
   "**/m9-certification-harness.spec.ts",
   "**/m9-loader-lifecycle.spec.ts",

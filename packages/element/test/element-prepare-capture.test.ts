@@ -37,7 +37,7 @@ function snapshot(sourceToken: number): Readonly<ElementDesiredSnapshot> {
     revision: sourceToken,
     sourceToken,
     configuration: Object.freeze({
-      src: "asset.rma", integrity: "", crossOrigin: "anonymous" as const,
+      src: "asset.avl", integrity: "", crossOrigin: "anonymous" as const,
       motion: "auto" as const, autoplay: "visible" as const, fit: null,
       bindings: "auto" as const, state: null, interactionFor: "",
       width: null, height: null

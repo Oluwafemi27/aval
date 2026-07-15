@@ -12,7 +12,7 @@ import {
   type ResidentPathRecoveryEndpointReport,
   type ResidentReversalStressReport,
   type ResidentReversiblePlayerSnapshot
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import {
   SYNTHETIC_REVERSIBLE_RENDITION_ID,
@@ -98,7 +98,7 @@ interface PendingContextRestore {
   readonly resumeRunning: boolean;
 }
 
-export interface RenderedMotionM2Api {
+export interface AvalM2Api {
   readonly ready: Promise<SyntheticReversibleCodecEvidence>;
   snapshot(): SerializedM2Snapshot | null;
   request(endpoint: DemoEndpoint): number;
@@ -112,14 +112,14 @@ export interface RenderedMotionM2Api {
 
 declare global {
   interface Window {
-    __renderedMotionM2: RenderedMotionM2Api;
+    __avalM2: AvalM2Api;
   }
 }
 
 export function mountM2Playground(
   root: HTMLElement,
   startWhen: Promise<unknown> = Promise.resolve()
-): RenderedMotionM2Api {
+): AvalM2Api {
   root.innerHTML = `
     <section class="m2-lab" aria-labelledby="m2-title">
       <div class="m2-heading">
@@ -245,7 +245,7 @@ export function mountM2Playground(
   });
   void ready.catch(() => undefined);
 
-  const api: RenderedMotionM2Api = {
+  const api: AvalM2Api = {
     ready,
     snapshot: () =>
       session === null
@@ -282,7 +282,7 @@ export function mountM2Playground(
       canvas.removeEventListener("webglcontextrestored", onContextRestored);
     }
   };
-  window.__renderedMotionM2 = api;
+  window.__avalM2 = api;
 
   host.addEventListener("pointerenter", () => {
     pointerEngaged = true;
@@ -505,10 +505,10 @@ export function mountM2Playground(
     const operation = (async () => {
       const wasRunning = current.player.state === "running";
       const m1WasRunning =
-        window.__renderedMotionSpike.snapshot()?.state === "running";
+        window.__avalSpike.snapshot()?.state === "running";
       current.player.pause();
       if (m1WasRunning) {
-        window.__renderedMotionSpike.pause();
+        window.__avalSpike.pause();
       }
       try {
         await current.renderer.settled();
@@ -561,7 +561,7 @@ export function mountM2Playground(
           await current.player.resume();
         }
         if (m1WasRunning) {
-          await window.__renderedMotionSpike.resume();
+          await window.__avalSpike.resume();
         }
       }
     })();

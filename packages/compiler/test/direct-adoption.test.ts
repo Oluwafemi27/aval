@@ -9,7 +9,7 @@ import type { CompileResult } from "../src/model.js";
 describe("direct compile adoption summary", () => {
   it("emits deterministic frame-canonical facts and copyable snippets", () => {
     const result = {
-      outputPath: "/private/output/orbit.rma",
+      outputPath: "/private/output/orbit.avl",
       bytes: 1234,
       sha256: "ab".repeat(32),
       buildDetails: {
@@ -34,8 +34,7 @@ describe("direct compile adoption summary", () => {
           selected: "opaque",
           audit: { uniqueReferencedFrames: 36 }
         },
-        continuity: [{ status: "pass" }],
-        statics: [{}]
+        continuity: [{ status: "pass" }]
       }
     } as unknown as CompileResult;
     const summary = createCompileAdoptionSummary(result);
@@ -43,10 +42,10 @@ describe("direct compile adoption summary", () => {
       expect.objectContaining({ kind: "intro", frameRange: [0, 12] }),
       expect.objectContaining({ kind: "body", frameRange: [12, 36] })
     ]);
-    expect(summary.snippets.html).toContain("orbit.rma");
+    expect(summary.snippets.html).toContain("orbit.avl");
     expect(summary.snippets.html).toContain("author-owned static fallback");
     expect(summary.snippets.html).not.toContain("fallback.png");
-    expect(summary.snippets.npm).toBe("npm install @rendered-motion/element@1.0.0");
+    expect(summary.snippets.npm).toBe("npm install @aval/element@1.0.0");
     expect(formatCompileAdoptionSummary(summary)).toContain("body body.default");
     expect(JSON.stringify(summary)).not.toContain("/private/output");
   });

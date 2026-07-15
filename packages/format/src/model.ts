@@ -1,4 +1,5 @@
-import type { ValidatedMotionGraph } from "@rendered-motion/graph";
+import type { ValidatedMotionGraph } from "@aval/graph";
+import type { AvcCodecV01 } from "./avc/codec.js";
 
 export type Id = string;
 export type Sha256Hex = string;
@@ -14,7 +15,7 @@ export interface FormatBudgets {
   readonly maxManifestBytes: number;
   readonly maxIndexBytes: number;
   readonly maxSampleBytes: number;
-  readonly maxStaticPngBytes: number;
+  readonly maxPngBytes: number;
   readonly maxJsonDepth: number;
   readonly maxJsonNodes: number;
   readonly maxJsonStringBytes: number;
@@ -22,7 +23,6 @@ export interface FormatBudgets {
   readonly maxEdges: number;
   readonly maxUnits: number;
   readonly maxRenditions: number;
-  readonly maxStaticFrames: number;
   readonly maxBindings: number;
   readonly maxBlobRanges: number;
   readonly maxTotalUnitFrames: number;
@@ -53,11 +53,17 @@ export interface BitrateV01 {
   readonly peak: number;
 }
 
+export type AvcProductionRenditionProfileV01 =
+  | "avc-annexb-opaque-v0"
+  | "avc-annexb-packed-alpha-v0"
+  | "avc-annexb-opaque-v1"
+  | "avc-annexb-packed-alpha-v1";
+
 export type RenditionV01 =
   | {
       readonly id: Id;
       readonly profile: "reference-rgba-v0";
-      readonly codec: "rma.reference-rgba";
+      readonly codec: "aval.reference-rgba";
       readonly codedWidth: number;
       readonly codedHeight: number;
       readonly alphaLayout: { readonly type: "straight-rgba-v0" };
@@ -66,7 +72,7 @@ export type RenditionV01 =
   | {
       readonly id: Id;
       readonly profile: "avc-annexb-opaque-v0";
-      readonly codec: "avc1.42E020";
+      readonly codec: AvcCodecV01;
       readonly codedWidth: number;
       readonly codedHeight: number;
       readonly alphaLayout: {
@@ -79,7 +85,34 @@ export type RenditionV01 =
   | {
       readonly id: Id;
       readonly profile: "avc-annexb-packed-alpha-v0";
-      readonly codec: "avc1.42E020";
+      readonly codec: AvcCodecV01;
+      readonly codedWidth: number;
+      readonly codedHeight: number;
+      readonly alphaLayout: {
+        readonly type: "stacked-v0";
+        readonly colorRect: Rect;
+        readonly alphaRect: Rect;
+      };
+      readonly bitrate: BitrateV01;
+      readonly capabilities: readonly ["webcodecs", "webgl2"];
+    }
+  | {
+      readonly id: Id;
+      readonly profile: "avc-annexb-opaque-v1";
+      readonly codec: AvcCodecV01;
+      readonly codedWidth: number;
+      readonly codedHeight: number;
+      readonly alphaLayout: {
+        readonly type: "opaque-v0";
+        readonly colorRect: Rect;
+      };
+      readonly bitrate: BitrateV01;
+      readonly capabilities: readonly ["webcodecs", "webgl2"];
+    }
+  | {
+      readonly id: Id;
+      readonly profile: "avc-annexb-packed-alpha-v1";
+      readonly codec: AvcCodecV01;
       readonly codedWidth: number;
       readonly codedHeight: number;
       readonly alphaLayout: {
@@ -134,19 +167,9 @@ export type UnitV01 =
     })
   | (UnitBaseV01 & { readonly kind: "one-shot" });
 
-export interface StaticFrameV01 {
-  readonly id: Id;
-  readonly offset: number;
-  readonly length: number;
-  readonly width: number;
-  readonly height: number;
-  readonly sha256: Sha256Hex;
-}
-
 export interface StateV01 {
   readonly id: Id;
   readonly bodyUnit: Id;
-  readonly staticFrame: Id;
   readonly initialUnit?: Id;
 }
 
@@ -227,11 +250,6 @@ export interface ReadinessV01 {
   readonly immediateEdges: readonly Id[];
 }
 
-export interface FallbackV01 {
-  readonly unsupported: "per-state-static";
-  readonly reducedMotion: "per-state-static";
-}
-
 export interface DeclaredLimitsV01 {
   readonly maxCompiledBytes: number;
   readonly maxRuntimeBytes: number;
@@ -247,13 +265,11 @@ export interface CompiledManifestV01 {
   readonly frameRate: RationalV01;
   readonly renditions: readonly RenditionV01[];
   readonly units: readonly UnitV01[];
-  readonly staticFrames: readonly StaticFrameV01[];
   readonly initialState: Id;
   readonly states: readonly StateV01[];
   readonly edges: readonly EdgeV01[];
   readonly bindings: readonly BindingV01[];
   readonly readiness: ReadinessV01;
-  readonly fallback: FallbackV01;
   readonly limits: DeclaredLimitsV01;
 }
 
@@ -291,11 +307,6 @@ export interface UnitBlobRange extends ByteRange {
   readonly sha256: Sha256Hex;
 }
 
-export interface StaticBlobRange extends ByteRange {
-  readonly staticFrame: Id;
-  readonly sha256: Sha256Hex;
-}
-
 export interface ParsedFrontIndex {
   readonly header: FormatHeader;
   readonly manifest: CompiledManifestV01;
@@ -303,23 +314,11 @@ export interface ParsedFrontIndex {
   readonly records: readonly AccessUnitRecord[];
   readonly frontIndexRange: ByteRange;
   readonly unitBlobs: readonly UnitBlobRange[];
-  readonly staticBlobs: readonly StaticBlobRange[];
-}
-
-export interface ValidatedStaticPngProfile {
-  readonly width: number;
-  readonly height: number;
-  readonly byteRange: ByteRange;
-  readonly zlibByteLength: number;
-  readonly expectedFilteredBytes: number;
-  readonly expectedRgbaBytes: number;
 }
 
 export interface ValidatedAssetLayout {
   readonly frontIndex: ParsedFrontIndex;
   readonly fileRange: ByteRange;
-  /** Strict PNG facts aligned one-for-one with frontIndex.staticBlobs. */
-  readonly staticPngProfiles: readonly Readonly<ValidatedStaticPngProfile>[];
 }
 
 export interface ReferenceFrameHeader {
@@ -351,19 +350,11 @@ export type UnitInputV01 =
   | UnitInputOf<"reversible">
   | UnitInputOf<"one-shot">;
 
-export interface StaticFrameInputV01 {
-  readonly id: Id;
-  readonly width: number;
-  readonly height: number;
-  readonly sha256: Sha256Hex;
-}
-
 export type CompiledManifestInputV01 = Omit<
   CompiledManifestV01,
-  "units" | "staticFrames"
+  "units"
 > & {
   readonly units: readonly UnitInputV01[];
-  readonly staticFrames: readonly StaticFrameInputV01[];
 };
 
 export interface AccessUnitInputV01 {
@@ -374,13 +365,7 @@ export interface AccessUnitInputV01 {
   readonly bytes: Uint8Array;
 }
 
-export interface StaticPayloadInputV01 {
-  readonly staticFrame: Id;
-  readonly bytes: Uint8Array;
-}
-
 export interface CanonicalAssetInputV01 {
   readonly manifest: CompiledManifestInputV01;
   readonly accessUnits: readonly AccessUnitInputV01[];
-  readonly staticPayloads: readonly StaticPayloadInputV01[];
 }

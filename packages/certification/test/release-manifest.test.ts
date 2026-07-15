@@ -82,7 +82,7 @@ describe("immutable release manifests", () => {
   });
 
   it("verifies digest, length, containment, media policy, and symlink rejection", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-artifact-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-artifact-"));
     try {
       await writeFile(join(root, "artifact.json"), "{}\n");
       const sha256 = createHash("sha256").update("{}\n").digest("hex");

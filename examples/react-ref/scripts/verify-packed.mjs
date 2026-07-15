@@ -14,8 +14,8 @@ if (packagesFlag < 0 || process.argv[packagesFlag + 1] === undefined) {
 const packageDirectory = resolve(process.cwd(), process.argv[packagesFlag + 1]);
 const packageJson = JSON.parse(await readFile(join(example, "package.json"), "utf8"));
 if (
-  packageJson.peerDependencies?.["@rendered-motion/element"] !== "1.0.0" ||
-  packageJson.peerDependenciesMeta?.["@rendered-motion/element"]?.optional !== true
+  packageJson.peerDependencies?.["@aval/element"] !== "1.0.0" ||
+  packageJson.peerDependenciesMeta?.["@aval/element"]?.optional !== true
 ) {
   throw new Error("React example must target the exact optional element 1.0.0 peer");
 }
@@ -24,11 +24,11 @@ const archives = (await readdir(packageDirectory))
   .filter((name) => name.endsWith(".tgz"))
   .sort()
   .map((name) => join(packageDirectory, name));
-if (!archives.some((path) => basename(path).includes("rendered-motion-element"))) {
+if (!archives.some((path) => basename(path).includes("aval-element"))) {
   throw new Error("packed React verification requires the element archive");
 }
 
-const temporary = await mkdtemp(join(tmpdir(), "rma-react-example-"));
+const temporary = await mkdtemp(join(tmpdir(), "aval-react-example-"));
 const target = join(temporary, "example");
 try {
   await cp(example, target, {
@@ -57,7 +57,7 @@ try {
     ...archives
   ], target, 120_000);
   const installedElement = JSON.parse(await readFile(
-    join(target, "node_modules/@rendered-motion/element/package.json"),
+    join(target, "node_modules/@aval/element/package.json"),
     "utf8"
   ));
   if (installedElement.version !== "1.0.0") {

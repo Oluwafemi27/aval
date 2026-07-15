@@ -4,12 +4,8 @@ import {
   type MotionGraphResult,
   type MotionGraphSnapshot,
   type ValidatedMotionGraph
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
-import {
-  RuntimePlaybackError,
-  normalizeRuntimeFailure
-} from "./errors.js";
 import {
   type IntegratedCandidateAttempt,
   type IntegratedCandidateAttemptContext,
@@ -19,7 +15,7 @@ import {
   type IntegratedPlaybackTraceState,
   type IntegratedPreparedActivation,
   type IntegratedPreparedContentTick,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player.js";
 import { createIntegratedActivationPresentation } from "./integrated-player-support.js";
 import { createIntegratedResumePresentation } from "./integrated-player-support.js";
@@ -48,13 +44,11 @@ export class FuzzCandidateFactory implements IntegratedCandidateFactory {
   public readonly sessions: FuzzPlaybackSession[] = [];
 
   readonly #recorder: FuzzRecorder;
-  readonly #failHigh: boolean;
   readonly #preparationTargets: string[] = [];
   #session: FuzzPlaybackSession | null = null;
 
-  public constructor(recorder: FuzzRecorder, failHigh: boolean) {
+  public constructor(recorder: FuzzRecorder) {
     this.#recorder = recorder;
-    this.#failHigh = failHigh;
   }
 
   public get session(): FuzzPlaybackSession {
@@ -95,13 +89,6 @@ export class FuzzCandidateFactory implements IntegratedCandidateFactory {
       playback: session,
       prepare: async () => {
         this.#recorder.push(`candidate:prepare:${rendition}`);
-        if (this.#failHigh && context.candidate.rank === 0) {
-          throw new RuntimePlaybackError(normalizeRuntimeFailure(
-            "readiness-failure",
-            "seeded high-candidate readiness failure",
-            { rendition }
-          ));
-        }
       },
       prepareActivation: async (options) => {
         const expected = options.graphSnapshot.phase === "static"
@@ -375,22 +362,17 @@ export class FuzzPlaybackSession implements IntegratedPlaybackSession {
   }
 }
 
-export class FuzzStaticStore implements IntegratedStaticSurfaceStore {
+export class FuzzFallbackStore implements IntegratedFallbackStore {
   public readonly presented: string[] = [];
   public disposed = false;
   public activePresentations = 0;
   public maximumActivePresentations = 0;
 
   readonly #recorder: FuzzRecorder;
-  readonly #inflatePath: "native" | "pure";
   #lastPresented = "idle";
 
-  public constructor(
-    recorder: FuzzRecorder,
-    inflatePath: "native" | "pure" = "pure"
-  ) {
+  public constructor(recorder: FuzzRecorder) {
     this.#recorder = recorder;
-    this.#inflatePath = inflatePath;
   }
 
   public async installInitial(options: {
@@ -399,13 +381,11 @@ export class FuzzStaticStore implements IntegratedStaticSurfaceStore {
   }): Promise<void> {
     throwIfAborted(options.signal);
     this.#lastPresented = options.state;
-    this.#recorder.push(`static:decode-model:${this.#inflatePath}:${options.state}`);
     this.#recorder.push(`static:install:${options.state}`);
   }
 
   public async validateAll(options: { readonly signal: AbortSignal }): Promise<void> {
     throwIfAborted(options.signal);
-    this.#recorder.push(`static:validate-model:${this.#inflatePath}`);
     this.#recorder.push("static:validate-all");
   }
 
@@ -421,7 +401,6 @@ export class FuzzStaticStore implements IntegratedStaticSurfaceStore {
     );
     try {
       this.#recorder.push(`static:present:${state}`);
-      this.#recorder.push(`static:decode-model:${this.#inflatePath}:${state}`);
       await Promise.resolve();
       throwIfAborted(options.signal);
       this.#lastPresented = state;

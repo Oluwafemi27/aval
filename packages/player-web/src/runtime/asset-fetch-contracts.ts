@@ -1,4 +1,4 @@
-import { FORMAT_DEFAULT_BUDGETS } from "@rendered-motion/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
 
 import type { RuntimeBodyReader } from "./bounded-body-reader.js";
 import { parseExternalIntegrity, type NormalizedExternalIntegrity } from "./external-integrity.js";

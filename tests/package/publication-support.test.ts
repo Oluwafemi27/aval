@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import * as certification from "../../packages/certification/src/index.js";
 import { loadBoundLedger, loadMitigationEvidence, loadRegistryConsumerEvidence } from "../../scripts/release/publication-support.mjs";
 
-const order = ["graph", "format", "player-web", "element", "compiler"].map((name) => `@rendered-motion/${name}`);
+const order = ["graph", "format", "player-web", "element", "compiler"].map((name) => `@aval/${name}`);
 const integrity = `sha512-${Buffer.alloc(64, 9).toString("base64")}`;
 const authorization = {
   digest: "a".repeat(64),
@@ -18,7 +18,7 @@ const authorization = {
 
 describe("bounded immutable publication inputs", () => {
   it("loads one canonical release-bound ledger and rejects symlink/oversized substitutions before parsing", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-publication-input-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-publication-input-"));
     try {
       const operations = order.map((packageName, index) => certification.planExactPublication({
         packageName,
@@ -55,7 +55,7 @@ describe("bounded immutable publication inputs", () => {
   });
 
   it("binds registry-consumer and mitigation evidence to exact stable bytes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-publication-evidence-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-publication-evidence-"));
     try {
       const evidence = {
         schemaVersion: "1.0", evidenceKind: "registry-consumers", status: "passed",

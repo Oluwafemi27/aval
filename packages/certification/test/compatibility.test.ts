@@ -6,7 +6,7 @@ import { COMPILER_PROJECT_VERSION } from "../../compiler/src/index.js";
 describe("1.0 compatibility policy", () => {
   it("keeps package, wire, and project version spaces independent", () => {
     expect([FORMAT_VERSION_MAJOR, FORMAT_VERSION_MINOR]).toEqual([0, 1]);
-    expect(COMPILER_PROJECT_VERSION).toBe("0.2");
+    expect(COMPILER_PROJECT_VERSION).toBe("0.3");
   });
   it("requires synchronized public ESM packages and exact internal dependencies", () => {
     const manifests = PUBLIC_RELEASE_PACKAGES.map((name) => ({
@@ -22,9 +22,9 @@ describe("1.0 compatibility policy", () => {
       dependencies: Object.fromEntries(PUBLIC_RELEASE_DEPENDENCIES[name].map((dependency) => [dependency, "1.0.0"]))
     }));
     expect(validateSynchronizedReleaseSet(manifests)).toEqual([]);
-    expect(validateSynchronizedReleaseSet(manifests.map((manifest) => manifest.name === "@rendered-motion/format" ? { ...manifest, version: "1.0.1" } : manifest))).toContain("@rendered-motion/format: version must be 1.0.0");
-    expect(validateSynchronizedReleaseSet(manifests.map((manifest) => manifest.name === "@rendered-motion/graph" ? { ...manifest, dependencies: { "@rendered-motion/unknown": "1.0.0" } } : manifest))).toContain("@rendered-motion/graph: internal dependencies must be exactly none");
-    expect(validateSynchronizedReleaseSet([...manifests, manifests[0]!])).toEqual(expect.arrayContaining([expect.stringMatching(/exactly 5/u), "@rendered-motion/graph: duplicate manifest"]));
+    expect(validateSynchronizedReleaseSet(manifests.map((manifest) => manifest.name === "@aval/format" ? { ...manifest, version: "1.0.1" } : manifest))).toContain("@aval/format: version must be 1.0.0");
+    expect(validateSynchronizedReleaseSet(manifests.map((manifest) => manifest.name === "@aval/graph" ? { ...manifest, dependencies: { "@aval/unknown": "1.0.0" } } : manifest))).toContain("@aval/graph: internal dependencies must be exactly none");
+    expect(validateSynchronizedReleaseSet([...manifests, manifests[0]!])).toEqual(expect.arrayContaining([expect.stringMatching(/exactly 5/u), "@aval/graph: duplicate manifest"]));
   });
 
   it("rejects unclassified exports when no reviewed package default exists", () => {

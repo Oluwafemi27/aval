@@ -1,26 +1,18 @@
 import type {
   ByteRange,
   ParsedFrontIndex,
-  StaticBlobRange,
   UnitBlobRange
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 export const DEFAULT_BLOB_RANGE_TARGET_BYTES = 4 * 1024 * 1024;
 
-export type RuntimeBlobSelection =
-  | {
-      readonly kind: "unit";
-      readonly rendition: string;
-      readonly unit: string;
-    }
-  | {
-      readonly kind: "static";
-      readonly staticFrame: string;
-    };
+export interface RuntimeBlobSelection {
+  readonly kind: "unit";
+  readonly rendition: string;
+  readonly unit: string;
+}
 
-export type PlannedRuntimeBlob =
-  | PlannedRuntimeUnitBlob
-  | PlannedRuntimeStaticBlob;
+export type PlannedRuntimeBlob = PlannedRuntimeUnitBlob;
 
 interface PlannedRuntimeBlobBase {
   readonly ordinal: number;
@@ -38,11 +30,6 @@ export interface PlannedRuntimeUnitBlob extends PlannedRuntimeBlobBase {
   readonly sampleCount: number;
 }
 
-export interface PlannedRuntimeStaticBlob extends PlannedRuntimeBlobBase {
-  readonly kind: "static";
-  readonly staticFrame: string;
-}
-
 export interface PlannedBlobTransportRange {
   readonly ordinal: number;
   readonly offset: number;
@@ -57,8 +44,8 @@ export interface RuntimeBlobRangePlan {
 }
 
 interface CanonicalBlob {
-  readonly source: UnitBlobRange | StaticBlobRange;
-  readonly kind: "unit" | "static";
+  readonly source: UnitBlobRange;
+  readonly kind: "unit";
   readonly paddingRange: Readonly<ByteRange>;
   readonly blobRange: Readonly<ByteRange>;
   readonly storageRange: Readonly<ByteRange>;
@@ -114,17 +101,14 @@ function buildCanonicalBlobs(frontIndex: ParsedFrontIndex): readonly CanonicalBl
   if (frontIndexEnd > declaredFileLength) {
     throw new RangeError("front index exceeds the declared file");
   }
-  if (!Array.isArray(frontIndex.unitBlobs) || !Array.isArray(frontIndex.staticBlobs)) {
+  if (!Array.isArray(frontIndex.unitBlobs)) {
     throw new TypeError("front index blob ranges must be arrays");
   }
 
-  const sources: Array<Readonly<{
-    source: UnitBlobRange | StaticBlobRange;
-    kind: "unit" | "static";
-  }>> = [
-    ...frontIndex.unitBlobs.map((source) => ({ source, kind: "unit" as const })),
-    ...frontIndex.staticBlobs.map((source) => ({ source, kind: "static" as const }))
-  ];
+  const sources = frontIndex.unitBlobs.map((source) => Object.freeze({
+    source,
+    kind: "unit" as const
+  }));
   sources.sort((left, right) => left.source.offset - right.source.offset);
 
   const result: CanonicalBlob[] = [];
@@ -228,26 +212,14 @@ function freezePlannedBlob(
   entry: CanonicalBlob,
   ordinal: number
 ): PlannedRuntimeBlob {
-  if (entry.kind === "unit") {
-    const source = entry.source as UnitBlobRange;
-    return Object.freeze({
-      ordinal,
-      kind: "unit",
-      rendition: source.rendition,
-      unit: source.unit,
-      sampleStart: source.sampleStart,
-      sampleCount: source.sampleCount,
-      sha256: source.sha256,
-      paddingRange: entry.paddingRange,
-      blobRange: entry.blobRange,
-      storageRange: entry.storageRange
-    });
-  }
-  const source = entry.source as StaticBlobRange;
+  const source = entry.source;
   return Object.freeze({
     ordinal,
-    kind: "static",
-    staticFrame: source.staticFrame,
+    kind: "unit",
+    rendition: source.rendition,
+    unit: source.unit,
+    sampleStart: source.sampleStart,
+    sampleCount: source.sampleCount,
     sha256: source.sha256,
     paddingRange: entry.paddingRange,
     blobRange: entry.blobRange,
@@ -256,19 +228,14 @@ function freezePlannedBlob(
 }
 
 function validateSourceIdentity(
-  source: UnitBlobRange | StaticBlobRange,
-  kind: "unit" | "static"
+  source: UnitBlobRange,
+  _kind: "unit"
 ): void {
   requireDigest(source.sha256);
-  if (kind === "unit") {
-    const unit = source as UnitBlobRange;
-    requireNonEmptyString(unit.rendition, "rendition id");
-    requireNonEmptyString(unit.unit, "unit id");
-    requireNonNegativeSafeInteger(unit.sampleStart, "sample start");
-    requirePositiveSafeInteger(unit.sampleCount, "sample count");
-  } else {
-    requireNonEmptyString((source as StaticBlobRange).staticFrame, "static frame id");
-  }
+  requireNonEmptyString(source.rendition, "rendition id");
+  requireNonEmptyString(source.unit, "unit id");
+  requireNonNegativeSafeInteger(source.sampleStart, "sample start");
+  requirePositiveSafeInteger(source.sampleCount, "sample count");
 }
 
 function assertUniqueCanonicalIdentities(blobs: readonly CanonicalBlob[]): void {
@@ -284,16 +251,11 @@ function assertUniqueCanonicalIdentities(blobs: readonly CanonicalBlob[]): void 
 }
 
 function canonicalSelection(blob: CanonicalBlob): RuntimeBlobSelection {
-  return blob.kind === "unit"
-    ? {
-        kind: "unit",
-        rendition: (blob.source as UnitBlobRange).rendition,
-        unit: (blob.source as UnitBlobRange).unit
-      }
-    : {
-        kind: "static",
-        staticFrame: (blob.source as StaticBlobRange).staticFrame
-      };
+  return {
+    kind: "unit",
+    rendition: blob.source.rendition,
+    unit: blob.source.unit
+  };
 }
 
 function validateSelection(
@@ -302,27 +264,16 @@ function validateSelection(
   if (typeof selection !== "object" || selection === null) {
     throw new TypeError("blob selection must be an object");
   }
-  if (selection.kind === "unit") {
-    requireNonEmptyString(selection.rendition, "requested rendition id");
-    requireNonEmptyString(selection.unit, "requested unit id");
-    return;
-  }
-  if (selection.kind === "static") {
-    requireNonEmptyString(selection.staticFrame, "requested static frame id");
-    return;
-  }
-  throw new TypeError("blob selection kind is invalid");
+  if (selection.kind !== "unit") throw new TypeError("blob selection kind is invalid");
+  requireNonEmptyString(selection.rendition, "requested rendition id");
+  requireNonEmptyString(selection.unit, "requested unit id");
 }
 
 function sameSelection(
   left: RuntimeBlobSelection,
   right: RuntimeBlobSelection
 ): boolean {
-  if (left.kind !== right.kind) return false;
-  return left.kind === "unit" && right.kind === "unit"
-    ? left.rendition === right.rendition && left.unit === right.unit
-    : left.kind === "static" && right.kind === "static" &&
-      left.staticFrame === right.staticFrame;
+  return left.rendition === right.rendition && left.unit === right.unit;
 }
 
 function matches(blob: CanonicalBlob, selection: RuntimeBlobSelection): boolean {

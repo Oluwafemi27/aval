@@ -4,14 +4,14 @@ import { CertificationApp, type CertificationBrowserApi } from "./app.js";
 
 declare global {
   interface Window {
-    readonly renderedMotionCertification: CertificationBrowserApi;
+    readonly avalCertification: CertificationBrowserApi;
   }
 }
 
 const root = document.querySelector<HTMLElement>("#certification-app");
 if (root === null) throw new Error("certification app root is unavailable");
 const api = new CertificationApp(root);
-Object.defineProperty(window, "renderedMotionCertification", {
+Object.defineProperty(window, "avalCertification", {
   value: api,
   configurable: false,
   enumerable: false,

@@ -14,7 +14,7 @@ M5.5 now connects the validated M4 container, M3 graph engine, M5 dedicated
 decoder worker, exact decode timeline, bounded presentation ring, persistent
 interaction cache, opaque WebGL2 renderer, production-backed all-routes
 readiness rehearsal, staged effect/promise host, realtime driver, and static
-recovery in `@rendered-motion/player-web`.
+recovery in `@aval/player-web`.
 
 The complete opaque route fixture, production browser composition,
 transactional rapid input, exact graph/media presentation agreement, cadence
@@ -22,7 +22,7 @@ bounds, and terminal resource cleanup all passed. The selected rendition used
 one configured decoder, never sought, reset, flushed, boundary-flushed, or
 reconfigured at an animation boundary, and released every live resource.
 
-The prototype `.rma` suffix and `@rendered-motion/*` scope remain private
+The prototype `.avl` suffix and `@aval/*` scope remain private
 descriptive labels, not a registered public format or product name.
 
 ## Captured Environment
@@ -44,7 +44,7 @@ source ordinal after lossy AVC conversion.
 
 | Item | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `fixtures/conformance/m55/opaque-all-routes.rma` | 35,817 | `28bbd6ca250fff5571ff9ef8a95a69d878e198641a05e8923743a521106f70d5` |
+| `fixtures/conformance/m55/opaque-all-routes.avl` | 35,817 | `28bbd6ca250fff5571ff9ef8a95a69d878e198641a05e8923743a521106f70d5` |
 | canonical manifest | 8,584-byte front index contains it | `a2a612d3005001f64f044d1a570e393eab61e62366f4dc729a17a8e3b9e3dbad` |
 | source project | 5,082 | `51ebecc9759943d9d637f8d0fa9d641a8053ff38beb48de84b915362738db306` |
 | source generator | 2,559 | `d4ac18065acba8c355f64786a0362348c0194ad3cab018479c0da08c0a3220f7` |
@@ -523,10 +523,10 @@ The final-shape focused Chromium proof passed three consecutive serial runs:
 | `npm run build` | passed; playground production build transformed 159 modules |
 | `npm run test:browser` | 12 of 12 passed in 18.3 s; integrated M5.5 route proof 5.6 s |
 | `npm audit --audit-level=high` | 0 vulnerabilities |
-| `npm pack --dry-run -w @rendered-motion/graph` | passed package inspection |
-| `npm pack --dry-run -w @rendered-motion/format` | passed package inspection |
-| `npm pack --dry-run -w @rendered-motion/compiler` | passed package inspection |
-| `npm pack --dry-run -w @rendered-motion/player-web` | passed package inspection |
+| `npm pack --dry-run -w @aval/graph` | passed package inspection |
+| `npm pack --dry-run -w @aval/format` | passed package inspection |
+| `npm pack --dry-run -w @aval/compiler` | passed package inspection |
+| `npm pack --dry-run -w @aval/player-web` | passed package inspection |
 | `git diff --check` | passed |
 | strict contract/maintainability audit | passed with no P0 blocker; P1 debt recorded above |
 

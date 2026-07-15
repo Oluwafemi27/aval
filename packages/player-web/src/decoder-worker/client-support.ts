@@ -167,15 +167,10 @@ export function collectUniqueSampleBuffers(
         false
       );
     }
-    if (
-      sample.data.byteLength < 1 ||
-      sample.data.byteLength > DECODER_WORKER_HARD_LIMITS.maxSampleBytes
-    ) {
+    if (sample.data.byteLength < 1) {
       throw new DecoderWorkerRemoteError(
         "PROTOCOL_ERROR",
-        `decode sample data exceeds the ${String(
-          DECODER_WORKER_HARD_LIMITS.maxSampleBytes
-        )}-byte worker cap`,
+        "decode sample data must not be empty",
         false
       );
     }

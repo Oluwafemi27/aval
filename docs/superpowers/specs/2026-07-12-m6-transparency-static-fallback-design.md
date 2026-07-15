@@ -2,13 +2,13 @@
 
 **Date:** 2026-07-12
 
-**Status:** Approved implementation slice derived from the committed web
-rendered-motion design and the approved M4-M5.5 contracts
+**Status:** Approved implementation slice derived from the committed AVAL
+design and the approved M4-M5.5 contracts
 
 **Authority:**
 
-- [Web Rendered Motion Format Design](2026-07-11-web-rendered-motion-format-design.md)
-- [Web Rendered Motion Implementation Plan](../plans/2026-07-11-web-rendered-motion-implementation.md)
+- [AVAL Format Design](2026-07-11-aval-format-design.md)
+- [AVAL Implementation Plan](../plans/2026-07-11-aval-implementation.md)
 - [M4 Minimal Compiled Format Design](2026-07-11-m4-minimal-compiled-format-design.md)
 - [M5 Opaque AVC Compiler and Dedicated Worker Design](2026-07-11-m5-opaque-avc-compiler-worker-design.md)
 - [M5.5 Integrated Scheduler and Readiness Design](2026-07-12-m55-integrated-scheduler-readiness-design.md)
@@ -37,7 +37,9 @@ M6 proves, for a completely resident local asset, that:
 - animation failure commits the newest accepted state to static pixels without
   an empty frame; and
 - a reduced-motion session can return to full animation through a fresh
-  readiness cycle without replaying the intro or revealing unprepared pixels.
+  readiness cycle without revealing unprepared pixels; an unfinished intro
+  restarts at frame zero, while an intro that already joined its body is never
+  replayed.
 
 The milestone remains local, in-memory, and single-player. It does not add
 network range loading or runtime digest enforcement, shared page-wide budgets,
@@ -388,7 +390,7 @@ and browser conversion; they are not general compiler acceptance criteria.
 
 ### 7.1 One strict platform-free grammar owner
 
-`@rendered-motion/format` replaces the M4 shallow envelope check with one
+`@aval/format` replaces the M4 shallow envelope check with one
 restricted RGBA PNG profile owner. It validates in checked order:
 
 - the standard eight-byte signature;
@@ -675,15 +677,17 @@ For eligible re-entry:
    preparation, all-routes rehearsal, and activation deadline;
 3. restage activation if static requests change the committed semantic state
    while preparation is asynchronous;
-4. upload and draw that state's body frame zero behind the static plane;
+4. upload and draw the selected first presentation behind the static plane;
 5. call the graph's new `resumeAnimated()` operation; and
 6. apply its readiness effect and reveal the animated plane atomically.
 
 `resumeAnimated()` is valid only from graph static phase with
 `requestedState === visualState`, no active/pending route, and a static
-presentation. It changes readiness to animated and presents the current
-state's body frame zero. It emits no transition, request, fallback, or intro
-effect. The initial state's `initialUnit` is never replayed during re-entry.
+presentation. It changes readiness to animated. A fresh source with no prior
+animated content presents its initial-unit frame zero; after that unit has
+reached the body, re-entry presents the current state's body frame zero. It
+emits no transition, request, or fallback effect, and never replays a consumed
+intro.
 The graph operation itself is policy-neutral; the host coordinator enforces
 the reduced-origin rule.
 
@@ -739,7 +743,8 @@ renderer or worker. It asserts:
 - reduce-before-prepare creates no animated resources;
 - full-to-reduced, precommit cancellation, reduced-to-full re-entry, rapid
   policy flips, and sticky failure-origin static behavior;
-- re-entry begins at current body frame zero and never replays the intro; and
+- first animated re-entry honors an unconsumed intro, while later re-entry
+  begins at current body frame zero and never replays it; and
 - exact cleanup of frames, workers, GL objects, bitmaps, decode buffers,
   callbacks, timers, and request promises.
 

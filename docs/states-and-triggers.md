@@ -4,9 +4,9 @@ State names are authored data, not a fixed runtime enum. Discover them from
 `stateNames`, request one imperatively, or reflect a declarative intent:
 
 ```ts
-const motion = document.querySelector("rendered-motion");
+const motion = document.querySelector("aval-player");
 if (!(motion instanceof HTMLElement) || !("setState" in motion)) {
-  throw new Error("Rendered Motion is not registered");
+  throw new Error("AVAL is not registered");
 }
 
 await motion.setState("loading");

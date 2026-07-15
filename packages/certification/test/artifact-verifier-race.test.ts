@@ -8,7 +8,7 @@ import { readVerifiedArtifactReferences } from "../src/artifact-verifier.js";
 
 describe("stable nofollow artifact reads", () => {
   it("rejects a same-size in-place mutation after the verified read", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-artifact-in-place-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-artifact-in-place-"));
     try {
       const path = join(root, "evidence.json");
       const original = Buffer.from("same");
@@ -24,7 +24,7 @@ describe("stable nofollow artifact reads", () => {
   });
 
   it("rejects path substitution after the nofollow handle is open", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-artifact-substitute-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-artifact-substitute-"));
     try {
       const path = join(root, "evidence.json");
       const original = Buffer.from("same");

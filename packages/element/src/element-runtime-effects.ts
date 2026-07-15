@@ -7,6 +7,7 @@ import type { ElementDesiredSnapshot } from "./element-desired-state.js";
 import type { ElementPublicState } from "./element-public-state.js";
 import type { ElementSourceMetadata } from "./element-generation-publication.js";
 import { applyIntrinsicSize, computeIntrinsicSize, type IntrinsicSizeResult } from "./intrinsic-size.js";
+import { isExpectedAbort } from "./public-failure.js";
 import type { ShadowLayerOwner } from "./shadow-layers.js";
 
 export interface ElementStateCommandKey {
@@ -72,6 +73,11 @@ export class ElementRuntimeEffects {
     authority: ElementRuntimeEffectAuthority
   ): Promise<void> {
     if (!authority.runtimeEffectCurrent(snapshot, asset)) return;
+    if (!this.presentation(snapshot, asset, configuration)) {
+      authority.runtimePresentationUnsupported();
+      return;
+    }
+    if (!authority.runtimeEffectCurrent(snapshot, asset)) return;
     try { await this.visibility(snapshot, asset); }
     catch (error) {
       if (authority.runtimeEffectCurrent(snapshot, asset)) {
@@ -86,11 +92,6 @@ export class ElementRuntimeEffects {
       }
     }
     if (!authority.runtimeEffectCurrent(snapshot, asset)) return;
-    if (!this.presentation(snapshot, asset, configuration)) {
-      authority.runtimePresentationUnsupported();
-      return;
-    }
-    if (!authority.runtimeEffectCurrent(snapshot, asset)) return;
     this.applyState(snapshot, asset, authority);
     if (!authority.runtimeEffectCurrent(snapshot, asset)) return;
     await this.applyPlay(snapshot, asset, authority);
@@ -103,6 +104,7 @@ export class ElementRuntimeEffects {
 
   public resetAsset(): void {
     this.#router.install([]);
+    this.#inputs.setRuntimeVisible(false);
     this.#inputs.metadataUnready();
     this.#intrinsic = null;
     this.#metadataGeneration = 0;
@@ -125,8 +127,10 @@ export class ElementRuntimeEffects {
     const value = snapshot.effectivelyVisible ? "visible" : "hidden";
     const key = `${asset.generation}:${value}`;
     if (key === this.#visibility) return;
+    if (value === "hidden") this.#inputs.setRuntimeVisible(false);
     this.#router.route(value);
     await asset.setVisibility(value);
+    if (value === "visible") this.#inputs.setRuntimeVisible(true);
     this.#visibility = key;
   }
 
@@ -146,6 +150,7 @@ export class ElementRuntimeEffects {
     asset: ElementAssetGeneration,
     configuration: Readonly<ElementConfiguration>
   ): boolean {
+    if (!snapshot.effectivelyVisible) this.#inputs.setRuntimeVisible(false);
     if (this.#metadataGeneration !== asset.generation && this.#intrinsic !== null) {
       this.#router.install(this.#state.inputBindings);
       this.#inputs.metadataReady();
@@ -214,7 +219,7 @@ export class ElementRuntimeEffects {
     });
     const publicCommand = this.#stateCommand.start(commandKey);
     if (!this.#state.stateNames.includes(intentName)) {
-      const error = new TypeError(`unknown rendered-motion state: ${intentName}`);
+      const error = new TypeError(`unknown aval state: ${intentName}`);
       if (publicCommand) this.#stateCommand.reject(commandKey, error);
       else authority.runtimeEffectFailure("invalid-configuration", false);
       this.markStateApplied(appliedKey);
@@ -224,7 +229,9 @@ export class ElementRuntimeEffects {
     try { operation = asset.setState(intentName); }
     catch (error) {
       if (publicCommand) this.#stateCommand.reject(commandKey, error);
-      else authority.runtimeEffectFailure("invalid-configuration", false);
+      else if (!isExpectedAbort(error)) {
+        authority.runtimeEffectFailure("invalid-configuration", false);
+      }
       return;
     }
     this.markStateApplied(appliedKey);
@@ -235,7 +242,9 @@ export class ElementRuntimeEffects {
     }, (error: unknown) => {
       if (!authority.runtimeSourceCurrent(snapshot.sourceToken)) return;
       if (publicCommand) this.#stateCommand.reject(commandKey, error);
-      else authority.runtimeEffectFailure("invalid-configuration", false);
+      else if (!isExpectedAbort(error)) {
+        authority.runtimeEffectFailure("invalid-configuration", false);
+      }
     });
   }
 

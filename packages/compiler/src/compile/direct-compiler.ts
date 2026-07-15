@@ -3,12 +3,13 @@ import { basename, dirname, extname, resolve } from "node:path";
 import {
   FORMAT_DEFAULT_BUDGETS,
   FormatError,
+  avcCodecForLevel,
   writeCanonicalAsset,
   type AvcRenditionGeometry,
   type AccessUnitInputV01,
   type CanonicalAssetInputV01,
   type UnitInputV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { CompilerError } from "../diagnostics.js";
 import {
@@ -32,9 +33,14 @@ import type {
   CompileResult,
   DirectArtifactOptions,
   DirectCompileOptions,
-  MediaProbe
+  MediaProbe,
+  NormalizedAvcEncoding
 } from "../model.js";
+import {
+  validateAvcEncoding
+} from "./avc-encoding-policy.js";
 import { analyzeSeam } from "./seam-analysis.js";
+import { buildAvcManifestRendition } from "./avc-manifest-rendition.js";
 import { compileAvcRendition } from "./avc-rendition-pipeline.js";
 import {
   resolveDirectCanvas,
@@ -46,10 +52,6 @@ import { normalizeHoldTimeline } from "./normalize-timeline.js";
 import { resolveAlphaPolicy } from "./alpha-policy.js";
 import { ffmpegGenerator, writeAssetAtomic } from "./output.js";
 import { validateCompiledOutput } from "./output-validation.js";
-import {
-  encodeCanonicalRgbaPng,
-  inspectCanonicalRgbaPng
-} from "./png.js";
 import {
   fingerprintSourceInputs,
   verifySourceInputFingerprints,
@@ -165,11 +167,8 @@ export async function buildDirectArtifact(
     options.fps,
     false
   );
-  const bitrate = validateBitrate(options.bitrate ?? DEFAULT_BITRATE);
-  const projectFrames = Object.freeze(Array.from(
-    { length: options.loop[1] },
-    (_, frame) => frame
-  ));
+  const encoding = resolveDirectEncoding(options);
+  const projectFrames = frameIndexes(options.loop[1]);
   const nativeFrames = projectFrames.map((frame) =>
     sourceFrameByProjectFrame?.[frame] ?? frame
   );
@@ -182,8 +181,7 @@ export async function buildDirectArtifact(
     sourceFrameByOutputFrame: nativeFrames,
     alphaReferences: projectFrames.map((frame) => Object.freeze({
       source: "direct",
-      frame,
-      role: "unit" as const
+      frame
     })),
     executable: provenance.executable,
     ...(options.mediaTimeoutMs === undefined
@@ -244,7 +242,9 @@ export async function buildDirectArtifact(
     throw new CompilerError(
       "CONTINUITY_FAILED",
       `Loop boundary RMS ${seam.boundaryRms.toFixed(6)} exceeds neighboring motion ${seam.neighborP95.toFixed(6)}`,
-      { hint: "Author a closed rendered loop or use an explicitly unverified project edge." }
+      {
+        hint: "Author a closed rendered loop, or describe the authored ranges and states in a project to preserve the source with a visual-review warning."
+      }
     );
   }
   if (options.loop[0] > 0) {
@@ -287,7 +287,8 @@ export async function buildDirectArtifact(
       id: renditionId,
       width: canvas.width,
       height: canvas.height,
-      bitrate
+      avcProfileVersion: encoding.legacyZeroLatency ? "v0" : "v1",
+      encoding
     },
     canvasWidth: canvas.width,
     canvasHeight: canvas.height,
@@ -315,9 +316,12 @@ export async function buildDirectArtifact(
     const samples = samplesByUnit.get(unit.id)!;
     for (let frameIndex = 0; frameIndex < samples.length; frameIndex += 1) {
       const sample = samples[frameIndex]!;
-      cumulativePayloadBytes += sample.bytes.byteLength;
+      cumulativePayloadBytes = checkedMediaSum(
+        cumulativePayloadBytes,
+        sample.bytes.byteLength,
+        "encoded payload bytes"
+      );
       if (
-        !Number.isSafeInteger(cumulativePayloadBytes) ||
         cumulativePayloadBytes > FORMAT_DEFAULT_BUDGETS.maxFileBytes
       ) {
         throw new CompilerError(
@@ -363,33 +367,15 @@ export async function buildDirectArtifact(
     }
   }
 
-  const posterRgba = retained.get(plan.staticFrame);
-  if (posterRgba === undefined) {
-    throw new CompilerError("IO_FAILED", "Static frame was not retained");
-  }
-  const poster = encodeCanonicalRgbaPng({
-    width: canvas.width,
-    height: canvas.height,
-    rgba: posterRgba
-  });
-  if (
-    cumulativePayloadBytes + poster.byteLength >
-    FORMAT_DEFAULT_BUDGETS.maxFileBytes
-  ) {
-    throw new CompilerError(
-      "OUTPUT_LIMIT",
-      "Encoded and static payloads exceed the compiled-file budget"
-    );
-  }
   const input = directAssetInput(
     canvas,
     plan.frameRate,
-    bitrate,
+    compiled.bitrate,
     units,
     accessUnits,
-    poster,
     renditionId,
-    compiled.geometry
+    compiled.geometry,
+    avcCodecForLevel(prepared.inspection.parameterSet.levelIdc)
   );
   let bytes: Uint8Array;
   try {
@@ -425,7 +411,11 @@ export async function buildDirectArtifact(
           droppedSourceFrames
         });
   const encodedPayloadBytes = accessUnits.reduce(
-    (total, sample) => total + sample.bytes.byteLength,
+    (total, sample) => checkedMediaSum(
+      total,
+      sample.bytes.byteLength,
+      "encoded payload bytes"
+    ),
     0
   );
   const artifactBytes = bytes.slice();
@@ -436,7 +426,7 @@ export async function buildDirectArtifact(
     provenance,
     warnings,
     buildDetails: Object.freeze({
-      detailsVersion: "0.1" as const,
+      detailsVersion: "0.2" as const,
       mode: source.mode,
       projectFile: null,
       alphaPolicy,
@@ -465,7 +455,8 @@ export async function buildDirectArtifact(
         geometry: compiled.geometry,
         codedWidth: compiled.geometry.codedWidth,
         codedHeight: compiled.geometry.codedHeight,
-        bitrate,
+        bitrate: compiled.bitrate,
+        encoding: compiled.encoding,
         encodedBytes: encodedPayloadBytes,
         accessUnits: accessUnits.length,
         inspection: prepared.inspection,
@@ -477,21 +468,9 @@ export async function buildDirectArtifact(
         alphaQuality: compiled.alphaQuality,
         compositeQuality: compiled.compositeQuality
       })]),
-      statics: Object.freeze([Object.freeze({
-        id: "static.00",
-        bytes: poster.byteLength,
-        sha256: sha256Hex(poster),
-        states: Object.freeze(["default"]),
-        validation: inspectCanonicalRgbaPng({
-          png: poster,
-          expectedWidth: canvas.width,
-          expectedHeight: canvas.height
-        })
-      })]),
       invocations: Object.freeze(invocations),
       accessUnits: accessUnits.length,
       encodedPayloadBytes,
-      staticPayloadBytes: poster.byteLength,
       normalization: Object.freeze(normalizationWarnings),
       continuity: Object.freeze(continuity)
     })
@@ -507,23 +486,30 @@ function directAssetInput(
   bitrate: { readonly average: number; readonly peak: number },
   units: readonly UnitInputV01[],
   accessUnits: readonly AccessUnitInputV01[],
-  poster: Uint8Array,
   renditionId: string,
-  geometry: Readonly<AvcRenditionGeometry>
+  geometry: Readonly<AvcRenditionGeometry>,
+  codec: ReturnType<typeof avcCodecForLevel>
 ): CanonicalAssetInputV01 {
   const bootstrapUnits = units.map(({ id }) => id).sort();
   const decodedPixelBytes = geometry.codedRgbaBytes;
   const encodedBytes = accessUnits.reduce(
-    (total, sample) => total + sample.bytes.byteLength,
+    (total, sample) => checkedMediaSum(
+      total,
+      sample.bytes.byteLength,
+      "encoded payload bytes"
+    ),
     0
   );
-  const runtimeWorkingSetBytes = 13 * decodedPixelBytes + encodedBytes;
-  if (runtimeWorkingSetBytes > 64 * 1024 * 1024) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      "Direct runtime estimate exceeds 64 MiB"
-    );
-  }
+  const decoderRingBytes = checkedMediaProduct(
+    decodedPixelBytes,
+    13,
+    "direct decoder ring bytes"
+  );
+  const runtimeWorkingSetBytes = checkedMediaSum(
+    decoderRingBytes,
+    encodedBytes,
+    "direct runtime working-set bytes"
+  );
   return {
     manifest: {
       formatVersion: "0.1",
@@ -536,46 +522,17 @@ function directAssetInput(
         colorSpace: "srgb"
       },
       frameRate,
-      renditions: [geometry.profile === "avc-annexb-opaque-v0"
-        ? {
-            id: renditionId,
-            profile: geometry.profile,
-            codec: "avc1.42E020" as const,
-            codedWidth: geometry.codedWidth,
-            codedHeight: geometry.codedHeight,
-            alphaLayout: {
-              type: "opaque-v0" as const,
-              colorRect: geometry.visibleColorRect
-            },
-            bitrate,
-            capabilities: ["webcodecs", "webgl2"] as const
-          }
-        : {
-            id: renditionId,
-            profile: geometry.profile,
-            codec: "avc1.42E020" as const,
-            codedWidth: geometry.codedWidth,
-            codedHeight: geometry.codedHeight,
-            alphaLayout: {
-              type: "stacked-v0" as const,
-              colorRect: geometry.visibleColorRect,
-              alphaRect: geometry.visibleAlphaRect!
-            },
-            bitrate,
-            capabilities: ["webcodecs", "webgl2"] as const
-          }],
+      renditions: [buildAvcManifestRendition({
+        id: renditionId,
+        codec,
+        geometry,
+        bitrate
+      })],
       units,
-      staticFrames: [{
-        id: "static.00",
-        width: canvas.width,
-        height: canvas.height,
-        sha256: sha256Hex(poster)
-      }],
       initialState: "default",
       states: [{
         id: "default",
         bodyUnit: "body.default",
-        staticFrame: "static.00",
         ...(units.some(({ id }) => id === "intro.default")
           ? { initialUnit: "intro.default" }
           : {})
@@ -587,20 +544,15 @@ function directAssetInput(
         bootstrapUnits,
         immediateEdges: []
       },
-      fallback: {
-        unsupported: "per-state-static",
-        reducedMotion: "per-state-static"
-      },
       limits: {
-        maxCompiledBytes: 32 * 1024 * 1024,
-        maxRuntimeBytes: 64 * 1024 * 1024,
+        maxCompiledBytes: FORMAT_DEFAULT_BUDGETS.maxFileBytes,
+        maxRuntimeBytes: Number.MAX_SAFE_INTEGER,
         decodedPixelBytes,
         persistentCacheBytes: 0,
         runtimeWorkingSetBytes
       }
     },
-    accessUnits,
-    staticPayloads: [{ staticFrame: "static.00", bytes: poster }]
+    accessUnits
   };
 }
 
@@ -874,13 +826,107 @@ function validateBitrate(value: {
     !Number.isSafeInteger(value.average) ||
     !Number.isSafeInteger(value.peak) ||
     value.average < 1 ||
-    value.peak < value.average ||
-    value.peak > 8_000_000
+    value.peak < value.average
   ) {
     throw new CompilerError(
       "INPUT_INVALID",
-      "Bitrate must be positive, average <= peak, and peak <= 8,000,000"
+      "Bitrate must use positive safe integers with average <= peak"
     );
   }
   return Object.freeze({ ...value });
+}
+
+function resolveDirectEncoding(
+  options: Readonly<DirectArtifactOptions>
+): Readonly<NormalizedAvcEncoding> {
+  if (options.crf !== undefined) {
+    if (options.bitrate !== undefined) {
+      throw new CompilerError(
+        "INPUT_INVALID",
+        "Direct CRF and bitrate modes are mutually exclusive"
+      );
+    }
+    if (options.maxBitrate === undefined) {
+      throw new CompilerError(
+        "INPUT_INVALID",
+        "Direct CRF mode requires maxBitrate"
+      );
+    }
+    return validateAvcEncoding({
+      codec: "h264",
+      preset: options.preset ?? "medium",
+      legacyZeroLatency: false,
+      rateControl: {
+        mode: "crf",
+        crf: options.crf,
+        maxBitrate: options.maxBitrate
+      }
+    });
+  }
+  if (options.maxBitrate !== undefined) {
+    throw new CompilerError(
+      "INPUT_INVALID",
+      "Direct maxBitrate is valid only with CRF mode"
+    );
+  }
+  const bitrate = validateBitrate(options.bitrate ?? DEFAULT_BITRATE);
+  const preset = options.preset ?? "medium";
+  return validateAvcEncoding({
+    codec: "h264",
+    preset,
+    legacyZeroLatency: preset === "medium",
+    rateControl: {
+      mode: "abr",
+      averageBitrate: bitrate.average,
+      maxBitrate: bitrate.peak
+    }
+  });
+}
+
+function frameIndexes(frameCount: number): readonly number[] {
+  if (
+    !Number.isSafeInteger(frameCount) ||
+    frameCount < 1 ||
+    frameCount > 0xffff_ffff
+  ) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      "Direct frame selection cannot be represented by a JavaScript array"
+    );
+  }
+  try {
+    return Object.freeze(Array.from({ length: frameCount }, (_, frame) => frame));
+  } catch (error) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      `Could not allocate the ${String(frameCount)}-frame direct selection`,
+      { cause: error }
+    );
+  }
+}
+
+function checkedMediaSum(left: number, right: number, label: string): number {
+  if (
+    !Number.isSafeInteger(left) ||
+    !Number.isSafeInteger(right) ||
+    left < 0 ||
+    right < 0 ||
+    left > Number.MAX_SAFE_INTEGER - right
+  ) {
+    throw new CompilerError("SOURCE_LIMIT", `${label} exceeds safe arithmetic`);
+  }
+  return left + right;
+}
+
+function checkedMediaProduct(left: number, right: number, label: string): number {
+  if (
+    !Number.isSafeInteger(left) ||
+    !Number.isSafeInteger(right) ||
+    left < 0 ||
+    right < 0 ||
+    (right !== 0 && left > Math.floor(Number.MAX_SAFE_INTEGER / right))
+  ) {
+    throw new CompilerError("SOURCE_LIMIT", `${label} exceeds safe arithmetic`);
+  }
+  return left * right;
 }

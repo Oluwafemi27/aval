@@ -31,7 +31,7 @@ describe("release supply-chain policy", () => {
   });
 
   it("generates and validates a bounded SPDX 2.3 inventory", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "rma-sbom-"));
+    const directory = await mkdtemp(join(tmpdir(), "aval-sbom-"));
     const output = join(directory, "workspace.spdx.json");
     const second = join(directory, "workspace-second.spdx.json");
     try {
@@ -46,7 +46,7 @@ describe("release supply-chain policy", () => {
   });
 
   it("rejects workspace SBOM and license-report substitutions", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "rma-supply-substitution-"));
+    const directory = await mkdtemp(join(tmpdir(), "aval-supply-substitution-"));
     const output = join(directory, "workspace.spdx.json");
     try {
       await execFileAsync(process.execPath, ["scripts/security/generate-sbom.mjs", "--output", output], { cwd: process.cwd() });

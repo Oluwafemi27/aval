@@ -1,12 +1,12 @@
-import type { RenderedMotionElement } from "@rendered-motion/element";
+import type { AvalElement } from "@aval/element";
 import { createRef } from "react";
 
-const motion = createRef<RenderedMotionElement>();
+const motion = createRef<AvalElement>();
 
 void (
-  <rendered-motion
+  <aval-player
     ref={motion}
-    src="/status.rma"
+    src="/status.avl"
     state="loading"
     motion="reduce"
     autoplay="manual"
@@ -20,10 +20,10 @@ void (
 
 void (
   // @ts-expect-error motion remains a closed public union in JSX
-  <rendered-motion motion="sometimes" />
+  <aval-player motion="sometimes" />
 );
 
 void (
   // @ts-expect-error object interaction targets are assigned through a ref
-  <rendered-motion interactionTarget={document.body} />
+  <aval-player interactionTarget={document.body} />
 );

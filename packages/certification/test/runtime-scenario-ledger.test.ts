@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { parseFrontIndex } from "@rendered-motion/format";
+import { parseFrontIndex } from "@aval/format";
 import { describe, expect, it } from "vitest";
 import { evaluateRuntimeScenarioLedger, runtimeFixtureModelFromManifest } from "../src/runtime-scenario-ledger.js";
 import { createRawScenarioLedger, TEST_FIXTURE_DIGEST, TEST_RUNTIME_FIXTURE } from "./runtime-scenario-support.js";
@@ -18,7 +18,7 @@ describe("raw runtime scenario ledgers", () => {
   });
 
   it("accepts zero maxWaitFrames from an actual compiled candidate fixture", async () => {
-    const bytes = new Uint8Array(await readFile("fixtures/conformance/m5/opaque-reversible.rma"));
+    const bytes = new Uint8Array(await readFile("fixtures/conformance/m5/opaque-reversible.avl"));
     const model = runtimeFixtureModelFromManifest(parseFrontIndex(bytes).manifest);
     expect(model.edges.some(({ start }) => start.maxWaitFrames === 0)).toBe(true);
   });

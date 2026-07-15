@@ -1,7 +1,7 @@
 import {
   MotionGraphEngine,
   type GraphPresentation
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 import { describe, expect, it } from "vitest";
 
 import { createInteractionCachePlanFromSemanticSequences } from "./interaction-cache-plan.js";

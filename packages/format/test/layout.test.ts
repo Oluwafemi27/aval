@@ -21,19 +21,6 @@ function expectFormatError(
   throw new Error("expected a FormatError");
 }
 
-function replaceAscii(
-  bytes: Uint8Array,
-  offset: number,
-  from: string,
-  to: string
-): void {
-  expect(to.length).toBe(from.length);
-  for (let index = 0; index < from.length; index += 1) {
-    expect(bytes[offset + index]).toBe(from.charCodeAt(index));
-    bytes[offset + index] = to.charCodeAt(index);
-  }
-}
-
 describe("canonical asset layout", () => {
   it("validates an exact complete file and returns frozen range-only geometry", () => {
     const fixture = canonicalAssetFixture();
@@ -75,7 +62,6 @@ describe("canonical asset layout", () => {
     const fixture = canonicalAssetFixture({
       profile: "avc",
       sampleLength: (ordinal) => (ordinal % 7) + 33,
-      staticLength: 67,
       generatorSuffix: "pad"
     });
     const front = parseFrontIndex(fixture.bytes);
@@ -119,32 +105,6 @@ describe("canonical asset layout", () => {
       );
       expectFormatError(() => parseFrontIndex(bytes), "LAYOUT_INVALID");
     }
-  });
-
-  it("rejects aliased static descriptors from canonical manifest bytes", () => {
-    const fixture = canonicalAssetFixture({ profile: "avc" });
-    const bytes = fixture.bytes.slice();
-    const header = parseFrontIndex(bytes).header;
-    const firstOffset = String(fixture.manifest.staticFrames[0]!.offset);
-    const secondOffset = String(fixture.manifest.staticFrames[1]!.offset);
-    expect(secondOffset.length).toBe(firstOffset.length);
-    const manifestText = new TextDecoder().decode(
-      bytes.subarray(
-        header.manifestOffset,
-        header.manifestOffset + header.manifestLength
-      )
-    );
-    const token = `\"offset\":${secondOffset}`;
-    const tokenOffset = manifestText.indexOf(token);
-    expect(tokenOffset).toBeGreaterThanOrEqual(0);
-    replaceAscii(
-      bytes,
-      header.manifestOffset + tokenOffset + `\"offset\":`.length,
-      secondOffset,
-      firstOffset
-    );
-
-    expectFormatError(() => parseFrontIndex(bytes), "LAYOUT_INVALID");
   });
 
   it("requires the caller bytes to end exactly at the declared file boundary", () => {
@@ -289,7 +249,7 @@ describe("canonical asset layout", () => {
     expect(elementProbes).toBe(0);
   });
 
-  it("runs complete reference-frame and strict PNG validation with absolute offsets", () => {
+  it("runs complete reference-frame validation with absolute offsets", () => {
     const fixture = canonicalAssetFixture();
     const badReference = fixture.bytes.slice();
     const firstSampleOffset = fixture.records[0]!.payloadOffset;
@@ -301,14 +261,6 @@ describe("canonical asset layout", () => {
     );
     expect(referenceError.offset).toBe(firstSampleOffset);
 
-    const badPng = fixture.bytes.slice();
-    const pngOffset = fixture.manifest.staticFrames[0]!.offset;
-    badPng[pngOffset] = (badPng[pngOffset] ?? 0) ^ 0xff;
-    const pngError = expectFormatError(
-      () => validateCompleteAsset({ bytes: badPng }),
-      "PNG_ENVELOPE_INVALID"
-    );
-    expect(pngError.offset).toBe(pngOffset);
   });
 
   it("does not inspect arbitrary AVC payload bytes during M4 validation", () => {

@@ -6,7 +6,7 @@ const DIGEST = "0".repeat(64);
 export function validManifest(): CompiledManifestV01 {
   return {
     formatVersion: "0.1",
-    generator: "rendered-motion-tests",
+    generator: "aval-tests",
     canvas: {
       width: 2,
       height: 2,
@@ -19,7 +19,7 @@ export function validManifest(): CompiledManifestV01 {
       {
         id: "reference",
         profile: "reference-rgba-v0",
-        codec: "rma.reference-rgba",
+        codec: "aval.reference-rgba",
         codedWidth: 2,
         codedHeight: 2,
         alphaLayout: { type: "straight-rgba-v0" },
@@ -45,21 +45,15 @@ export function validManifest(): CompiledManifestV01 {
         samples: [sample(12, 6)]
       }
     ],
-    staticFrames: [
-      staticFrame("static-a", 1_000),
-      staticFrame("static-b", 1_072),
-      staticFrame("static-c", 1_144)
-    ],
     initialState: "a-a",
     states: [
       {
         id: "a-a",
         bodyUnit: "body-a",
-        staticFrame: "static-a",
         initialUnit: "intro-a"
       },
-      { id: "a-b", bodyUnit: "body-b", staticFrame: "static-b" },
-      { id: "a-c", bodyUnit: "body-c", staticFrame: "static-c" }
+      { id: "a-b", bodyUnit: "body-b" },
+      { id: "a-c", bodyUnit: "body-c" }
     ],
     edges: [
       {
@@ -146,10 +140,6 @@ export function validManifest(): CompiledManifestV01 {
       ],
       immediateEdges: ["edge-ab", "edge-ac"]
     },
-    fallback: {
-      unsupported: "per-state-static",
-      reducedMotion: "per-state-static"
-    },
     limits: {
       maxCompiledBytes: 32 * 1024,
       maxRuntimeBytes: 64 * 1024,
@@ -160,7 +150,7 @@ export function validManifest(): CompiledManifestV01 {
   };
 }
 
-/** A valid manifest exactly at the state/edge/unit/static/blob/frame ceilings. */
+/** A valid manifest exactly at the state/edge/unit/blob/frame ceilings. */
 export function limitManifest(): CompiledManifestV01 {
   const bodyUnits = Array.from({ length: 32 }, (_, index) => ({
     id: numbered("body", index),
@@ -200,8 +190,7 @@ export function limitManifest(): CompiledManifestV01 {
 
   const states = Array.from({ length: 32 }, (_, index) => ({
     id: numbered("state", index),
-    bodyUnit: numbered("body", index),
-    staticFrame: numbered("static", index)
+    bodyUnit: numbered("body", index)
   }));
   const edges = Array.from({ length: 64 }, (_, index) => {
     const from = index % 32;
@@ -226,7 +215,7 @@ export function limitManifest(): CompiledManifestV01 {
 
   return {
     formatVersion: "0.1",
-    generator: "rendered-motion-limit-tests",
+    generator: "aval-limit-tests",
     canvas: {
       width: 2,
       height: 2,
@@ -239,7 +228,7 @@ export function limitManifest(): CompiledManifestV01 {
       {
         id: "reference",
         profile: "reference-rgba-v0",
-        codec: "rma.reference-rgba",
+        codec: "aval.reference-rgba",
         codedWidth: 2,
         codedHeight: 2,
         alphaLayout: { type: "straight-rgba-v0" },
@@ -247,14 +236,6 @@ export function limitManifest(): CompiledManifestV01 {
       }
     ],
     units,
-    staticFrames: Array.from({ length: 32 }, (_, index) => ({
-      id: numbered("static", index),
-      offset: 4_096 + index * 8,
-      length: 1,
-      width: 2,
-      height: 2,
-      sha256: DIGEST
-    })),
     initialState: "state-00",
     states,
     edges,
@@ -269,10 +250,6 @@ export function limitManifest(): CompiledManifestV01 {
         "bridge-32"
       ],
       immediateEdges: ["edge-00", "edge-32"]
-    },
-    fallback: {
-      unsupported: "per-state-static",
-      reducedMotion: "per-state-static"
     },
     limits: {
       maxCompiledBytes: 32 * 1024 * 1024,
@@ -316,8 +293,4 @@ function basicUnit(
 
 function sample(sampleStart: number, sampleCount: number) {
   return { rendition: "reference", sampleStart, sampleCount, sha256: DIGEST };
-}
-
-function staticFrame(id: string, offset: number) {
-  return { id, offset, length: 68, width: 2, height: 2, sha256: DIGEST };
 }

@@ -6,17 +6,17 @@
 
 ## Result
 
-M4 passes its implementation gate. The new pure `@rendered-motion/format`
+M4 passes its implementation gate. The new pure `@aval/format`
 package writes one byte-canonical 0.1 asset, parses a bounded front index,
 validates the exact complete layout, checks the M4 conformance payload
 envelopes, and adapts the manifest to M3's immutable graph.
 
 The production TypeScript project exposes only `ES2023` types and depends only
-on `@rendered-motion/graph`. It has no DOM, WebCodecs, Node, network, or
+on `@aval/graph`. It has no DOM, WebCodecs, Node, network, or
 platform-crypto dependency. Parsed results are detached, recursively frozen
 metadata and numeric ranges; no returned object retains caller media bytes.
 
-`.rma` remains a private prototype suffix, not a registered or published file
+`.avl` remains a private prototype suffix, not a registered or published file
 format.
 
 ## Captured Environment
@@ -30,7 +30,7 @@ format.
 
 ## Frozen Contracts
 
-- Exact 64-byte `RMAF` header, 16-byte `RMAI` index header, 32-byte sample
+- Exact 64-byte `AVLF` header, 16-byte `AVLI` index header, 32-byte sample
   records, eight-byte alignment, zero padding, and exact end-of-file geometry.
 - Strict UTF-8 canonical JSON with bytewise key ordering, safe integers,
   null-prototype parsing, duplicate/dangerous-key rejection, and lower-only
@@ -45,7 +45,7 @@ format.
   length.
 - A deterministic 32-iteration static-offset fixed point with a directly
   exercised non-convergence branch and a final fixed-point recheck.
-- Exact `RMRF` reference-frame envelopes and M4's intentionally shallow PNG
+- Exact `AVRF` reference-frame envelopes and M4's intentionally shallow PNG
   signature/IHDR gate.
 
 ## Golden and Adversarial Proof
@@ -69,8 +69,8 @@ The checked-in fixtures are deterministic writer output:
 
 | Fixture | Bytes | Whole-file SHA-256 |
 | --- | ---: | --- |
-| `reference-loop.rma` | 1,593 | `d2741ca678232bbd30e0c10d0572d83ed147222604b074a21e05a3440ef642f8` |
-| `reference-graph.rma` | 5,713 | `91cd7336c518caba4ce5df07a13203fccaebb48ef756c7d41d6fd6441be68d95` |
+| `reference-loop.avl` | 1,593 | `d2741ca678232bbd30e0c10d0572d83ed147222604b074a21e05a3440ef642f8` |
+| `reference-graph.avl` | 5,713 | `91cd7336c518caba4ce5df07a13203fccaebb48ef756c7d41d6fd6441be68d95` |
 
 These digests are review provenance only; runtime digest verification belongs
 to M7.
@@ -96,7 +96,7 @@ npm run build           graph, format, player, and playground passed
 npm run test:browser    7 Chromium regression tests passed
 npm audit --audit-level=high
                         0 vulnerabilities
-npm pack --dry-run -w @rendered-motion/format
+npm pack --dry-run -w @aval/format
                         package contents inspected successfully
 git diff --check        passed
 ```

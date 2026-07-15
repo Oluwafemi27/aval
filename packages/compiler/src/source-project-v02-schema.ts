@@ -1,7 +1,7 @@
 import {
   FORMAT_DEFAULT_BUDGETS,
   type CanvasV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import type {
   SourceProjectV02,
@@ -46,6 +46,7 @@ const PROJECT_KEYS = [
   "edges",
   "bindings"
 ] as const;
+const PNG_DIMENSION_MAX = 0xffff_ffff;
 
 /** Validate only the exact M6 authoring schema. */
 export function validateSourceProjectV02(
@@ -64,7 +65,7 @@ export function validateSourceProjectV02(
   const sources = cloneSourceDescriptors(input.sources);
   const renditions = cloneRenditionsV02(input.renditions, canvas);
   const units = cloneSourceUnits(input.units, sources);
-  const states = cloneSourceStates(input.states, units, sources);
+  const states = cloneSourceStates(input.states, units);
   const edges = cloneSourceEdges(input.edges, FORMAT_DEFAULT_BUDGETS.maxEdges);
   const bindings = cloneSourceBindings(
     input.bindings,
@@ -103,8 +104,8 @@ function cloneCanvasV02(value: unknown): CanvasV01 {
     ["width", "height", "fit", "pixelAspect", "colorSpace"],
     "canvas"
   );
-  const width = integer(input.width, "canvas.width", 1, 512);
-  const height = integer(input.height, "canvas.height", 1, 512);
+  const width = integer(input.width, "canvas.width", 1, PNG_DIMENSION_MAX);
+  const height = integer(input.height, "canvas.height", 1, PNG_DIMENSION_MAX);
   const aspectInput = tuple(input.pixelAspect, 2, "canvas.pixelAspect");
   const numerator = integer(
     aspectInput[0],
@@ -151,8 +152,8 @@ function cloneRenditionsV02(
     const path = `renditions[${String(index)}]`;
     const input = record(entry, path);
     exactKeys(input, ["id", "width", "height", "bitrate"], path);
-    const width = integer(input.width, `${path}.width`, 1, 512);
-    const height = integer(input.height, `${path}.height`, 1, 512);
+    const width = integer(input.width, `${path}.width`, 1);
+    const height = integer(input.height, `${path}.height`, 1);
     if (
       width > canvas.width ||
       height > canvas.height ||
@@ -169,14 +170,12 @@ function cloneRenditionsV02(
     const average = integer(
       bitrateInput.average,
       `${path}.bitrate.average`,
-      1,
-      8_000_000
+      1
     );
     const peak = integer(
       bitrateInput.peak,
       `${path}.bitrate.peak`,
-      average,
-      8_000_000
+      average
     );
     return Object.freeze({
       id: identifier(input.id, `${path}.id`),

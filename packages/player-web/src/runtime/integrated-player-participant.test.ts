@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { GraphPresentation } from "@rendered-motion/graph";
+import type { GraphPresentation } from "@aval/graph";
 
 // @ts-expect-error Vite exposes the checked-in binary as a data URL in tests.
-import packedFixtureDataUrl from "../../../../fixtures/conformance/m7/reference-packed.rma?url&inline";
+import packedFixtureDataUrl from "../../../../fixtures/conformance/m7/reference-packed.avl?url&inline";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import type { AvcCandidateResourceAuthority } from "./avc-candidate-factory-model.js";
@@ -13,7 +13,7 @@ import {
   type IntegratedCandidateFactory,
   type IntegratedPlaybackSession,
   type IntegratedPreparedActivation,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player.js";
 import { ManualTimers } from "./integrated-player-preparation-test-support.js";
 import type { RuntimeDecoderLease, RuntimeDecoderTicket } from "./model.js";
@@ -33,7 +33,7 @@ import type {
   RuntimeCanvasResourceHost,
   RuntimeCanvasResourceLease,
   RuntimeCanvasResourcePlan
-} from "./static-resource-plan.js";
+} from "./canvas-resource-plan.js";
 
 const PACKED_FIXTURE = decodeFixture(packedFixtureDataUrl);
 
@@ -149,10 +149,11 @@ describe("IntegratedPlayer page participant composition", () => {
         reason: "decoder-queued"
       });
 
-      expect(page.sessions[2]!.snapshot()).toMatchObject({
-        staticBlobs: { absent: 0 },
+      const queuedSession = page.sessions[2]!.snapshot();
+      expect(queuedSession).toMatchObject({
         unitBlobs: { verified: 0, verifiedBytes: 0 }
       });
+      expect(queuedSession).not.toHaveProperty("staticBlobs");
       expect(page.decoders.snapshot()).toMatchObject({
         activeLeaseCount: 2,
         queuedTicketCount: 1
@@ -224,7 +225,7 @@ describe("IntegratedPlayer page participant composition", () => {
     }
   });
 
-  it("opens a real sparse session without requiring PNG profiles at construction", async () => {
+  it("opens a real sparse session with unit-only payload residency", async () => {
     const manager = new PageResourceManager();
     const decoders = new PageDecoderLeases(manager);
     const account = new PlayerResourceAccount(manager);
@@ -233,11 +234,12 @@ describe("IntegratedPlayer page participant composition", () => {
       PACKED_FIXTURE,
       { resources: resources.assetSession }
     );
-    expect(session.snapshot()).toMatchObject({
+    const snapshot = session.snapshot();
+    expect(snapshot).toMatchObject({
       verifiedPayloadBytes: 0,
-      staticBlobs: { verified: 0 },
       unitBlobs: { verified: 0 }
     });
+    expect(snapshot).not.toHaveProperty("staticBlobs");
     const store = new VerifiedCatalogStaticStore(session.catalog);
     let reservationCount = 0;
     let releaseCount = 0;
@@ -264,7 +266,7 @@ describe("IntegratedPlayer page participant composition", () => {
       assetSession: session,
       assetSessionOwnership: "external",
       participantBinding: resources.participant,
-      createStaticStore: () => store,
+      createFallbackStore: () => store,
       candidateFactory: factory,
       timers: new ManualTimers()
     });
@@ -272,8 +274,7 @@ describe("IntegratedPlayer page participant composition", () => {
     expect(session.snapshot().verifiedPayloadBytes).toBe(0);
     expect(reservationCount).toBe(1);
     await expect(player.prepare()).resolves.toMatchObject({ mode: "animated" });
-    expect(store.pngCopies).toBeGreaterThan(0);
-    expect(session.snapshot().staticBlobs.absent).toBe(0);
+    expect(store.stateUpdates).toBeGreaterThan(0);
     expect(session.snapshot().unitBlobs.verified).toBeGreaterThan(0);
 
     await player.dispose();
@@ -322,7 +323,7 @@ async function createThreePlayerPage(): Promise<ThreePlayerPage> {
     assetSession: session,
     assetSessionOwnership: "player",
     participantBinding: resources[index]!.participant,
-    createStaticStore: (catalog) => new VerifiedCatalogStaticStore(catalog),
+    createFallbackStore: (catalog) => new VerifiedCatalogStaticStore(catalog),
     candidateFactory: factories[index]!,
     timers: new ManualTimers()
   }));
@@ -343,8 +344,8 @@ async function createThreePlayerPage(): Promise<ThreePlayerPage> {
   };
 }
 
-class VerifiedCatalogStaticStore implements IntegratedStaticSurfaceStore {
-  public pngCopies = 0;
+class VerifiedCatalogStaticStore implements IntegratedFallbackStore {
+  public stateUpdates = 0;
   readonly #catalog: RuntimeAssetCatalog;
   #state: string | null = null;
   public constructor(catalog: RuntimeAssetCatalog) { this.#catalog = catalog; }
@@ -353,22 +354,20 @@ class VerifiedCatalogStaticStore implements IntegratedStaticSurfaceStore {
     readonly signal: AbortSignal;
   }): Promise<void> {
     throwIfAborted(options.signal);
-    this.#copy(options.state);
+    this.#catalog.states.require(options.state);
+    this.stateUpdates += 1;
     this.#state = options.state;
   }
   public async validateAll(options: { readonly signal: AbortSignal }): Promise<void> {
-    for (const state of this.#catalog.states.values()) {
-      throwIfAborted(options.signal);
-      this.#catalog.copyStaticPng(state.staticFrame);
-      this.pngCopies += 1;
-    }
+    throwIfAborted(options.signal);
   }
   public async presentState(state: string, options: {
     readonly signal: AbortSignal;
     readonly cover?: boolean;
   }): Promise<void> {
     throwIfAborted(options.signal);
-    this.#copy(state);
+    this.#catalog.states.require(state);
+    this.stateUpdates += 1;
     this.#state = state;
   }
   public currentState(): string | null { return this.#state; }
@@ -376,11 +375,6 @@ class VerifiedCatalogStaticStore implements IntegratedStaticSurfaceStore {
   public revealAnimated(): void {}
   public async settled(): Promise<void> {}
   public dispose(): void {}
-  #copy(state: string): void {
-    const frame = this.#catalog.states.require(state).staticFrame;
-    this.#catalog.copyStaticPng(frame);
-    this.pngCopies += 1;
-  }
 }
 
 class LeaseCandidateFactory implements IntegratedCandidateFactory {

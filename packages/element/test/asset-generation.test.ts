@@ -10,14 +10,34 @@ import type {
   BrowserRuntimePlayer
 } from "../src/browser-runtime-factory.js";
 import type { ShadowLayerOwner } from "../src/shadow-layers.js";
-import type { RenderedMotionCleanupReceipt } from "../src/public-types.js";
+import type { AvalCleanupReceipt } from "../src/public-types.js";
 import { RuntimeAcquisitionCleanupError } from "../src/runtime-acquisition-error.js";
 
 describe("ElementAssetGeneration", () => {
+  it("does not reapply the motion policy captured by runtime construction", async () => {
+    let policyCalls = 0;
+    let hostReducedCalls = 0;
+    let publishCleanup: () => void = () => undefined;
+    const runtime = runtimeFixture(async () => { publishCleanup(); });
+    runtime.setMotionPolicy = async () => { policyCalls += 1; };
+    runtime.setHostReducedMotion = async () => { hostReducedCalls += 1; };
+    const generation = testGeneration(async (input) => {
+      publishCleanup = () => input.cleanupSink(completeReceipt(1));
+      return runtime;
+    }, () => undefined);
+
+    await generation.setMotionPolicy("auto", false);
+
+    expect(policyCalls).toBe(0);
+    expect(hostReducedCalls).toBe(0);
+    await generation.dispose();
+  });
+
   it("shares preparation, exposes arbitrary states, and retires all ownership", async () => {
     let prepares = 0;
     let disposals = 0;
     let publishCleanup: () => void = () => undefined;
+    let capturedInitialPresentation: unknown;
     const metadata: BrowserRuntimeMetadata = Object.freeze({
       initialState: "idle",
       stateNames: Object.freeze(["idle", "success"]),
@@ -75,13 +95,20 @@ describe("ElementAssetGeneration", () => {
       layers: {} as ShadowLayerOwner,
       elementGeneration: 1,
       generation: 1,
-      source: "asset.rma",
+      source: "asset.avl",
       integrity: "",
       credentials: "same-origin",
       motionPolicy: "auto",
       hostReducedMotion: false,
       initialVisibility: "hidden",
+      initialPresentation: {
+        cssWidth: 320,
+        cssHeight: 180,
+        devicePixelRatio: 2,
+        fit: "cover"
+      },
       factory: async (input) => {
+        capturedInitialPresentation = input.initialPresentation;
         publishCleanup = () => input.cleanupSink(completeReceipt(1));
         input.onMetadata(metadata);
         return runtime;
@@ -110,6 +137,12 @@ describe("ElementAssetGeneration", () => {
     const second = generation.prepare();
     expect(await first).toBe(await second);
     expect(prepares).toBe(1);
+    expect(capturedInitialPresentation).toEqual({
+      cssWidth: 320,
+      cssHeight: 180,
+      devicePixelRatio: 2,
+      fit: "cover"
+    });
     expect(generation.canSend("request.success")).toBe(true);
     expect(generation.send("request.success")).toBe(true);
     await generation.setState("success");
@@ -172,7 +205,7 @@ describe("ElementAssetGeneration", () => {
       layers: {} as ShadowLayerOwner,
       elementGeneration: 1,
       generation: 1,
-      source: "asset.rma",
+      source: "asset.avl",
       integrity: "",
       credentials: "same-origin",
       motionPolicy: "auto",
@@ -210,7 +243,7 @@ describe("ElementAssetGeneration", () => {
     let releaseCleanup!: () => void;
     let cleanupStarted = false;
     let publishCleanup: () => void = () => undefined;
-    const receipts: Readonly<RenderedMotionCleanupReceipt>[] = [];
+    const receipts: Readonly<AvalCleanupReceipt>[] = [];
     const runtime = runtimeFixture(async () => {
       cleanupStarted = true;
       await new Promise<void>((resolve) => { releaseCleanup = resolve; });
@@ -239,7 +272,7 @@ describe("ElementAssetGeneration", () => {
   it("bounds a stalled factory and retains an explicit incomplete receipt", async () => {
     vi.useFakeTimers();
     try {
-      const receipts: Readonly<RenderedMotionCleanupReceipt>[] = [];
+      const receipts: Readonly<AvalCleanupReceipt>[] = [];
       const generation = testGeneration(
         () => new Promise<BrowserRuntimePlayer>(() => undefined),
         (receipt) => receipts.push(receipt)
@@ -260,7 +293,7 @@ describe("ElementAssetGeneration", () => {
   });
 
   it("proves ownerless runtime-module rejection and permits final disposal", async () => {
-    const receipts: Readonly<RenderedMotionCleanupReceipt>[] = [];
+    const receipts: Readonly<AvalCleanupReceipt>[] = [];
     const generation = testGeneration(
       async () => { throw new RuntimeModuleImportError(); },
       (receipt) => receipts.push(receipt)
@@ -278,7 +311,7 @@ describe("ElementAssetGeneration", () => {
 
   it("retains and retries cleanup ownership from a rejected runtime construction", async () => {
     let cleanupAttempts = 0;
-    const receipts: Readonly<RenderedMotionCleanupReceipt>[] = [];
+    const receipts: Readonly<AvalCleanupReceipt>[] = [];
     const generation = testGeneration(async (input) => {
       throw new RuntimeAcquisitionCleanupError(
         new Error("injected construction failure"),
@@ -308,7 +341,7 @@ describe("ElementAssetGeneration", () => {
     let attempts = 0;
     let activated = false;
     let publishCleanup: () => void = () => undefined;
-    const receipts: Readonly<RenderedMotionCleanupReceipt>[] = [];
+    const receipts: Readonly<AvalCleanupReceipt>[] = [];
     const runtime = runtimeFixture(async () => {
       attempts += 1;
       if (attempts <= 2) throw new Error("injected cleanup failure");
@@ -331,7 +364,7 @@ describe("ElementAssetGeneration", () => {
     vi.useFakeTimers();
     try {
       const failures: unknown[] = [];
-      const receipts: Readonly<RenderedMotionCleanupReceipt>[] = [];
+      const receipts: Readonly<AvalCleanupReceipt>[] = [];
       const generation = testGeneration(
         () => new Promise<BrowserRuntimePlayer>(() => undefined),
         (receipt) => receipts.push(receipt),
@@ -359,7 +392,7 @@ describe("ElementAssetGeneration", () => {
 
 function testGeneration(
   factory: ElementBrowserRuntimeFactory,
-  cleanup: (receipt: Readonly<RenderedMotionCleanupReceipt>) => void,
+  cleanup: (receipt: Readonly<AvalCleanupReceipt>) => void,
   failure: (error: unknown, fatal: boolean) => void = () => undefined
 ): ElementAssetGeneration {
   return new ElementAssetGeneration({
@@ -368,7 +401,7 @@ function testGeneration(
     layers: {} as ShadowLayerOwner,
     elementGeneration: 1,
     generation: 1,
-    source: "asset.rma",
+    source: "asset.avl",
     integrity: "",
     credentials: "same-origin",
     motionPolicy: "auto",

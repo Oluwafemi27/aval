@@ -56,8 +56,8 @@ No machine-local executable or workspace path is recorded here.
 
 ## Deterministic Fixture and Provenance
 
-`fixtures/conformance/m7/reference-packed.rma` is byte-identical to the
-reviewed M6 `packed-alpha-all-routes.rma` compiler output. The M7 fixture adds
+`fixtures/conformance/m7/reference-packed.avl` is byte-identical to the
+reviewed M6 `packed-alpha-all-routes.avl` compiler output. The M7 fixture adds
 transport/scenario provenance without changing the compiler output or wire
 format.
 
@@ -386,7 +386,7 @@ The independent production-only searches found:
 - one strong entity-tag parser/matcher authority in `http-entity-tag.ts`;
 - one SHA-256 comparison/promotion authority in `sha256-verifier.ts` backed by
   an injected Web Crypto digest capability;
-- the existing `@rendered-motion/format` parser/validator as the only wire
+- the existing `@aval/format` parser/validator as the only wire
   grammar authority, reached through captured testable adapters;
 - one untrusted response-body reader in `bounded-body-reader.ts`; the other
   stream reader match is the bounded strict-PNG inflate path, not network
@@ -515,10 +515,10 @@ All four required package dry-runs exited zero:
 
 | Package | Packed bytes | Unpacked bytes | Entries | Top-level contents |
 | --- | ---: | ---: | ---: | --- |
-| `@rendered-motion/graph` | 45,323 | 250,748 | 31 | package metadata, source, tests, configs |
-| `@rendered-motion/format` | 136,610 | 621,908 | 98 | package metadata, source, tests, configs |
-| `@rendered-motion/compiler` | 339,018 | 1,635,273 | 375 | package metadata, generated distribution, source, tests, configs |
-| `@rendered-motion/player-web` | 680,755 | 3,564,432 | 314 | package metadata, source, configs |
+| `@aval/graph` | 45,323 | 250,748 | 31 | package metadata, source, tests, configs |
+| `@aval/format` | 136,610 | 621,908 | 98 | package metadata, source, tests, configs |
+| `@aval/compiler` | 339,018 | 1,635,273 | 375 | package metadata, generated distribution, source, tests, configs |
+| `@aval/player-web` | 680,755 | 3,564,432 | 314 | package metadata, source, configs |
 
 No dry-run entry used an absolute path or a secret/report/trace-shaped name.
 No generated distribution, trace, report, result, cache, archive, credential

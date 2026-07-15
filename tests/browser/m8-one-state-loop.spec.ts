@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("one-state markup plays its intro once and repeats only the authored body", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?one-state-loop");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   const before = await motion.evaluate((element) =>
     (element as unknown as { getDiagnostics(): { sourceGeneration: number } })
       .getDiagnostics().sourceGeneration

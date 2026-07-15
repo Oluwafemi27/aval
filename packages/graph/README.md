@@ -1,6 +1,6 @@
-# @rendered-motion/graph
+# @aval/graph
 
-Deterministic user-defined motion-state graph for Rendered Motion. It owns
+Deterministic user-defined motion-state graph for AVAL. It owns
 latest-wins inputs, body/transition/port routing, portal and finish boundaries,
 resident inverse reversal, immutable effects, and exactly-once settlement.
 

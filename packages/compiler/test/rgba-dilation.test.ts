@@ -106,17 +106,19 @@ describe("transparent RGBA dilation", () => {
     }
   });
 
-  it("rejects mismatched and out-of-bound allocation geometry", () => {
+  it("rejects mismatched geometry and accepts dimensions beyond 512", () => {
     expect(() => dilateTransparentRgba({
       width: 2,
       height: 2,
       rgba: new Uint8Array(15)
     })).toThrow(/RGBA byte length/);
-    expect(() => dilateTransparentRgba({
+    const wide = new Uint8Array(513 * 4);
+    wide[3] = 255;
+    expect(dilateTransparentRgba({
       width: 513,
       height: 1,
-      rgba: new Uint8Array(4)
-    })).toThrow(/dimensions/);
+      rgba: wide
+    })).toHaveLength(513 * 4);
   });
 });
 

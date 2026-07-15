@@ -1,16 +1,29 @@
 {
   "provenanceVersion": "0.1",
-  "generatedAt": "2026-07-12",
-  "generator": "rendered-motion-compiler/0.2-web",
+  "generatedAt": "2026-07-14",
+  "generator": "aval-format-writer/0.1",
   "regeneration": {
-    "build": "npm run build",
+    "build": "npm run build -w @aval/format",
     "compilerSourceCheck": "node fixtures/compiler/m6/update-provenance.mjs --check",
     "completeConformanceCheck": "node fixtures/conformance/m6/update-provenance.mjs --check"
   },
   "compilerSource": {
     "path": "fixtures/compiler/m6/provenance.json",
-    "bytes": 14738,
-    "sha256": "b3af8e748cceab1be9227b5960ed6ff4696e25f570f7f61cb4553f382d004246"
+    "bytes": 14558,
+    "sha256": "706f95e7479b57a3d838b49dec0357e10284e3b215549dfc0cc52fb1badbe65a"
+  },
+  "reviewedEncodedSource": {
+    "recipe": {
+      "path": "fixtures/conformance/m6/reviewed-motion/recipe.json",
+      "bytes": 81707,
+      "sha256": "f657b7f43ee44864ccc8f26adee353fe71d552ec24c59810b00b0e52bf24386e"
+    },
+    "payload": {
+      "path": "fixtures/conformance/m6/reviewed-motion/reviewed-avc.bin",
+      "bytes": 17207,
+      "sha256": "28200084e9f94f20ec2c6b79531eca21cae0d13ef819021e20b8494aa1c50610"
+    },
+    "claim": "The recorded AVC unit blobs are preserved byte-for-byte; the current writer deterministically assembles poster-free AVAL containers without re-encoding."
   },
   "toolchain": {
     "aggregateMemoryLimit": "derived",
@@ -35,34 +48,30 @@
     "alpha-auto-and-explicit-policy",
     "hostile-hidden-rgb-and-edge-dilation",
     "alpha-and-three-background-composite-quality",
-    "shared-and-distinct-strict-static-pngs",
     "all-route-classes-and-readiness",
-    "stored-fixed-dynamic-deflate-and-all-png-filters",
-    "rfc1951-literal-only-dynamic-empty-distance-alphabet",
-    "exhaustive-reachable-strict-png-envelope-zlib-deflate-and-scanline-rejections",
-    "executable-png-and-deflate-limit-only-contracts",
-    "malformed-geometry-sps-crop-alpha-quality-and-resource-contracts"
+    "motion-only-canonical-payload-layout",
+    "tool-free-reviewed-sample-container-reassembly"
   ],
   "assets": [
     {
-      "name": "opaque-odd.rma",
+      "name": "opaque-odd.avl",
       "sourceProject": {
         "path": "fixtures/compiler/m6/source/opaque-odd.json",
         "bytes": 1001,
         "sha256": "6a7965c9674a47009c456b385b088c45b7c8ec8b5f3ca05ebff6f0dd47292fd3"
       },
       "asset": {
-        "bytes": 9344,
-        "sha256": "47ee7c6b23323e89def9f1073057b7465c98b62a4dbe63f2dc038b565d72478f"
+        "bytes": 4112,
+        "sha256": "ba0e894ab0130335fc4e9c7356d01146ed972e72546b25edbfee11998e2ced07"
       },
       "frontIndex": {
         "offset": 0,
-        "length": 1672
+        "length": 1408
       },
-      "manifestSha256": "433dadd9d2cbef304505ca742e76ba35f5cb5836b2a0d73dea289d3c4d3460f7",
+      "manifestSha256": "4b851e48d6f6553e03a0dc5ca901dc886b6bfb4b9f41b4e55a34218a7aac16a6",
       "manifest": {
         "formatVersion": "0.1",
-        "generator": "rendered-motion-compiler/0.1",
+        "generator": "aval-compiler/0.1",
         "canvas": {
           "width": 45,
           "height": 27,
@@ -80,7 +89,6 @@
         "renditions": [
           {
             "id": "opaque.1x",
-            "profile": "avc-annexb-opaque-v0",
             "codec": "avc1.42E020",
             "codedWidth": 48,
             "codedHeight": 32,
@@ -100,7 +108,8 @@
             "capabilities": [
               "webcodecs",
               "webgl2"
-            ]
+            ],
+            "profile": "avc-annexb-opaque-v0"
           }
         ],
         "units": [
@@ -128,22 +137,11 @@
             ]
           }
         ],
-        "staticFrames": [
-          {
-            "id": "static.00",
-            "offset": 4376,
-            "length": 4968,
-            "width": 45,
-            "height": 27,
-            "sha256": "bba4c68a10a87314ff9a5af3c70bc9763de3fe222468d7c6bb5a3d67d4f4eefd"
-          }
-        ],
         "initialState": "default",
         "states": [
           {
             "id": "default",
-            "bodyUnit": "body",
-            "staticFrame": "static.00"
+            "bodyUnit": "body"
           }
         ],
         "edges": [],
@@ -155,13 +153,9 @@
           ],
           "immediateEdges": []
         },
-        "fallback": {
-          "unsupported": "per-state-static",
-          "reducedMotion": "per-state-static"
-        },
         "limits": {
-          "maxCompiledBytes": 33554432,
-          "maxRuntimeBytes": 67108864,
+          "maxCompiledBytes": 9007199254740991,
+          "maxRuntimeBytes": 9007199254740991,
           "decodedPixelBytes": 6144,
           "persistentCacheBytes": 0,
           "runtimeWorkingSetBytes": 81292
@@ -174,16 +168,8 @@
           "sampleStart": 0,
           "sampleCount": 8,
           "sha256": "e69213964e6dd39677de23e920b05618e25e7493eac218e840ac1e5f5e963079",
-          "offset": 1672,
+          "offset": 1408,
           "length": 2704
-        }
-      ],
-      "staticFrames": [
-        {
-          "staticFrame": "static.00",
-          "sha256": "bba4c68a10a87314ff9a5af3c70bc9763de3fe222468d7c6bb5a3d67d4f4eefd",
-          "offset": 4376,
-          "length": 4968
         }
       ],
       "strictInspections": [
@@ -429,26 +415,6 @@
           "compositeQuality": null
         }
       ],
-      "statics": [
-        {
-          "id": "static.00",
-          "bytes": 4968,
-          "sha256": "bba4c68a10a87314ff9a5af3c70bc9763de3fe222468d7c6bb5a3d67d4f4eefd",
-          "states": [
-            "default"
-          ],
-          "validation": {
-            "profile": "strict-rgba-png-v0",
-            "decoder": "format-pure-rfc1950-1951-v0",
-            "width": 45,
-            "height": 27,
-            "pngBytes": 4968,
-            "zlibBytes": 4898,
-            "filteredBytes": 4887,
-            "rgbaBytes": 4860
-          }
-        }
-      ],
       "continuity": [
         {
           "name": "body loop",
@@ -474,28 +440,27 @@
           }
         }
       ],
-      "encodedPayloadBytes": 2704,
-      "staticPayloadBytes": 4968
+      "encodedPayloadBytes": 2704
     },
     {
-      "name": "packed-alpha-loop.rma",
+      "name": "packed-alpha-loop.avl",
       "sourceProject": {
         "path": "fixtures/compiler/m6/source/packed-loop.json",
         "bytes": 1003,
         "sha256": "9d3d2d74cce19601e030708ac2621d7690601de0231ba5e1950ba11000b0dc22"
       },
       "asset": {
-        "bytes": 9064,
-        "sha256": "98966b2b0ea32e66edb431d6d741e7abaf64b6cbeb1bf617133c4d5739d2c7ed"
+        "bytes": 3832,
+        "sha256": "ca26b55d416950f46f3e236596ab3074919bce1aae73acdec15224ce25221aec"
       },
       "frontIndex": {
         "offset": 0,
-        "length": 1712
+        "length": 1448
       },
-      "manifestSha256": "e0d8a05bd8b7dd136671ee5bdf0c23e78fe45c3b9d7f76e3d39434b0c52a7843",
+      "manifestSha256": "b5a320aae09a612147ccb74c75c223951c075a62973b48a4008cd95ef67246a7",
       "manifest": {
         "formatVersion": "0.1",
-        "generator": "rendered-motion-compiler/0.1",
+        "generator": "aval-compiler/0.1",
         "canvas": {
           "width": 45,
           "height": 27,
@@ -513,7 +478,6 @@
         "renditions": [
           {
             "id": "packed.1x",
-            "profile": "avc-annexb-packed-alpha-v0",
             "codec": "avc1.42E020",
             "codedWidth": 48,
             "codedHeight": 64,
@@ -539,7 +503,8 @@
             "capabilities": [
               "webcodecs",
               "webgl2"
-            ]
+            ],
+            "profile": "avc-annexb-packed-alpha-v0"
           }
         ],
         "units": [
@@ -567,22 +532,11 @@
             ]
           }
         ],
-        "staticFrames": [
-          {
-            "id": "static.00",
-            "offset": 4096,
-            "length": 4968,
-            "width": 45,
-            "height": 27,
-            "sha256": "1381cf8252fa191bdaeaedbb65bb8f29ca2a186359d090599d34698589f9a0d3"
-          }
-        ],
         "initialState": "default",
         "states": [
           {
             "id": "default",
-            "bodyUnit": "body",
-            "staticFrame": "static.00"
+            "bodyUnit": "body"
           }
         ],
         "edges": [],
@@ -594,13 +548,9 @@
           ],
           "immediateEdges": []
         },
-        "fallback": {
-          "unsupported": "per-state-static",
-          "reducedMotion": "per-state-static"
-        },
         "limits": {
-          "maxCompiledBytes": 33554432,
-          "maxRuntimeBytes": 67108864,
+          "maxCompiledBytes": 9007199254740991,
+          "maxRuntimeBytes": 9007199254740991,
           "decodedPixelBytes": 12288,
           "persistentCacheBytes": 0,
           "runtimeWorkingSetBytes": 154700
@@ -613,16 +563,8 @@
           "sampleStart": 0,
           "sampleCount": 8,
           "sha256": "d56eaf5dbd021ecb8cf3453c9efc3b6bc724909c56b54ab68f34a3e33fd095dc",
-          "offset": 1712,
+          "offset": 1448,
           "length": 2384
-        }
-      ],
-      "staticFrames": [
-        {
-          "staticFrame": "static.00",
-          "sha256": "1381cf8252fa191bdaeaedbb65bb8f29ca2a186359d090599d34698589f9a0d3",
-          "offset": 4096,
-          "length": 4968
         }
       ],
       "strictInspections": [
@@ -945,26 +887,6 @@
           }
         }
       ],
-      "statics": [
-        {
-          "id": "static.00",
-          "bytes": 4968,
-          "sha256": "1381cf8252fa191bdaeaedbb65bb8f29ca2a186359d090599d34698589f9a0d3",
-          "states": [
-            "default"
-          ],
-          "validation": {
-            "profile": "strict-rgba-png-v0",
-            "decoder": "format-pure-rfc1950-1951-v0",
-            "width": 45,
-            "height": 27,
-            "pngBytes": 4968,
-            "zlibBytes": 4898,
-            "filteredBytes": 4887,
-            "rgbaBytes": 4860
-          }
-        }
-      ],
       "continuity": [
         {
           "name": "body loop",
@@ -990,28 +912,27 @@
           }
         }
       ],
-      "encodedPayloadBytes": 2384,
-      "staticPayloadBytes": 4968
+      "encodedPayloadBytes": 2384
     },
     {
-      "name": "packed-alpha-all-routes.rma",
+      "name": "packed-alpha-all-routes.avl",
       "sourceProject": {
         "path": "fixtures/compiler/m6/source/packed-all-routes.json",
         "bytes": 5080,
         "sha256": "5d82ef90b04be6c52e06fc8fc0eb7fb215e16706d44dda11034f838bab17346f"
       },
       "asset": {
-        "bytes": 37968,
-        "sha256": "aa66fbca787138b692e7fed691cbabec58dd9f9576b63b13d4ed9c69269d9a0f"
+        "bytes": 22421,
+        "sha256": "881bf080f55353c3a67a1c85dd6ffda236c5f270444cd8994fb8a2db68a8c1ad"
       },
       "frontIndex": {
         "offset": 0,
-        "length": 8520
+        "length": 7880
       },
-      "manifestSha256": "37e526bda7a4e0f049d1d6f7ba1e50e45d25a8f4fea8e0b4b4ada355f82cae12",
+      "manifestSha256": "4996769ca181085cde9147b29279e1625242e5e8398ba44155ce112106c4d193",
       "manifest": {
         "formatVersion": "0.1",
-        "generator": "rendered-motion-compiler/0.1",
+        "generator": "aval-compiler/0.1",
         "canvas": {
           "width": 45,
           "height": 27,
@@ -1029,7 +950,6 @@
         "renditions": [
           {
             "id": "packed.0.333x",
-            "profile": "avc-annexb-packed-alpha-v0",
             "codec": "avc1.42E020",
             "codedWidth": 16,
             "codedHeight": 32,
@@ -1055,11 +975,11 @@
             "capabilities": [
               "webcodecs",
               "webgl2"
-            ]
+            ],
+            "profile": "avc-annexb-packed-alpha-v0"
           },
           {
             "id": "packed.1x",
-            "profile": "avc-annexb-packed-alpha-v0",
             "codec": "avc1.42E020",
             "codedWidth": 48,
             "codedHeight": 64,
@@ -1085,7 +1005,8 @@
             "capabilities": [
               "webcodecs",
               "webgl2"
-            ]
+            ],
+            "profile": "avc-annexb-packed-alpha-v0"
           }
         ],
         "units": [
@@ -1277,54 +1198,24 @@
             ]
           }
         ],
-        "staticFrames": [
-          {
-            "id": "static.00",
-            "offset": 23064,
-            "length": 4968,
-            "width": 45,
-            "height": 27,
-            "sha256": "7f2f68a761a24d9177a2970a69ba8a69c6009578e017bbba22b7a04e7a6c5a8f"
-          },
-          {
-            "id": "static.01",
-            "offset": 28032,
-            "length": 4968,
-            "width": 45,
-            "height": 27,
-            "sha256": "399db4bc9fa1d5508555a46bc4b60bc7d7272d447e91a15411de6e6553b9b75b"
-          },
-          {
-            "id": "static.02",
-            "offset": 33000,
-            "length": 4968,
-            "width": 45,
-            "height": 27,
-            "sha256": "1381cf8252fa191bdaeaedbb65bb8f29ca2a186359d090599d34698589f9a0d3"
-          }
-        ],
         "initialState": "idle",
         "states": [
           {
             "id": "done",
-            "bodyUnit": "done-body",
-            "staticFrame": "static.00"
+            "bodyUnit": "done-body"
           },
           {
             "id": "hover",
-            "bodyUnit": "hover-body",
-            "staticFrame": "static.01"
+            "bodyUnit": "hover-body"
           },
           {
             "id": "idle",
             "bodyUnit": "idle-body",
-            "staticFrame": "static.02",
             "initialUnit": "intro"
           },
           {
             "id": "loading",
-            "bodyUnit": "loading-body",
-            "staticFrame": "static.00"
+            "bodyUnit": "loading-body"
           }
         ],
         "edges": [
@@ -1475,13 +1366,9 @@
             "idle-loading"
           ]
         },
-        "fallback": {
-          "unsupported": "per-state-static",
-          "reducedMotion": "per-state-static"
-        },
         "limits": {
-          "maxCompiledBytes": 33554432,
-          "maxRuntimeBytes": 67108864,
+          "maxCompiledBytes": 9007199254740991,
+          "maxRuntimeBytes": 9007199254740991,
           "decodedPixelBytes": 12288,
           "persistentCacheBytes": 294912,
           "runtimeWorkingSetBytes": 457165
@@ -1494,7 +1381,7 @@
           "sampleStart": 0,
           "sampleCount": 1,
           "sha256": "a62735199b2b5e01c6648e704206b73dada13a8f69cf9ecbf2f9b58b8dc9f10b",
-          "offset": 8520,
+          "offset": 7880,
           "length": 311
         },
         {
@@ -1503,7 +1390,7 @@
           "sampleStart": 1,
           "sampleCount": 8,
           "sha256": "527844f75e9da3854968bae4d2e952ec5f2f6ab5fe21cd3b801479eee360b732",
-          "offset": 8832,
+          "offset": 8192,
           "length": 1068
         },
         {
@@ -1512,7 +1399,7 @@
           "sampleStart": 9,
           "sampleCount": 6,
           "sha256": "c4e2b649c0016a763be7a22ce5c6dd50a19b2ece7c521dc0cb746785d0a0ab4d",
-          "offset": 9904,
+          "offset": 9264,
           "length": 809
         },
         {
@@ -1521,7 +1408,7 @@
           "sampleStart": 15,
           "sampleCount": 8,
           "sha256": "54471f897b9d91f6ea3619b26e17477e300a8fabda238b61d057944886f48e05",
-          "offset": 10720,
+          "offset": 10080,
           "length": 1044
         },
         {
@@ -1530,7 +1417,7 @@
           "sampleStart": 23,
           "sampleCount": 3,
           "sha256": "6790a817b37a0bdbf489c686f7e6555674bb027ad1b80c95d0790fce786a9c4d",
-          "offset": 11768,
+          "offset": 11128,
           "length": 508
         },
         {
@@ -1539,7 +1426,7 @@
           "sampleStart": 26,
           "sampleCount": 3,
           "sha256": "f5c75bb0a2e99a4ae6894607d12f61ea8e2b64fe17fadd25536286eb6bd2156b",
-          "offset": 12280,
+          "offset": 11640,
           "length": 515
         },
         {
@@ -1548,7 +1435,7 @@
           "sampleStart": 29,
           "sampleCount": 1,
           "sha256": "341c7e67fd75c37aa3f7f257eea6f20fdf496d8e1fb158068ba188243f8bce2a",
-          "offset": 12800,
+          "offset": 12160,
           "length": 311
         },
         {
@@ -1557,7 +1444,7 @@
           "sampleStart": 30,
           "sampleCount": 1,
           "sha256": "62e3e6e8ccdd60d1dabefea4cadb5549a172d67556b1d3391637599fa1b1f673",
-          "offset": 13112,
+          "offset": 12472,
           "length": 509
         },
         {
@@ -1566,7 +1453,7 @@
           "sampleStart": 31,
           "sampleCount": 8,
           "sha256": "9e2d1d60ebd962b335f836d3b02692d9657316c38e21e2887d2f825f35e1a2fd",
-          "offset": 13624,
+          "offset": 12984,
           "length": 2526
         },
         {
@@ -1575,7 +1462,7 @@
           "sampleStart": 39,
           "sampleCount": 6,
           "sha256": "694b3471afd34f7d6745f217437279d570c1abccc5b37e66b69a8bdf84f929ff",
-          "offset": 16152,
+          "offset": 15512,
           "length": 1940
         },
         {
@@ -1584,7 +1471,7 @@
           "sampleStart": 45,
           "sampleCount": 8,
           "sha256": "d56eaf5dbd021ecb8cf3453c9efc3b6bc724909c56b54ab68f34a3e33fd095dc",
-          "offset": 18096,
+          "offset": 17456,
           "length": 2384
         },
         {
@@ -1593,7 +1480,7 @@
           "sampleStart": 53,
           "sampleCount": 3,
           "sha256": "6341afd62b0ba46bebb43189dda84dd87c77a7ccc851995b97bbb2b35e3cd9bd",
-          "offset": 20480,
+          "offset": 19840,
           "length": 1182
         },
         {
@@ -1602,7 +1489,7 @@
           "sampleStart": 56,
           "sampleCount": 3,
           "sha256": "75e3b693bab9a47597da7f06fe7b4e2dde7a5c4b55b60d54f372d10ae6ab5721",
-          "offset": 21664,
+          "offset": 21024,
           "length": 871
         },
         {
@@ -1611,28 +1498,8 @@
           "sampleStart": 59,
           "sampleCount": 1,
           "sha256": "73a9c91269b3aae300be1d1eac55a5ec24907cc079b887a10498def8a1a1ec01",
-          "offset": 22536,
+          "offset": 21896,
           "length": 525
-        }
-      ],
-      "staticFrames": [
-        {
-          "staticFrame": "static.00",
-          "sha256": "7f2f68a761a24d9177a2970a69ba8a69c6009578e017bbba22b7a04e7a6c5a8f",
-          "offset": 23064,
-          "length": 4968
-        },
-        {
-          "staticFrame": "static.01",
-          "sha256": "399db4bc9fa1d5508555a46bc4b60bc7d7272d447e91a15411de6e6553b9b75b",
-          "offset": 28032,
-          "length": 4968
-        },
-        {
-          "staticFrame": "static.02",
-          "sha256": "1381cf8252fa191bdaeaedbb65bb8f29ca2a186359d090599d34698589f9a0d3",
-          "offset": 33000,
-          "length": 4968
         }
       ],
       "strictInspections": [
@@ -2892,63 +2759,6 @@
           }
         }
       ],
-      "statics": [
-        {
-          "id": "static.00",
-          "bytes": 4968,
-          "sha256": "7f2f68a761a24d9177a2970a69ba8a69c6009578e017bbba22b7a04e7a6c5a8f",
-          "states": [
-            "done",
-            "loading"
-          ],
-          "validation": {
-            "profile": "strict-rgba-png-v0",
-            "decoder": "format-pure-rfc1950-1951-v0",
-            "width": 45,
-            "height": 27,
-            "pngBytes": 4968,
-            "zlibBytes": 4898,
-            "filteredBytes": 4887,
-            "rgbaBytes": 4860
-          }
-        },
-        {
-          "id": "static.01",
-          "bytes": 4968,
-          "sha256": "399db4bc9fa1d5508555a46bc4b60bc7d7272d447e91a15411de6e6553b9b75b",
-          "states": [
-            "hover"
-          ],
-          "validation": {
-            "profile": "strict-rgba-png-v0",
-            "decoder": "format-pure-rfc1950-1951-v0",
-            "width": 45,
-            "height": 27,
-            "pngBytes": 4968,
-            "zlibBytes": 4898,
-            "filteredBytes": 4887,
-            "rgbaBytes": 4860
-          }
-        },
-        {
-          "id": "static.02",
-          "bytes": 4968,
-          "sha256": "1381cf8252fa191bdaeaedbb65bb8f29ca2a186359d090599d34698589f9a0d3",
-          "states": [
-            "idle"
-          ],
-          "validation": {
-            "profile": "strict-rgba-png-v0",
-            "decoder": "format-pure-rfc1950-1951-v0",
-            "width": 45,
-            "height": 27,
-            "pngBytes": 4968,
-            "zlibBytes": 4898,
-            "filteredBytes": 4887,
-            "rgbaBytes": 4860
-          }
-        }
-      ],
       "continuity": [
         {
           "name": "loading-idle cut",
@@ -3220,690 +3030,7 @@
           }
         }
       ],
-      "encodedPayloadBytes": 14503,
-      "staticPayloadBytes": 14904
+      "encodedPayloadBytes": 14503
     }
-  ],
-  "pngCorpus": [
-    {
-      "path": "fixtures/conformance/m6/png/stored-filter0.png",
-      "bytes": 2145,
-      "sha256": "2239a8a41adb5228e75be9bfd0fb1157d1c3b95f615f0dfef7093a2e3db0ef7c",
-      "width": 32,
-      "height": 16,
-      "rgbaBytes": 2048,
-      "filteredBytes": 2064,
-      "zlibBytes": 2075,
-      "rowFilter": 0,
-      "firstDeflateBlockType": 0,
-      "pixelFixture": "conformance-pattern"
-    },
-    {
-      "path": "fixtures/conformance/m6/png/fixed-filter1.png",
-      "bytes": 194,
-      "sha256": "fa5c01bd0177a2637c3fcde21c51673ec8a20c01931b8c08c47323c769d62127",
-      "width": 32,
-      "height": 16,
-      "rgbaBytes": 2048,
-      "filteredBytes": 2064,
-      "zlibBytes": 124,
-      "rowFilter": 1,
-      "firstDeflateBlockType": 1,
-      "pixelFixture": "conformance-pattern"
-    },
-    {
-      "path": "fixtures/conformance/m6/png/dynamic-filter2.png",
-      "bytes": 850,
-      "sha256": "95b595b5b44da5c2b9e3ace7f27c3f76d2c559396e062e9649aecfb0e6d76633",
-      "width": 32,
-      "height": 16,
-      "rgbaBytes": 2048,
-      "filteredBytes": 2064,
-      "zlibBytes": 780,
-      "rowFilter": 2,
-      "firstDeflateBlockType": 2,
-      "pixelFixture": "conformance-pattern"
-    },
-    {
-      "path": "fixtures/conformance/m6/png/dynamic-filter3.png",
-      "bytes": 910,
-      "sha256": "44c010c600fb76d2bf987ca0ebd041ecdecb9b266a137d23dec460184e417340",
-      "width": 32,
-      "height": 16,
-      "rgbaBytes": 2048,
-      "filteredBytes": 2064,
-      "zlibBytes": 840,
-      "rowFilter": 3,
-      "firstDeflateBlockType": 2,
-      "pixelFixture": "conformance-pattern"
-    },
-    {
-      "path": "fixtures/conformance/m6/png/dynamic-filter4.png",
-      "bytes": 770,
-      "sha256": "9f413cf97d3279e298751a7d128316ddaafa25028f3223de6c0f0f1f9582b37f",
-      "width": 32,
-      "height": 16,
-      "rgbaBytes": 2048,
-      "filteredBytes": 2064,
-      "zlibBytes": 700,
-      "rowFilter": 4,
-      "firstDeflateBlockType": 2,
-      "pixelFixture": "conformance-pattern"
-    },
-    {
-      "path": "fixtures/conformance/m6/png/dynamic-literal-only-filter0.png",
-      "bytes": 376,
-      "sha256": "0d763c1d21016d08246ff6a6a9bc6d1659709ef41a9eb5910a4703638ef7bf77",
-      "width": 32,
-      "height": 16,
-      "rgbaBytes": 2048,
-      "filteredBytes": 2064,
-      "zlibBytes": 306,
-      "rowFilter": 0,
-      "firstDeflateBlockType": 2,
-      "pixelFixture": "transparent-black"
-    }
-  ],
-  "malformedCorpus": [
-    {
-      "path": "fixtures/conformance/m6/malformed/truncated-signature.png",
-      "bytes": 4,
-      "sha256": "0f4636c78f65d3639ece5a064b5ae753e3408614a14fb18ab4d7540d2c248543",
-      "rejectionClass": "signature-range",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-signature.png",
-      "bytes": 850,
-      "sha256": "930761b070f478794af22ba43193d66d45f63045eb5fa221394715624f59d2bd",
-      "rejectionClass": "signature-value",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/truncated-chunk-header.png",
-      "bytes": 12,
-      "sha256": "218ad85a233eff829618a6865ab681222b734c62d35a32b3eabd5c37d8945f86",
-      "rejectionClass": "chunk-header-range",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/oversized-chunk-payload.png",
-      "bytes": 16,
-      "sha256": "0a539ebc2a44c70bfb5e83102445ea5a34b1d26ea9f067f60b3510b042ae4ef0",
-      "rejectionClass": "per-chunk-payload-limit",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/truncated-chunk-payload.png",
-      "bytes": 16,
-      "sha256": "02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8",
-      "rejectionClass": "chunk-payload-crc-range",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-crc.png",
-      "bytes": 850,
-      "sha256": "e62deb23ac09b4e49d9b31c1e23daad7e32b668e4933ecb5a29c5ce21628d235",
-      "rejectionClass": "chunk-crc",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/non-ascii-chunk-type.png",
-      "bytes": 33,
-      "sha256": "80748720af8b14aab25eb07499a7037a11bd145d284a5cf70c93581e3c0632a3",
-      "rejectionClass": "chunk-type-ascii",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/first-chunk-not-ihdr.png",
-      "bytes": 21,
-      "sha256": "9a7f2a4c194c06131c9604f36e14e15706da269014bb4556fd11e909cdbd544f",
-      "rejectionClass": "ihdr-first",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-ihdr-length.png",
-      "bytes": 32,
-      "sha256": "26db8f682187eda070418861fb6f0bc70393e84df27218b3ed4651a4b0d30601",
-      "rejectionClass": "ihdr-length",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/zero-dimension.png",
-      "bytes": 850,
-      "sha256": "ba2b380a9f13306605f76243df4849decabbe09ebc07322ce480437e227cae32",
-      "rejectionClass": "dimensions-positive",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/descriptor-dimension-mismatch.png",
-      "bytes": 850,
-      "sha256": "4fbe055016aae1c458bac2c11723439ac9991a233b7fc922ec45fb8c22490993",
-      "rejectionClass": "descriptor-dimensions",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-bit-depth.png",
-      "bytes": 850,
-      "sha256": "92c81c781fd84c7f03220b56571621187289c80b4a800bb1318bb309dc8c88b9",
-      "rejectionClass": "ihdr-bit-depth",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-color-type.png",
-      "bytes": 850,
-      "sha256": "a7ded805212aa6dc7d865d6d0c75c0616a6b85f4cda74491527aff824b68c47e",
-      "rejectionClass": "ihdr-color-type",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-compression-method.png",
-      "bytes": 850,
-      "sha256": "8dedf210b8f3e36cf2f95d097201d465307b1d30d26f3a13d43c493e8910b351",
-      "rejectionClass": "ihdr-compression-method",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-filter-method.png",
-      "bytes": 850,
-      "sha256": "38690e25f5ed914869313c83b06caf7c1cd974889b7832c6336654128e4c837d",
-      "rejectionClass": "ihdr-filter-method",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/interlaced.png",
-      "bytes": 850,
-      "sha256": "5cdac7ece273ee6226040e53d06604077cd0ad787eace6d6d140cbe1efefd17d",
-      "rejectionClass": "ihdr-interlace",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/misplaced-srgb.png",
-      "bytes": 838,
-      "sha256": "fb2a93ba46e10681916791e7a0b2207b18d569b2c9b8072d27472d73c5c397a4",
-      "rejectionClass": "srgb-placement-or-duplication",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-srgb-intent.png",
-      "bytes": 46,
-      "sha256": "13ff0f2454f977dca7ef054c827cbd095f69a307df958b882d0dab8b6ad9c923",
-      "rejectionClass": "srgb-payload",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/iend-before-idat.png",
-      "bytes": 58,
-      "sha256": "5484096ab352774e481db0a709a93a45c92ed220fa3152b52c57ef724e98dc30",
-      "rejectionClass": "iend-requires-idat",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/nonempty-iend.png",
-      "bytes": 851,
-      "sha256": "bbe32e61db68744ac54b012cadd7e7b2c0217c873823634f3bb8dca7909efd1b",
-      "rejectionClass": "iend-empty-payload",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/unknown-chunk.png",
-      "bytes": 59,
-      "sha256": "c9dc75c276b01b4ca8044a9a44f2b2fee3b457ada2b7f1698e151a1780c89196",
-      "rejectionClass": "restricted-chunk-grammar",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/too-many-chunks.png",
-      "bytes": 3105,
-      "sha256": "8fb64e9e399b51e3a299faa5269d731bbec0406a731b7e6f3bfc8799ed5d5004",
-      "rejectionClass": "chunk-count-limit",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/trailing-byte.png",
-      "bytes": 851,
-      "sha256": "91ad9cb84197e97644d026d43f4c04af9ca0acdefab0fb8d798bf680d2196b92",
-      "rejectionClass": "terminal-iend",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/missing-iend.png",
-      "bytes": 838,
-      "sha256": "c80bd8a6b21f60b8d1e111a59c503d81952f06017ecfe415e13f3640e4314b57",
-      "rejectionClass": "missing-terminal-iend",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/short-zlib-member.png",
-      "bytes": 76,
-      "sha256": "e844c04b31e63a1c6f9a6b2ec5914529274048f919efd7a3b9df4e94a59a45fd",
-      "rejectionClass": "zlib-minimum-length",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-zlib-method.png",
-      "bytes": 850,
-      "sha256": "33f7c5f8a8e2022d84df4ac69c7b85d0b56b853ad6436c82d88c7e967ea3c25f",
-      "rejectionClass": "zlib-compression-method",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-zlib-window.png",
-      "bytes": 850,
-      "sha256": "55db6462f6e8d518b04239f045bcc6d8c5b39e8bb9af391e57366c4afe53c69d",
-      "rejectionClass": "zlib-window-size",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-zlib-fcheck.png",
-      "bytes": 850,
-      "sha256": "eb70a32b2af44493e7b8a01c02eea834fdaa6b05cb761f4f29df49179f3e30c0",
-      "rejectionClass": "zlib-fcheck",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/zlib-preset-dictionary.png",
-      "bytes": 850,
-      "sha256": "a949b5fde837c1425da61c0e5ad7dfcc6a28011a8a71eb0c17d41199cf7d53bc",
-      "rejectionClass": "zlib-preset-dictionary",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_ENVELOPE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/reserved-block-type.png",
-      "bytes": 77,
-      "sha256": "b154667a00a34530810c182d95b99178b06165badd0b4bc5924175b35f83c47b",
-      "rejectionClass": "deflate-reserved-block",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/stored-nonzero-padding.png",
-      "bytes": 84,
-      "sha256": "af87af17a6c5cef5cd57f7668c336a737a24a7fa1c09cc9d0f2b6095caa32e7f",
-      "rejectionClass": "deflate-stored-padding",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/stored-len-nlen-mismatch.png",
-      "bytes": 84,
-      "sha256": "a4d250cd0277df0ccb6cfbe5031cef98b0a02a00ec70f6afdafe04bc4190ec32",
-      "rejectionClass": "deflate-stored-complement",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/stored-output-overrun.png",
-      "bytes": 81,
-      "sha256": "ef46a687f1dd8ce0c1e8d9227c6752ef6ecc7843b9517853ab423b1b6eed9c49",
-      "rejectionClass": "deflate-stored-output-overrun",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/stored-truncated-byte.png",
-      "bytes": 81,
-      "sha256": "79dc9fbd8411ca6ebd8fe48e34c77aadb1bf5ce3cba37f137a438218024c106a",
-      "rejectionClass": "deflate-stored-byte-range",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/fixed-literal-overrun.png",
-      "bytes": 2143,
-      "sha256": "900318711047386d9cf8f1edc983a30dacce37af087e64a8a36e260a13c8ae15",
-      "rejectionClass": "deflate-literal-output-overrun",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/fixed-reserved-literal.png",
-      "bytes": 79,
-      "sha256": "d87a1596a57fbcd62b102ad62f16da5750a3c0e1681ccb202a5189d3548fd6e0",
-      "rejectionClass": "deflate-reserved-literal",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/fixed-reserved-distance.png",
-      "bytes": 79,
-      "sha256": "3bed7fef9dce295a3b016e319dddee253710598c3ca9dfcd8a7206093ba16208",
-      "rejectionClass": "deflate-reserved-distance",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/fixed-missing-history.png",
-      "bytes": 79,
-      "sha256": "2b37187c873ca3830f504349bc6f2f52e7b1f94bae430d622e36a39ce8fd303e",
-      "rejectionClass": "deflate-distance-history",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/fixed-copy-overrun.png",
-      "bytes": 2141,
-      "sha256": "0fee52e236ec943d76aca07a0c8995ac420d18e3e7276b389cf69adf4e728554",
-      "rejectionClass": "deflate-copy-output-overrun",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-empty-code-length-tree.png",
-      "bytes": 80,
-      "sha256": "ab681137a4c2ab4adf418c884207a68928c2477eb15c612988086b8642c89789",
-      "rejectionClass": "deflate-code-length-tree-empty",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-oversubscribed-code-length-tree.png",
-      "bytes": 80,
-      "sha256": "863880b7189e0a943cad6cf6c497df4650d4dd9651f6e6fdd9bdf4cb8929e100",
-      "rejectionClass": "deflate-code-length-tree-oversubscribed",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-incomplete-code-length-tree.png",
-      "bytes": 80,
-      "sha256": "d2ad208f69d4e6fea70c75c7dc9e3173366a84504d73f8d7763d11c16b69136a",
-      "rejectionClass": "deflate-code-length-tree-incomplete",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-leading-repeat16.png",
-      "bytes": 80,
-      "sha256": "c32fcd296706467caa33bdaf4997f88b4b55e292aa3f590e4bc7486e0530bf06",
-      "rejectionClass": "deflate-repeat16-without-previous",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-repeat-overflow.png",
-      "bytes": 82,
-      "sha256": "d652c74b9bb2fc325d82207d340a0011504e23d013d7c8f993f2cefa9766839c",
-      "rejectionClass": "deflate-code-length-repeat-overflow",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-missing-eob-symbol.png",
-      "bytes": 118,
-      "sha256": "de3432183b3f0d50f035c2dd2b6439185dbe5edeee3d1b7e889ee2a7943c7b95",
-      "rejectionClass": "deflate-literal-tree-missing-eob",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-reserved-distance-tree.png",
-      "bytes": 122,
-      "sha256": "dbd1367e7d6b2733239697e393c1811bddc70be2c4739a997b69ec5f56d9f2e9",
-      "rejectionClass": "deflate-dynamic-reserved-distance",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-oversubscribed-literal-tree.png",
-      "bytes": 118,
-      "sha256": "d6820fc2fce1dd09f6ce4564234ac867fc4726987bdd21edbd52e8bdf51a366e",
-      "rejectionClass": "deflate-literal-tree-oversubscribed",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-incomplete-literal-tree.png",
-      "bytes": 118,
-      "sha256": "6688c6b9af5c7c481b957b263281e95dc3ab39c790fa053582459f3ed042e465",
-      "rejectionClass": "deflate-literal-tree-incomplete",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-empty-distance-tree-used.png",
-      "bytes": 118,
-      "sha256": "ffd2e0f5f2a14109c3bd94b44ea9e5a790654f2943a04ac346d193f3382d5b12",
-      "rejectionClass": "deflate-empty-distance-tree-used-by-length",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-oversubscribed-distance-tree.png",
-      "bytes": 118,
-      "sha256": "ac903a134ede098df1d2d43d473403324cfd63fd4975a1557b59b37cac30fd65",
-      "rejectionClass": "deflate-distance-tree-oversubscribed",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-incomplete-distance-tree.png",
-      "bytes": 118,
-      "sha256": "d212b9ab840fad5da090866229b966fd130b67f2dc37051f7520fad7e102007d",
-      "rejectionClass": "deflate-distance-tree-incomplete",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/dynamic-unmatched-huffman-code.png",
-      "bytes": 118,
-      "sha256": "e957c295d91f8be7c99d3373538616cbd5bc0ff8fa44b3e09810d58ff3cc0b53",
-      "rejectionClass": "deflate-huffman-code-unmatched",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/missing-eob.png",
-      "bytes": 78,
-      "sha256": "1c5ab5f6d17467776faf8ab16322cc2cc8cb46497e6a8bf8eafbced55d710076",
-      "rejectionClass": "deflate-missing-eob",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/missing-final-block.png",
-      "bytes": 81,
-      "sha256": "1d2a35b55509b4ddfa8b577e3b7fe25ae9d5f722b4e005153ad89c9e903b759a",
-      "rejectionClass": "deflate-missing-final-block",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/nonzero-terminal-padding.png",
-      "bytes": 78,
-      "sha256": "5aee6331849edc4fe5bbb44afd8d249b48b259bdeffffd759d9750beabc19865",
-      "rejectionClass": "deflate-terminal-padding",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/trailing-deflate-byte.png",
-      "bytes": 79,
-      "sha256": "42a09b6459fe098df2c0d9634e910ec23954dd5b4568c370aa5cd9908d4cf026",
-      "rejectionClass": "deflate-trailing-byte",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/short-deflate-output.png",
-      "bytes": 78,
-      "sha256": "a53822f3edccfc0c81c93fe621fc4da0f8178f56b91f8cdaaf39923c74a23363",
-      "rejectionClass": "deflate-output-length",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-adler.png",
-      "bytes": 850,
-      "sha256": "6adcc9dff670588fad9a997afdf50200ef30a73e58946049fa9b9d74e8a6bfeb",
-      "rejectionClass": "adler32",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_DEFLATE_INVALID"
-      }
-    },
-    {
-      "path": "fixtures/conformance/m6/malformed/bad-filter.png",
-      "bytes": 2145,
-      "sha256": "9f40f953cf362ade8f457be6ec3b6aa9a8b53e46938b8bd445767f93deae459f",
-      "rejectionClass": "scanline-filter",
-      "rejection": {
-        "name": "FormatError",
-        "code": "PNG_SCANLINE_INVALID"
-      }
-    }
-  ],
-  "malformedCorpusManifest": {
-    "path": "fixtures/conformance/m6/malformed/corpus.json",
-    "bytes": 12105,
-    "sha256": "64039534c5e8bb8bd6b7350ac0e1ff2abbf9bb4be4e28bb2cee3ff1b8f05b0dd"
-  },
-  "malformedContracts": {
-    "path": "fixtures/conformance/m6/malformed/contracts.json",
-    "bytes": 3334,
-    "sha256": "8d291fbbd6ef74dd5bcec2db10954974c39dc307c6c84b0a10bb1925bc5a6002"
-  }
+  ]
 }

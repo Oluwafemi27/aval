@@ -1,11 +1,11 @@
 import {
-  FORMAT_DEFAULT_BUDGETS,
   FormatError,
   deriveAvcRenditionGeometryFromVisible,
+  inspectAvcAnnexBRendition,
   prepareAvcEncoderRendition,
   type AvcEncoderRenditionPreparation,
   type AvcRenditionGeometry
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { CompilerError } from "../diagnostics.js";
 import {
@@ -19,11 +19,18 @@ import {
 import type {
   AlphaQualitySummary,
   CompileInvocationDetails,
+  CompileRenditionDetails,
   CompositeQualitySummary,
+  NormalizedAvcEncoding,
   RationalV01,
   SourceAlphaPolicy
 } from "../model.js";
 import { createAlphaQualityAccumulator } from "./alpha-quality.js";
+import {
+  avcPeakBitrate,
+  deriveCanonicalAverageBitrate,
+  validateAvcEncoding
+} from "./avc-encoding-policy.js";
 import { createCompositeQualityAccumulator } from "./composite-quality.js";
 import {
   materializeScaledYuvUnitSpool,
@@ -44,10 +51,8 @@ export interface CompileAvcRenditionInput {
     readonly id: string;
     readonly width: number;
     readonly height: number;
-    readonly bitrate: {
-      readonly average: number;
-      readonly peak: number;
-    };
+    readonly avcProfileVersion: "v0" | "v1";
+    readonly encoding: Readonly<NormalizedAvcEncoding>;
   };
   readonly canvasWidth: number;
   readonly canvasHeight: number;
@@ -63,6 +68,8 @@ export interface CompiledAvcRendition {
   readonly geometry: Readonly<AvcRenditionGeometry>;
   readonly prepared: Readonly<AvcEncoderRenditionPreparation>;
   readonly rawEncodedBytes: number;
+  readonly bitrate: Readonly<CompileRenditionDetails["bitrate"]>;
+  readonly encoding: Readonly<CompileRenditionDetails["encoding"]>;
   readonly alphaQuality: Readonly<AlphaQualitySummary> | null;
   readonly compositeQuality: Readonly<CompositeQualitySummary> | null;
   readonly invocations: readonly CompileInvocationDetails[];
@@ -81,9 +88,14 @@ export async function compileAvcRendition(
   if (!Array.isArray(input.units) || input.units.length < 1) {
     throw new CompilerError("INPUT_INVALID", "AVC rendition requires units");
   }
+  const encoding = validateAvcEncoding(input.rendition.encoding);
   const profile = input.selectedAlphaProfile === "packed"
-    ? "avc-annexb-packed-alpha-v0" as const
-    : "avc-annexb-opaque-v0" as const;
+    ? input.rendition.avcProfileVersion === "v1"
+      ? "avc-annexb-packed-alpha-v1" as const
+      : "avc-annexb-packed-alpha-v0" as const
+    : input.rendition.avcProfileVersion === "v1"
+      ? "avc-annexb-opaque-v1" as const
+      : "avc-annexb-opaque-v0" as const;
   let geometry: Readonly<AvcRenditionGeometry>;
   try {
     geometry = deriveAvcRenditionGeometryFromVisible({
@@ -100,17 +112,6 @@ export async function compileAvcRendition(
       });
     }
     throw error;
-  }
-  const macroblocks = geometry.codedWidth / 16 * (geometry.codedHeight / 16);
-  if (
-    macroblocks > 5_120 ||
-    macroblocks * input.frameRate.numerator >
-      216_000 * input.frameRate.denominator
-  ) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      "Rendition exceeds AVC Level 3.2 macroblock limits"
-    );
   }
   const invocations: CompileInvocationDetails[] = [];
   const scratch: EncodedUnitScratch[] = [];
@@ -144,7 +145,7 @@ export async function compileAvcRendition(
           codedWidth: geometry.codedWidth,
           codedHeight: geometry.codedHeight,
           decodedStorageRect: geometry.decodedStorageRect,
-          bitrate: input.rendition.bitrate,
+          encoding,
           executable: input.executable,
           ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
           ...(input.signal === undefined ? {} : { signal: input.signal })
@@ -158,12 +159,11 @@ export async function compileAvcRendition(
         const rawBytes = await encodeAvcUnit(encodeInput);
         rawEncodedBytes += rawBytes.byteLength;
         if (
-          !Number.isSafeInteger(rawEncodedBytes) ||
-          rawEncodedBytes > FORMAT_DEFAULT_BUDGETS.maxFileBytes
+          !Number.isSafeInteger(rawEncodedBytes)
         ) {
           throw new CompilerError(
             "OUTPUT_LIMIT",
-            "Raw encoder output exceeds the compiled-file budget"
+            "Raw encoder output exceeds the safe-integer range"
           );
         }
         scratch.push(Object.freeze({ unit, spool, rawBytes }));
@@ -174,6 +174,10 @@ export async function compileAvcRendition(
     }
 
     let prepared: Readonly<AvcEncoderRenditionPreparation>;
+    const peakBitrate = avcPeakBitrate(encoding);
+    const configuredAverage = encoding.rateControl.mode === "abr"
+      ? encoding.rateControl.averageBitrate
+      : peakBitrate;
     try {
       prepared = prepareAvcEncoderRendition({
         profile: {
@@ -181,9 +185,12 @@ export async function compileAvcRendition(
           codedHeight: geometry.codedHeight,
           expectedDecodedStorageRect: geometry.decodedStorageRect,
           frameRate: input.frameRate,
-          averageBitrate: input.rendition.bitrate.average,
-          peakBitrate: input.rendition.bitrate.peak,
-          cpbBufferBits: input.rendition.bitrate.peak,
+          averageBitrate: configuredAverage,
+          peakBitrate,
+          cpbBufferBits: peakBitrate,
+          quantizationPolicy: input.rendition.avcProfileVersion === "v1"
+            ? "bounded-qp-v1"
+            : "fixed-qp26-v0",
           requireBt709LimitedRange: true
         },
         units: scratch.map(({ unit, rawBytes }) => Object.freeze({
@@ -201,9 +208,78 @@ export async function compileAvcRendition(
       throw error;
     }
 
+    const canonicalBytes = prepared.units.reduce(
+      (total, unit) => unit.accessUnits.reduce(
+        (unitTotal, accessUnit) => checkedByteSum(
+          unitTotal,
+          accessUnit.bytes.byteLength,
+          "canonical AVC bytes"
+        ),
+        total
+      ),
+      0
+    );
+    const frameCount = input.units.reduce(
+      (total, unit) => checkedByteSum(
+        total,
+        unit.endFrame - unit.startFrame,
+        "AVC frame count"
+      ),
+      0
+    );
+    const measuredAverageBitrate = deriveCanonicalAverageBitrate({
+      canonicalBytes,
+      frameCount,
+      frameRate: input.frameRate
+    });
+    if (
+      input.rendition.avcProfileVersion === "v1" &&
+      measuredAverageBitrate > peakBitrate
+    ) {
+      throw new CompilerError(
+        "AVC_PROFILE_INVALID",
+        `Measured AVC average bitrate ${String(measuredAverageBitrate)} exceeds the configured maximum ${String(peakBitrate)}`
+      );
+    }
+    const bitrate = Object.freeze({
+      average: input.rendition.avcProfileVersion === "v1"
+        ? measuredAverageBitrate
+        : configuredAverage,
+      peak: peakBitrate
+    });
+    if (input.rendition.avcProfileVersion === "v1") {
+      try {
+        const inspection = inspectAvcAnnexBRendition({
+          profile: {
+            codedWidth: geometry.codedWidth,
+            codedHeight: geometry.codedHeight,
+            expectedDecodedStorageRect: geometry.decodedStorageRect,
+            frameRate: input.frameRate,
+            averageBitrate: bitrate.average,
+            peakBitrate: bitrate.peak,
+            cpbBufferBits: bitrate.peak,
+            quantizationPolicy: "bounded-qp-v1",
+            requireBt709LimitedRange: true
+          },
+          units: prepared.units
+        });
+        prepared = Object.freeze({ ...prepared, inspection });
+      } catch (error) {
+        if (error instanceof FormatError) {
+          throw new CompilerError("AVC_PROFILE_INVALID", error.message, {
+            cause: error
+          });
+        }
+        throw error;
+      }
+    }
+
     let alphaQuality: Readonly<AlphaQualitySummary> | null = null;
     let compositeQuality: Readonly<CompositeQualitySummary> | null = null;
-    if (profile === "avc-annexb-packed-alpha-v0") {
+    if (
+      profile === "avc-annexb-packed-alpha-v0" ||
+      profile === "avc-annexb-packed-alpha-v1"
+    ) {
       const quality = createAlphaQualityAccumulator({
         rendition: input.rendition.id,
         geometry,
@@ -265,6 +341,15 @@ export async function compileAvcRendition(
       geometry,
       prepared,
       rawEncodedBytes,
+      bitrate,
+      encoding: Object.freeze({
+        codec: "libx264" as const,
+        preset: encoding.preset,
+        rateControl: encoding.rateControl,
+        legacyZeroLatency: encoding.legacyZeroLatency,
+        canonicalBytes,
+        measuredAverageBitrate
+      }),
       alphaQuality,
       compositeQuality,
       invocations: Object.freeze(invocations)
@@ -272,6 +357,19 @@ export async function compileAvcRendition(
   } finally {
     await Promise.all(scratch.map(({ spool }) => spool.cleanup()));
   }
+}
+
+function checkedByteSum(left: number, right: number, label: string): number {
+  if (
+    !Number.isSafeInteger(left) ||
+    !Number.isSafeInteger(right) ||
+    left < 0 ||
+    right < 0 ||
+    left > Number.MAX_SAFE_INTEGER - right
+  ) {
+    throw new CompilerError("OUTPUT_LIMIT", `${label} exceeds safe arithmetic`);
+  }
+  return left + right;
 }
 
 function extractAlpha(rgba: Uint8Array): Uint8Array {
@@ -296,14 +394,23 @@ function concatenate(parts: readonly Uint8Array[]): Uint8Array {
   let length = 0;
   for (const part of parts) {
     length += part.byteLength;
-    if (
-      !Number.isSafeInteger(length) ||
-      length > FORMAT_DEFAULT_BUDGETS.maxFileBytes
-    ) {
-      throw new CompilerError("OUTPUT_LIMIT", "Canonical AVC unit is too large");
+    if (!Number.isSafeInteger(length)) {
+      throw new CompilerError(
+        "OUTPUT_LIMIT",
+        "Canonical AVC unit exceeds the safe-integer range"
+      );
     }
   }
-  const output = new Uint8Array(length);
+  let output: Uint8Array;
+  try {
+    output = new Uint8Array(length);
+  } catch (cause) {
+    throw new CompilerError(
+      "OUTPUT_LIMIT",
+      `Could not allocate ${String(length)} bytes for the canonical AVC unit`,
+      { cause }
+    );
+  }
   let offset = 0;
   for (const part of parts) {
     output.set(part, offset);

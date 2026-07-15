@@ -6,7 +6,6 @@ import {
   byteIdentity,
   shuffledWriterInput,
   twoRenditionWriterInput,
-  validWriterInput,
   writerInputFromParsed
 } from "./writer-fixture.js";
 
@@ -26,13 +25,7 @@ describe("canonical writer/parser round trip", () => {
   });
 
   it("preserves every derived sample span and payload byte range", () => {
-    const base = twoRenditionWriterInput();
-    const input = {
-      ...base,
-      staticPayloads: validWriterInput({
-        staticLength: (index) => 33 + index * 7
-      }).staticPayloads
-    };
+    const input = twoRenditionWriterInput();
     const bytes = writeCanonicalAsset(input);
     const parsed = parseFrontIndex(bytes);
 
@@ -44,15 +37,6 @@ describe("canonical writer/parser round trip", () => {
         record.payloadOffset + record.payloadLength
       ))).toEqual(Array.from(input.accessUnits[index]!.bytes));
     }
-    for (const blob of parsed.staticBlobs) {
-      const payload = input.staticPayloads.find(
-        (candidate) => candidate.staticFrame === blob.staticFrame
-      )!;
-      expect(Array.from(bytes.subarray(blob.offset, blob.offset + blob.length))).toEqual(
-        Array.from(payload.bytes)
-      );
-    }
-
     const totalFrames = parsed.manifest.units.reduce(
       (sum, unit) => sum + unit.frameCount,
       0

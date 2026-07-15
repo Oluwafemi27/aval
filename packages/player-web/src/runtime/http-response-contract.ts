@@ -114,7 +114,7 @@ export function validateRuntimeHttpResponse(
   const contentEncoding = readRuntimeHeader(values.headers, "Content-Encoding");
   // Fetch exposes a decoded stream for a complete response while retaining
   // representation metadata. Its Content-Length therefore describes encoded
-  // transfer bytes, not the decoded RMA bytes that this runtime owns. Partial
+  // transfer bytes, not the decoded AVAL bytes that this runtime owns. Partial
   // responses remain identity-only because their offsets are representation
   // byte positions.
   if (values.status === 200) {

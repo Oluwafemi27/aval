@@ -2,7 +2,7 @@ import type {
   GraphEdgeDefinition,
   GraphPresentation,
   GraphStateDefinition
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import { graphBodyFrameAt } from "./body-frame-semantics.js";
 import {

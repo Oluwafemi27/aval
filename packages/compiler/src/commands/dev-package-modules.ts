@@ -11,10 +11,10 @@ import {
 } from "./dev-file-reader.js";
 
 export const DEV_MODULE_PACKAGES = Object.freeze({
-  element: "@rendered-motion/element",
-  "player-web": "@rendered-motion/player-web",
-  format: "@rendered-motion/format",
-  graph: "@rendered-motion/graph"
+  element: "@aval/element",
+  "player-web": "@aval/player-web",
+  format: "@aval/format",
+  graph: "@aval/graph"
 } as const);
 
 export type DevModulePackage = keyof typeof DEV_MODULE_PACKAGES;
@@ -40,7 +40,7 @@ export interface PackageModuleStore {
 export function rewriteDevModuleImports(bytes: Buffer, sessionPath: string): Buffer {
   if (!/^\/[A-Za-z0-9_-]{43}\/$/u.test(sessionPath)) throw new TypeError("dev module session path is invalid");
   const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  const rewritten = source.replace(/(["'])@rendered-motion\/(element|player-web|format|graph)\1/gu, (_match, _quote: string, packageName: DevModulePackage) => JSON.stringify(`${sessionPath}modules/${packageName}/index.js`));
+  const rewritten = source.replace(/(["'])@aval\/(element|player-web|format|graph)\1/gu, (_match, _quote: string, packageName: DevModulePackage) => JSON.stringify(`${sessionPath}modules/${packageName}/index.js`));
   return Buffer.from(rewritten, "utf8");
 }
 
@@ -96,7 +96,7 @@ export async function resolveCompilerPackageEntry(packageName: string): Promise<
     if (!resolved.startsWith("file:")) throw new TypeError("package entry is not a file URL");
     entryPath = fileURLToPath(resolved);
   } catch (cause) {
-    throw new CompilerError("IO_FAILED", `Could not resolve dev dependency ${packageName} from @rendered-motion/compiler`, { cause });
+    throw new CompilerError("IO_FAILED", `Could not resolve dev dependency ${packageName} from @aval/compiler`, { cause });
   }
   const packageRoot = await findOwningPackageRoot(entryPath, packageName);
   if (packageRoot === null) throw new CompilerError("IO_FAILED", `Could not verify dev dependency ${packageName}`);

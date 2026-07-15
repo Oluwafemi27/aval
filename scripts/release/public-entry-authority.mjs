@@ -1,9 +1,9 @@
 const EXPECTED = Object.freeze([
-  Object.freeze({ package: "@rendered-motion/graph", export: ".", path: "dist/index.js" }),
-  Object.freeze({ package: "@rendered-motion/format", export: ".", path: "dist/index.js" }),
-  Object.freeze({ package: "@rendered-motion/player-web", export: ".", path: "dist/index.js" }),
-  Object.freeze({ package: "@rendered-motion/element", export: ".", path: "dist/index.js" }),
-  Object.freeze({ package: "@rendered-motion/element", export: "./auto", path: "dist/auto.js" })
+  Object.freeze({ package: "@aval/graph", export: ".", path: "dist/index.js" }),
+  Object.freeze({ package: "@aval/format", export: ".", path: "dist/index.js" }),
+  Object.freeze({ package: "@aval/player-web", export: ".", path: "dist/index.js" }),
+  Object.freeze({ package: "@aval/element", export: ".", path: "dist/index.js" }),
+  Object.freeze({ package: "@aval/element", export: "./auto", path: "dist/auto.js" })
 ]);
 
 export function reconcileProductionPublicEntryManifest(input, packageInspection) {

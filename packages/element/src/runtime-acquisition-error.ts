@@ -6,7 +6,7 @@ export class RuntimeAcquisitionCleanupError extends Error {
   readonly #retry: () => Promise<void>;
 
   public constructor(cause: unknown, retry: () => Promise<void>) {
-    super("rendered-motion runtime acquisition cleanup is incomplete", { cause });
+    super("aval-player runtime acquisition cleanup is incomplete", { cause });
     this.name = "RuntimeAcquisitionCleanupError";
     this.#retry = retry;
   }

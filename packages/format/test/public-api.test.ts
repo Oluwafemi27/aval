@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import * as packageApi from "@rendered-motion/format";
+import * as packageApi from "@aval/format";
 import * as sourceApi from "../src/index.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +29,9 @@ const RUNTIME_EXPORTS = Object.freeze([
   "SHA256_HEX_PATTERN",
   "adaptManifestToMotionGraph",
   "adler32",
+  "avcCodecForLevel",
+  "avcLevelLimits",
+  "avcQuantizationPolicyForRendition",
   "crc32",
   "decodePngRgba",
   "decodePngRgbaFromInflated",
@@ -37,11 +40,14 @@ const RUNTIME_EXPORTS = Object.freeze([
   "encodeReferenceFrame",
   "inspectAvcAnnexBEncoderCandidateRendition",
   "inspectAvcAnnexBRendition",
+  "isAvcCodec",
+  "isAvcLevelIdc",
   "maximumAvcDecodedRgbaBytes",
   "maximumAvcDecoderSurfaceDimension",
   "parseStrictJson",
   "parseFrontIndex",
   "parseHeader",
+  "parseAvcCodec",
   "parseReferenceFrameHeader",
   "prepareAvcEncoderRendition",
   "resolveFormatBudgets",
@@ -66,7 +72,7 @@ function productionSources(packageName: "format" | "graph"): readonly string[] {
     .map((entry) => resolve(sourceDirectory, entry));
 }
 
-describe("@rendered-motion/format public boundary", () => {
+describe("@aval/format public boundary", () => {
   it("exposes exactly the approved runtime surface from source and package root", () => {
     expect(Object.keys(sourceApi).sort()).toEqual([...RUNTIME_EXPORTS].sort());
     expect(Object.keys(packageApi).sort()).toEqual([...RUNTIME_EXPORTS].sort());

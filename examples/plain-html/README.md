@@ -4,7 +4,7 @@ This source example is illustrative: it is ordinary HTML, CSS, and JavaScript
 with a package-aware development server—no framework and no inline script or
 style exception. Its asset paths are placeholders.
 
-Place `orbit.rma` and its optional author fallback `orbit.png` in this
+Place `orbit.avl` and its optional author fallback `orbit.png` in this
 directory, then run:
 
 ```sh
@@ -12,9 +12,9 @@ npm install
 npm run dev
 ```
 
-Vite resolves the public `@rendered-motion/element` package import. A browser
+Vite resolves the public `@aval/element` package import. A browser
 cannot resolve a bare npm specifier by opening `index.html` from disk; use this
 workflow, another package-aware bundler, or an exact pinned CDN URL.
 
 For an immediately runnable generated asset and browser workflow, use
-`rma init` and `npm run dev` in the generated starter.
+`avl init` and `npm run dev` in the generated starter.

@@ -11,13 +11,16 @@ export const AVC_DECODER_SURFACE_PADDING = 32;
 
 /** Conservative browser-decoder coded-surface bound for one AVC dimension. */
 export function maximumAvcDecoderSurfaceDimension(dimension: number): number {
-  if (!Number.isSafeInteger(dimension) || dimension < 1 || dimension > 2_048) {
+  if (!Number.isSafeInteger(dimension) || dimension < 1) {
     throw new FormatError(
       "INPUT_INVALID",
-      "AVC decoder surface dimension must be between 1 and 2048"
+      "AVC decoder surface dimension must be a positive safe integer"
     );
   }
-  return Math.ceil(dimension / 16) * 16 + AVC_DECODER_SURFACE_PADDING;
+  const aligned = dimension % 16 === 0
+    ? dimension
+    : checkedAdd(dimension, 16 - dimension % 16);
+  return checkedAdd(aligned, AVC_DECODER_SURFACE_PADDING);
 }
 
 /** Worst-case logical RGBA lease for a decoder surface, including padding. */
@@ -25,6 +28,21 @@ export function maximumAvcDecodedRgbaBytes(
   codedWidth: number,
   codedHeight: number
 ): number {
-  return maximumAvcDecoderSurfaceDimension(codedWidth) *
-    maximumAvcDecoderSurfaceDimension(codedHeight) * 4;
+  const width = maximumAvcDecoderSurfaceDimension(codedWidth);
+  const height = maximumAvcDecoderSurfaceDimension(codedHeight);
+  return checkedMultiply(checkedMultiply(width, height), 4);
+}
+
+function checkedAdd(left: number, right: number): number {
+  if (left > Number.MAX_SAFE_INTEGER - right) {
+    throw new FormatError("INPUT_INVALID", "AVC decoder surface size exceeds the safe-integer range");
+  }
+  return left + right;
+}
+
+function checkedMultiply(left: number, right: number): number {
+  if (left !== 0 && right > Math.floor(Number.MAX_SAFE_INTEGER / left)) {
+    throw new FormatError("INPUT_INVALID", "AVC decoded byte size exceeds the safe-integer range");
+  }
+  return left * right;
 }

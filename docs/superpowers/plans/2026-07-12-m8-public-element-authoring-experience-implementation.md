@@ -6,7 +6,7 @@
 
 ## Outcome
 
-Add one framework-neutral, SSR-safe `@rendered-motion/element` package over
+Add one framework-neutral, SSR-safe `@aval/element` package over
 the completed M7 browser runtime. Make a one-state compiled asset work through
 one definition call and one HTML tag, while preserving arbitrary authored
 states, exact graph settlement, automatic engagement bindings, reduced-motion
@@ -32,8 +32,8 @@ upload, product-name decision, or certification claim.
 - Preserve compiled format `0.1`, source project `0.1` compatibility, and the
   normalized source project `0.2` path. M8 adds no manifest field or binding
   source.
-- `@rendered-motion/element` may depend on public
-  `@rendered-motion/player-web` exports only. It must not import player private
+- `@aval/element` may depend on public
+  `@aval/player-web` exports only. It must not import player private
   paths, parse the container, fetch payloads, decode media, schedule frames,
   manage page leases, validate PNG, or implement graph routing again.
 - Keep the package root safe in a process with no DOM globals. Touch
@@ -90,7 +90,7 @@ packages/element/test/public-api.test.ts
 ```
 
 Update the root workspace/project references and package lock. Add no runtime
-dependency beyond `@rendered-motion/player-web` and the types it publicly
+dependency beyond `@aval/player-web` and the types it publicly
 re-exports.
 
 Freeze closed public unions for:
@@ -108,7 +108,7 @@ Freeze closed public unions for:
 
 Add `HTMLElementTagNameMap` typing for the default prototype tag and typed
 `addEventListener` overloads without importing React. Export a plain
-`RenderedMotionElementAttributes` interface for framework type augmentation.
+`AvalElementAttributes` interface for framework type augmentation.
 Compile hostile examples proving closed enums, read-only staged properties,
 read-only state/binding lists, immutable event detail, and nonconstructible
 diagnostic/resource internals.
@@ -121,7 +121,7 @@ Run:
 
 ```text
 npx vitest run packages/element/test/public-api.test.ts
-npm run typecheck -w @rendered-motion/element
+npm run typecheck -w @aval/element
 ```
 
 ### 2. Implement SSR-safe, collision-safe custom-element registration
@@ -135,10 +135,10 @@ packages/element/test/definition-node.test.ts
 tests/browser/m8-definition.spec.ts
 ```
 
-Implement `defineRenderedMotionElement()` so it:
+Implement `defineAvalElement()` so it:
 
 1. validates a browser environment;
-2. checks the browser's `CustomElementRegistry` for `rendered-motion`;
+2. checks the browser's `CustomElementRegistry` for `aval-player`;
 3. returns an existing constructor only when it carries this package's
    compatible symbol/version marker;
 4. rejects a foreign definition with bounded `NotSupportedError`;
@@ -317,7 +317,7 @@ Run:
 
 ```text
 npx vitest run packages/element/test/asset-generation.test.ts packages/element/test/element-lifecycle.test.ts
-npm run typecheck -w @rendered-motion/element
+npm run typecheck -w @aval/element
 ```
 
 ### 6. Implement the public readiness, state, and playback facade
@@ -692,7 +692,7 @@ Run:
 
 ```text
 npx vitest run packages/compiler/test/direct-adoption.test.ts packages/compiler/test/cli-output.test.ts
-npm run typecheck -w @rendered-motion/compiler
+npm run typecheck -w @aval/compiler
 ```
 
 ### 15. Replace the placeholder init output with the idle-hover starter
@@ -727,15 +727,15 @@ Run:
 
 ```text
 npx vitest run packages/compiler/test/init-starter.test.ts
-npm run build -w @rendered-motion/compiler
+npm run build -w @aval/compiler
 node packages/compiler/dist/cli.js init .tmp-m8-starter
-node packages/compiler/dist/cli.js compile .tmp-m8-starter/project.json --out .tmp-m8-starter/output.rma
-node packages/compiler/dist/cli.js validate .tmp-m8-starter/output.rma
+node packages/compiler/dist/cli.js compile .tmp-m8-starter/project.json --out .tmp-m8-starter/output.avl
+node packages/compiler/dist/cli.js validate .tmp-m8-starter/output.avl
 ```
 
 Remove temporary output after the manual gate; never commit it.
 
-### 16. Extend `rma dev` into the public-element watch playground
+### 16. Extend `avl dev` into the public-element watch playground
 
 Update/add:
 
@@ -778,7 +778,7 @@ Run:
 
 ```text
 npx vitest run packages/compiler/test/dev-command.test.ts packages/compiler/test/dev-server.test.ts
-npm run build -w @rendered-motion/compiler
+npm run build -w @aval/compiler
 ```
 
 ### 17. Write public integration, hosting, and framework documentation
@@ -837,8 +837,8 @@ git diff --check
 Add:
 
 ```text
-fixtures/conformance/m8/one-state-partial-loop.rma
-fixtures/conformance/m8/user-states-all-routes-alpha.rma
+fixtures/conformance/m8/one-state-partial-loop.avl
+fixtures/conformance/m8/user-states-all-routes-alpha.avl
 fixtures/conformance/m8/provenance.json
 fixtures/conformance/m8/update-provenance.mjs
 apps/playground/m8-http-fixture-plugin.ts
@@ -864,10 +864,10 @@ never writes secret header values to reports.
 Run:
 
 ```text
-npm run build -w @rendered-motion/compiler
+npm run build -w @aval/compiler
 node fixtures/conformance/m8/update-provenance.mjs --check
-node packages/compiler/dist/cli.js validate fixtures/conformance/m8/one-state-partial-loop.rma
-node packages/compiler/dist/cli.js validate fixtures/conformance/m8/user-states-all-routes-alpha.rma
+node packages/compiler/dist/cli.js validate fixtures/conformance/m8/one-state-partial-loop.avl
+node packages/compiler/dist/cli.js validate fixtures/conformance/m8/user-states-all-routes-alpha.avl
 ```
 
 ### 19. Build the public-API-only M8 real browser proof
@@ -960,7 +960,7 @@ Run a strict maintainability review and reject:
 Searches include:
 
 ```text
-rg -n "@rendered-motion/player-web/src|@rendered-motion/(format|graph)/src" packages/element
+rg -n "@aval/player-web/src|@aval/(format|graph)/src" packages/element
 rg -n "HTMLElement|customElements|document|window|matchMedia|IntersectionObserver|ResizeObserver" packages/element/src
 rg -n "innerHTML|insertAdjacentHTML|querySelector|eval\(|new Function|new Blob|console\.|globalThis\[" packages/element/src
 rg -n "role|tabindex|aria-|keydown|keyup|preventDefault|stopPropagation|\.click\(" packages/element/src
@@ -989,7 +989,7 @@ packages/element/src/
   errors.ts
   definition.ts
   definition-marker.ts
-  rendered-motion-element.ts
+  aval-element.ts
   element-controller.ts
   element-lifecycle.ts
   element-attributes.ts
@@ -1060,11 +1060,11 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @rendered-motion/graph
-npm pack --dry-run -w @rendered-motion/format
-npm pack --dry-run -w @rendered-motion/compiler
-npm pack --dry-run -w @rendered-motion/player-web
-npm pack --dry-run -w @rendered-motion/element
+npm pack --dry-run -w @aval/graph
+npm pack --dry-run -w @aval/format
+npm pack --dry-run -w @aval/compiler
+npm pack --dry-run -w @aval/player-web
+npm pack --dry-run -w @aval/element
 git diff --check
 ```
 

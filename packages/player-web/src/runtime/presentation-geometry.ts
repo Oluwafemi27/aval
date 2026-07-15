@@ -11,9 +11,10 @@ export const PRESENTATION_FIT_MODES = Object.freeze([
   "fill",
   "none"
 ] as const);
-export const MAX_PRESENTATION_BACKING_DIMENSION = 2_048 as const;
-export const MAX_LOGICAL_CANVAS_DIMENSION = 512 as const;
-const PRESENTATION_PLANE_COUNT = 2;
+/** Compatibility exports; host/device policies now provide real dimensions. */
+export const MAX_PRESENTATION_BACKING_DIMENSION = Number.MAX_SAFE_INTEGER;
+export const MAX_LOGICAL_CANVAS_DIMENSION = Number.MAX_SAFE_INTEGER;
+const PRESENTATION_PLANE_COUNT = 1;
 
 export type PresentationFit = (typeof PRESENTATION_FIT_MODES)[number];
 export type PresentationClampReason =
@@ -108,11 +109,10 @@ export interface PresentationGeometry {
   };
   readonly planes: {
     readonly animated: Readonly<PresentationPlaneMapping>;
-    readonly static: Readonly<PresentationPlaneMapping>;
   };
 }
 
-/** One pure geometry authority shared by the animated and static planes. */
+/** Pure geometry authority for the animated canvas. */
 export function computePresentationGeometry(
   input: Readonly<PresentationGeometryInput>
 ): Readonly<PresentationGeometry> {
@@ -154,64 +154,22 @@ export function computePresentationGeometry(
     PRESENTATION_PLANE_COUNT
   ], "desired presentation backing bytes");
 
-  const clampReasons: PresentationClampReason[] = [];
-  if (
-    desiredWidth > MAX_PRESENTATION_BACKING_DIMENSION ||
-    desiredHeight > MAX_PRESENTATION_BACKING_DIMENSION
-  ) clampReasons.push("format-dimension");
   if (
     desiredWidth > input.maxBackingWidth ||
     desiredHeight > input.maxBackingHeight
-  ) clampReasons.push("device-dimension");
+  ) {
+    throw new RangeError(
+      "requested presentation backing exceeds the host or device dimensions"
+    );
+  }
   if (desiredBytes > BigInt(input.maxBackingBytes)) {
-    clampReasons.push("byte-budget");
+    throw new RangeError(
+      "requested presentation backing exceeds the host byte policy"
+    );
   }
 
-  const maximumWidth = Math.min(
-    MAX_PRESENTATION_BACKING_DIMENSION,
-    input.maxBackingWidth
-  );
-  const maximumHeight = Math.min(
-    MAX_PRESENTATION_BACKING_DIMENSION,
-    input.maxBackingHeight
-  );
-  const dimensionScale = Math.min(
-    1,
-    maximumWidth / desiredWidth,
-    maximumHeight / desiredHeight
-  );
-  const byteScale = desiredBytes <= BigInt(input.maxBackingBytes)
-    ? 1
-    : Math.sqrt(input.maxBackingBytes / Number(desiredBytes));
-  const requestedScale = Math.min(dimensionScale, byteScale);
-  if (!Number.isFinite(requestedScale) || requestedScale <= 0) {
-    throw new RangeError("presentation backing has no viable resolution");
-  }
-
-  let backingWidth = Math.max(1, Math.floor(desiredWidth * requestedScale));
-  let backingHeight = Math.max(1, Math.floor(desiredHeight * requestedScale));
-  const maximumBackingPixels = Math.floor(
-    input.maxBackingBytes /
-      (BYTES_PER_RGBA_PIXEL * PRESENTATION_PLANE_COUNT)
-  );
-  // The uniform floating-point scale can put one extreme-aspect dimension
-  // below one pixel. Raising that dimension to the required one-pixel floor
-  // may then exceed the area budget. Retighten the axis with the larger
-  // effective scale until the integer raster itself fits.
-  while (backingWidth * backingHeight > maximumBackingPixels) {
-    const widthScale = backingWidth / desiredWidth;
-    const heightScale = backingHeight / desiredHeight;
-    if (
-      backingWidth > 1 &&
-      (backingHeight === 1 || widthScale >= heightScale)
-    ) {
-      backingWidth -= 1;
-    } else if (backingHeight > 1) {
-      backingHeight -= 1;
-    } else {
-      throw new RangeError("presentation backing has no viable resolution");
-    }
-  }
+  const backingWidth = desiredWidth;
+  const backingHeight = desiredHeight;
   const totalBackingBytesBig = checkedByteProduct([
     backingWidth,
     backingHeight,
@@ -259,13 +217,10 @@ export function computePresentationGeometry(
       x: backingWidth / input.cssWidth,
       y: backingHeight / input.cssHeight
     }),
-    resolutionScale: Math.min(
-      backingWidth / desiredWidth,
-      backingHeight / desiredHeight
-    ),
-    clampReasons: Object.freeze(clampReasons),
+    resolutionScale: 1,
+    clampReasons: Object.freeze([]),
     byteTerms: Object.freeze({ bytesPerPlane, totalBackingBytes }),
-    planes: Object.freeze({ animated: mapping, static: mapping })
+    planes: Object.freeze({ animated: mapping })
   });
 }
 
@@ -353,16 +308,8 @@ function validateInput(input: Readonly<PresentationGeometryInput>): void {
   if (input === null || typeof input !== "object") {
     throw new TypeError("presentation geometry input must be an object");
   }
-  validateBoundedPositiveInteger(
-    input.canvasWidth,
-    MAX_LOGICAL_CANVAS_DIMENSION,
-    "presentation canvas width"
-  );
-  validateBoundedPositiveInteger(
-    input.canvasHeight,
-    MAX_LOGICAL_CANVAS_DIMENSION,
-    "presentation canvas height"
-  );
+  validatePositiveSafeInteger(input.canvasWidth, "presentation canvas width");
+  validatePositiveSafeInteger(input.canvasHeight, "presentation canvas height");
   validatePositiveSafeInteger(
     input.pixelAspectNumerator,
     "presentation pixel-aspect numerator"
@@ -437,15 +384,6 @@ function freezeSize(width: number, height: number): Readonly<PresentationSize> {
 
 function normalizeZero(value: number): number {
   return Object.is(value, -0) ? 0 : value;
-}
-
-function validateBoundedPositiveInteger(
-  value: number,
-  maximum: number,
-  label: string
-): void {
-  validatePositiveSafeInteger(value, label);
-  if (value > maximum) throw new RangeError(`${label} exceeds ${maximum}`);
 }
 
 function validatePositiveFinite(value: number, label: string): void {

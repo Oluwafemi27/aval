@@ -2,7 +2,6 @@ import { opendir, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 
 import { CompilerError } from "../diagnostics.js";
-import { MAX_SOURCE_FRAMES } from "../model.js";
 
 export interface PngSequencePlan {
   readonly pattern: string;
@@ -58,8 +57,8 @@ export async function inspectPngSequence(
     (
       !Number.isSafeInteger(expectedFrameCount) ||
       expectedFrameCount < 1 ||
-      expectedFrameCount > MAX_SOURCE_FRAMES ||
-      firstFileNumber + expectedFrameCount - 1 >= 10 ** token.width
+      BigInt(firstFileNumber) + BigInt(expectedFrameCount) - 1n >=
+        10n ** BigInt(token.width)
     )
   ) {
     throw new CompilerError(
@@ -81,20 +80,12 @@ export async function inspectPngSequence(
       cause: error
     });
   });
-  let entryCount = 0;
   try {
     while (true) {
       throwIfAborted(signal);
       const entry = await handle.read();
       throwIfAborted(signal);
       if (entry === null) break;
-      entryCount += 1;
-      if (entryCount > MAX_SOURCE_FRAMES * 4) {
-        throw new CompilerError(
-          "SOURCE_LIMIT",
-          "PNG sequence directory contains too many entries"
-        );
-      }
       if (!entry.isFile()) continue;
       const match = matcher.exec(entry.name);
       if (match === null) continue;
@@ -116,12 +107,6 @@ export async function inspectPngSequence(
       "INPUT_INVALID",
       `PNG sequence has no frame ${String(firstFileNumber)}`,
       { path: candidatePattern }
-    );
-  }
-  if (selected.length > MAX_SOURCE_FRAMES) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      `PNG sequence exceeds ${String(MAX_SOURCE_FRAMES)} frames`
     );
   }
   if (

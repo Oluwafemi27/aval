@@ -1,4 +1,4 @@
-import type { BindingSourceV01 } from "@rendered-motion/player-web";
+import type { BindingSourceV01 } from "@aval/player-web";
 
 import type {
   ElementOwnershipHandle,
@@ -36,6 +36,7 @@ export class AutomaticInputs {
   #attachmentToken = 0;
   #enabled = true;
   #metadataReady = false;
+  #runtimeVisible = true;
   #disposed = false;
 
   public constructor(
@@ -88,9 +89,18 @@ export class AutomaticInputs {
     this.#metadataReady = false;
   }
 
+  public setRuntimeVisible(visible: boolean): void {
+    if (visible === this.#runtimeVisible) return;
+    this.#runtimeVisible = visible;
+    if (visible && this.#metadataReady) this.sample();
+  }
+
   public sample(): void {
     const target = this.#target;
-    if (!this.#metadataReady || !this.#enabled || target === null) return;
+    if (
+      !this.#metadataReady || !this.#enabled ||
+      !this.#runtimeVisible || target === null
+    ) return;
     let pointer = false;
     let focus = false;
     try {
@@ -226,7 +236,10 @@ export class AutomaticInputs {
   }
 
   #emit(source: BindingSourceV01): void {
-    if (this.#enabled && this.#metadataReady && !this.#disposed) {
+    if (
+      this.#enabled && this.#metadataReady &&
+      this.#runtimeVisible && !this.#disposed
+    ) {
       this.#route(source);
     }
   }

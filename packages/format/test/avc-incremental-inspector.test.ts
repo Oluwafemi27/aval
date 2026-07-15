@@ -355,6 +355,43 @@ describe("incremental strict AVC inspector", () => {
     profile.cpbBufferBits = profile.peakBitrate - 1;
     expectProfileError(() => new AvcIncrementalInspector(profile));
   });
+
+  it("applies bounded-v1 quantization to every incremental worker sample", () => {
+    const profile = {
+      ...strictProfile(),
+      quantizationPolicy: "bounded-qp-v1" as const
+    };
+    const inspector = new AvcIncrementalInspector(profile);
+    inspector.inspect(sample({
+      unitInstance: 0,
+      unitFrame: 0,
+      unitFrameCount: 2,
+      bytes: keyBytes(
+        strictSps(),
+        makePps({ picInitQpMinus26: 10 }),
+        -36
+      )
+    }));
+    expect(() => inspector.inspect(sample({
+      unitInstance: 0,
+      unitFrame: 1,
+      unitFrameCount: 2,
+      bytes: deltaBytes(1, 15),
+      key: false
+    }))).not.toThrow();
+
+    const overflow = new AvcIncrementalInspector(profile);
+    expectProfileError(() => overflow.inspect(sample({
+      unitInstance: 0,
+      unitFrame: 0,
+      unitFrameCount: 1,
+      bytes: keyBytes(
+        strictSps(),
+        makePps({ picInitQpMinus26: 25 }),
+        1
+      )
+    })));
+  });
 });
 
 const STRICT_SPS = Object.freeze({
@@ -374,25 +411,42 @@ function strictProfile(): AvcConstrainedBaselineProfile {
     averageBitrate: 1_000_000,
     peakBitrate: 2_000_000,
     cpbBufferBits: 2_000_000,
-    requireBt709LimitedRange: true
+    requireBt709LimitedRange: true,
+    quantizationPolicy: "fixed-qp26-v0"
   };
 }
 
-function keyBytes(sps: Uint8Array, pps = makePps()): Uint8Array {
+function keyBytes(
+  sps: Uint8Array,
+  pps = makePps(),
+  sliceQpDelta = 0
+): Uint8Array {
   return makeAccessUnit({
     idr: true,
     frameNum: 0,
     aud: makeAud(0),
     sps,
-    pps
+    pps,
+    slices: [makeSlice({
+      idr: true,
+      frameNum: 0,
+      sliceType: "I",
+      sliceQpDelta
+    })]
   }).bytes;
 }
 
-function deltaBytes(frameNum: number): Uint8Array {
+function deltaBytes(frameNum: number, sliceQpDelta = 0): Uint8Array {
   return makeAccessUnit({
     idr: false,
     frameNum,
-    aud: makeAud(1)
+    aud: makeAud(1),
+    slices: [makeSlice({
+      idr: false,
+      frameNum,
+      sliceType: "P",
+      sliceQpDelta
+    })]
   }).bytes;
 }
 
@@ -418,6 +472,7 @@ interface MutableProfile {
   peakBitrate: number;
   cpbBufferBits: number;
   requireBt709LimitedRange: true;
+  quantizationPolicy: "fixed-qp26-v0" | "bounded-qp-v1";
 }
 
 function expectProfileError(callback: () => unknown): void {

@@ -25,7 +25,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
         }
       });
       expect(harness.factory.calls).toEqual([]);
-      expect(harness.staticStore.calls).toEqual([
+      expect(harness.fallbackStore.calls).toEqual([
         "install:idle",
         "validate-all",
         "present:idle"
@@ -60,17 +60,17 @@ describe("IntegratedPlayer motion-policy preparation", () => {
     });
   });
 
-  it("covers the newest strict static before releasing an animated candidate", async () => {
+  it("covers with the newest host fallback before releasing animation", async () => {
     const harness = createHarness();
     await harness.player.prepare();
 
     await harness.player.setMotionPolicy("reduce");
 
-    expect(harness.staticStore.calls).toEqual(expect.arrayContaining([
+    expect(harness.fallbackStore.calls).toEqual(expect.arrayContaining([
       "stage:idle",
       "cover-current"
     ]));
-    expect(harness.staticStore.calls.filter((call) => call === "cover-current"))
+    expect(harness.fallbackStore.calls.filter((call) => call === "cover-current"))
       .toHaveLength(1);
     expect(harness.factory.calls.filter((call) =>
       call === "dispose:opaque-high"
@@ -95,7 +95,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
 
     await expect(harness.player.reclaimForPagePressure()).resolves.toBe(true);
 
-    expect(harness.staticStore.calls).toEqual(expect.arrayContaining([
+    expect(harness.fallbackStore.calls).toEqual(expect.arrayContaining([
       "stage:idle",
       "cover-current"
     ]));
@@ -137,7 +137,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
     }));
   });
 
-  it("re-enters with a fresh body-zero candidate and never replays intro", async () => {
+  it("restarts an unfinished intro with a fresh full-motion candidate", async () => {
     const harness = createHarness({
       behaviors: [{ kind: "success" }, { kind: "success" }]
     });
@@ -151,7 +151,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
         presentation.kind,
         presentation.kind === "static" ? null : presentation.frameIndex
       ]
-    )).toEqual([["intro", 0], ["body", 0]]);
+    )).toEqual([["intro", 0], ["intro", 0]]);
     expect(harness.factory.calls.filter((call) =>
       call === "create:opaque-high"
     )).toHaveLength(2);
@@ -192,7 +192,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
     await harness.player.setMotionPolicy("reduce");
 
     expect(cancellationAttempts).toBe(1);
-    expect(harness.staticStore.calls).toContain("cover-current");
+    expect(harness.fallbackStore.calls).toContain("cover-current");
     expect(harness.player.realtimeSnapshot()).toMatchObject({ running: false });
     expect(harness.player.motionSnapshot()).toMatchObject({
       desiredMode: "reduce",
@@ -223,7 +223,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
     });
     await harness.player.prepare();
     const reducing = harness.player.setMotionPolicy("reduce");
-    await waitForCall(harness.staticStore.calls, "stage:idle");
+    await waitForCall(harness.fallbackStore.calls, "stage:idle");
     const restoring = harness.player.setMotionPolicy("full");
     gate.resolve(undefined);
 
@@ -247,14 +247,14 @@ describe("IntegratedPlayer motion-policy preparation", () => {
     });
     await harness.player.prepare();
     const reducing = harness.player.setMotionPolicy("reduce");
-    await waitForCall(harness.staticStore.calls, "stage:idle");
+    await waitForCall(harness.fallbackStore.calls, "stage:idle");
     const hover = harness.player.requestState("hover");
     gate.resolve(undefined);
 
     await reducing;
     await hover;
 
-    expect(harness.staticStore.calls.filter((call) =>
+    expect(harness.fallbackStore.calls.filter((call) =>
       call.startsWith("stage:")
     )).toEqual(["stage:idle", "stage:hover"]);
     expect(harness.player.snapshot()).toMatchObject({
@@ -293,8 +293,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
       report: {
         selectedRendition: null,
         candidates: [
-          { rendition: "opaque-high", outcome: "rejected" },
-          { rendition: "opaque-low", outcome: "rejected" }
+          { rendition: "opaque-high", outcome: "rejected" }
         ]
       }
     });
@@ -305,7 +304,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
     });
   });
 
-  it("terminalizes a failed reduction surface with sticky PNG origin", async () => {
+  it("terminalizes a failed host reduction with sticky fallback origin", async () => {
     const harness = createHarness({ staticBehavior: "fail-stage" });
     await harness.player.prepare();
 
@@ -317,7 +316,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
     });
     expect(harness.player.motionSnapshot()).toMatchObject({
       actualMode: "static",
-      staticOrigin: "png-failure",
+      staticOrigin: "fallback-failure",
       stickyFailure: true
     });
     expect(harness.factory.calls).toContain("dispose:opaque-high");
@@ -329,7 +328,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
 
     await harness.player.setMotionPolicy("reduce");
 
-    expect(harness.staticStore.calls.filter((call) => call === "cover-current"))
+    expect(harness.fallbackStore.calls.filter((call) => call === "cover-current"))
       .toHaveLength(1);
     expect(harness.factory.calls).not.toContain("dispose:opaque-high");
     expect(harness.player.snapshot()).toMatchObject({
@@ -338,7 +337,7 @@ describe("IntegratedPlayer motion-policy preparation", () => {
     });
     expect(harness.player.motionSnapshot()).toMatchObject({
       actualMode: "static",
-      staticOrigin: "png-failure",
+      staticOrigin: "fallback-failure",
       stickyFailure: true
     });
 

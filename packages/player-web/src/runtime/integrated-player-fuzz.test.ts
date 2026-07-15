@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Vite exposes the checked-in binary as a data URL in tests.
-import packedFixtureDataUrl from "../../../../fixtures/conformance/m6/packed-alpha-all-routes.rma?url&inline";
+import packedFixtureDataUrl from "../../../../fixtures/conformance/m6/packed-alpha-all-routes.avl?url&inline";
 
 import { runIntegratedFuzzSeed } from "./integrated-player-fuzz-support.js";
 import { runM7ResourceLifecycleFuzz } from "./m7-resource-lifecycle-fuzz-test-support.js";
@@ -43,7 +43,8 @@ describe("IntegratedPlayer fixed-seed model properties", () => {
       expect(first.profile).toBe(profile === "packed"
         ? "avc-annexb-packed-alpha-v0"
         : "avc-annexb-opaque-v0");
-      expect(first.abortAction).toBe(true);
+      expect(first.abortAction).toBe(false);
+      expect(first.presentedFallbackStates.length).toBeGreaterThan(0);
       expect(first.resizeActions).toBeGreaterThan(0);
     });
   }

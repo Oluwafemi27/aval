@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   parseFrontIndex,
   validateCompleteAsset
-} from "@rendered-motion/format";
+} from "@aval/format";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { validateAssetReport } from "../src/commands/asset.js";
@@ -51,12 +51,12 @@ interface FixtureCase {
 }
 
 const FIXTURES = Object.freeze([
-  { id: "loop", project: "loop.json", golden: "opaque-loop.rma" },
-  { id: "path", project: "path.json", golden: "opaque-path.rma" },
+  { id: "loop", project: "loop.json", golden: "opaque-loop.avl" },
+  { id: "path", project: "path.json", golden: "opaque-path.avl" },
   {
     id: "reversible",
     project: "reversible.json",
-    golden: "opaque-reversible.rma"
+    golden: "opaque-reversible.avl"
   }
 ] as const satisfies readonly FixtureCase[]);
 
@@ -80,7 +80,7 @@ describe.skipIf(!HAS_FFMPEG)("reviewed FFmpeg conformance fixtures", () => {
   let exactReviewedToolPair = false;
 
   beforeAll(async () => {
-    temporaryRoot = await mkdtemp(join(tmpdir(), "rma-m5-tool-backed-"));
+    temporaryRoot = await mkdtemp(join(tmpdir(), "aval-m5-tool-backed-"));
     const provenance = JSON.parse(
       await readFile(join(CONFORMANCE_ROOT, "provenance.json"), "utf8")
     ) as FixtureProvenance;
@@ -100,7 +100,7 @@ describe.skipIf(!HAS_FFMPEG)("reviewed FFmpeg conformance fixtures", () => {
   it.each(FIXTURES)(
     "deterministically rebuilds the checked $id fixture across ordering, relocation, and deletion",
     async (fixture) => {
-      const originalOutput = join(temporaryRoot, `${fixture.id}-original.rma`);
+      const originalOutput = join(temporaryRoot, `${fixture.id}-original.avl`);
       const original = await compileAndValidate(
         join(SOURCE_ROOT, fixture.project),
         originalOutput,
@@ -111,7 +111,7 @@ describe.skipIf(!HAS_FFMPEG)("reviewed FFmpeg conformance fixtures", () => {
         fixture,
         join(temporaryRoot, `${fixture.id}-relocated-a`)
       );
-      const rebuildOutput = join(temporaryRoot, `${fixture.id}-rebuilt.rma`);
+      const rebuildOutput = join(temporaryRoot, `${fixture.id}-rebuilt.avl`);
       const reordered = await compileAndValidate(
         reorderedProject,
         rebuildOutput,
@@ -221,16 +221,9 @@ function assertPathPayloadDigests(
   if (!exactReviewedToolPair) return;
   const front = parseFrontIndex(assetBytes);
   expect(front.unitBlobs.map(({ unit, sha256 }) => ({ unit, sha256 }))).toEqual([
-    { unit: "active-body", sha256: "b5d0e3b4b7e58bee05219132c10f2b6f943077756b9dd3957df56a6bac715d00" },
-    { unit: "bridge", sha256: "6c3818115385f4f3564e86f1ecce673ab70caab83271a3c3ae8b17003378b698" },
-    { unit: "idle-body", sha256: "0ef19b31deb6d0414f51a0889ad1f4682aaa13a82123f26f9b3b4766fd9d6401" },
-    { unit: "intro", sha256: "939dccd46c88c96b1c5aa094d53e6f8b30fa3837ddd2b380a08c387d2e26e775" }
-  ]);
-  expect(front.staticBlobs.map(({ staticFrame, sha256 }) => ({
-    staticFrame,
-    sha256
-  }))).toEqual([
-    { staticFrame: "static.00", sha256: "8162c8df6950f1f7855d02a06938e17c4936f6d9f01f034b99f61f919eb2d0c1" },
-    { staticFrame: "static.01", sha256: "75c75688e4ed6bd78f4fd593de44e1dc6789b79a1169c34c72b2fafd7af7e71e" }
+    { unit: "active-body", sha256: "b8ebad17cd557e7d236e0b10665120cf73cd6fb2ce9eeacfecef56690d61cf51" },
+    { unit: "bridge", sha256: "963c7e48e359b8e742544dcdb3d4ff5d7aeca632fa9424cf89612511666c365d" },
+    { unit: "idle-body", sha256: "c395ed0b3b94c21f40c07eb7223dac310c732b62b6d369e92344d3d613a4a605" },
+    { unit: "intro", sha256: "4cafa156a27d83f8fc9f3d2aff7cfef0cad123617b6809491060c6b5878da8f7" }
   ]);
 }

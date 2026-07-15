@@ -1,7 +1,7 @@
 import {
   MotionGraphEngine,
   type GraphPresentation
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 import { expect } from "vitest";
 
 import type {

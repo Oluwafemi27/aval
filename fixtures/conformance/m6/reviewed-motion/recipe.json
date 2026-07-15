@@ -1,0 +1,2991 @@
+{
+  "recipeVersion": "0.1",
+  "origin": "Reviewed AVC samples encoded with the recorded toolchain and repackaged byte-for-byte into poster-free AVAL containers.",
+  "payload": {
+    "path": "fixtures/conformance/m6/reviewed-motion/reviewed-avc.bin",
+    "bytes": 17207,
+    "sha256": "28200084e9f94f20ec2c6b79531eca21cae0d13ef819021e20b8494aa1c50610"
+  },
+  "toolchain": {
+    "aggregateMemoryLimit": "derived",
+    "ffmpeg": {
+      "executableSha256": "329fa7360b28a067a0cd7281474bb18cd868932d5173646a674466bcb56d6e93",
+      "version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
+      "versionOutputSha256": "98f2da65e4b3e39aa6ac74848582be422751d8f52176cf810eceb94bbcaa78d1",
+      "configurationSha256": "8470f6e5d1c91c01f1228e91aa8827bea05a7e8a39c8dedefdb778716bdc1aec",
+      "encodersOutputSha256": "38b11441f5ffe17fd32539030ba9290b81e730878bb0cffe1af5084e2b7b8879",
+      "calibrationSha256": "2187478d0b9baaa2e44dc458abcdcbc7c9242c360bb233cff2d5229004a6911c"
+    },
+    "ffprobe": {
+      "executableSha256": "841ab2259a55e5c5e44c5851890867d48750ff1e7cfa92b5fbed91445a493128",
+      "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers",
+      "versionOutputSha256": "8316221740e891c1f9d08d30a9a45059af9f1ec96741423eee3ae0c7721d9cec"
+    }
+  },
+  "blobs": [
+    {
+      "sha256": "e69213964e6dd39677de23e920b05618e25e7493eac218e840ac1e5f5e963079",
+      "offset": 0,
+      "length": 2704,
+      "samples": [
+        {
+          "length": 398,
+          "key": true
+        },
+        {
+          "length": 255,
+          "key": false
+        },
+        {
+          "length": 444,
+          "key": false
+        },
+        {
+          "length": 414,
+          "key": false
+        },
+        {
+          "length": 19,
+          "key": false
+        },
+        {
+          "length": 350,
+          "key": false
+        },
+        {
+          "length": 474,
+          "key": false
+        },
+        {
+          "length": 350,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "d56eaf5dbd021ecb8cf3453c9efc3b6bc724909c56b54ab68f34a3e33fd095dc",
+      "offset": 2704,
+      "length": 2384,
+      "samples": [
+        {
+          "length": 516,
+          "key": true
+        },
+        {
+          "length": 229,
+          "key": false
+        },
+        {
+          "length": 338,
+          "key": false
+        },
+        {
+          "length": 312,
+          "key": false
+        },
+        {
+          "length": 62,
+          "key": false
+        },
+        {
+          "length": 291,
+          "key": false
+        },
+        {
+          "length": 333,
+          "key": false
+        },
+        {
+          "length": 303,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "a62735199b2b5e01c6648e704206b73dada13a8f69cf9ecbf2f9b58b8dc9f10b",
+      "offset": 5088,
+      "length": 311,
+      "samples": [
+        {
+          "length": 311,
+          "key": true
+        }
+      ]
+    },
+    {
+      "sha256": "527844f75e9da3854968bae4d2e952ec5f2f6ab5fe21cd3b801479eee360b732",
+      "offset": 5399,
+      "length": 1068,
+      "samples": [
+        {
+          "length": 304,
+          "key": true
+        },
+        {
+          "length": 110,
+          "key": false
+        },
+        {
+          "length": 125,
+          "key": false
+        },
+        {
+          "length": 98,
+          "key": false
+        },
+        {
+          "length": 97,
+          "key": false
+        },
+        {
+          "length": 100,
+          "key": false
+        },
+        {
+          "length": 117,
+          "key": false
+        },
+        {
+          "length": 117,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "c4e2b649c0016a763be7a22ce5c6dd50a19b2ece7c521dc0cb746785d0a0ab4d",
+      "offset": 6467,
+      "length": 809,
+      "samples": [
+        {
+          "length": 296,
+          "key": true
+        },
+        {
+          "length": 100,
+          "key": false
+        },
+        {
+          "length": 80,
+          "key": false
+        },
+        {
+          "length": 96,
+          "key": false
+        },
+        {
+          "length": 120,
+          "key": false
+        },
+        {
+          "length": 117,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "54471f897b9d91f6ea3619b26e17477e300a8fabda238b61d057944886f48e05",
+      "offset": 7276,
+      "length": 1044,
+      "samples": [
+        {
+          "length": 299,
+          "key": true
+        },
+        {
+          "length": 102,
+          "key": false
+        },
+        {
+          "length": 106,
+          "key": false
+        },
+        {
+          "length": 113,
+          "key": false
+        },
+        {
+          "length": 90,
+          "key": false
+        },
+        {
+          "length": 106,
+          "key": false
+        },
+        {
+          "length": 112,
+          "key": false
+        },
+        {
+          "length": 116,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "6790a817b37a0bdbf489c686f7e6555674bb027ad1b80c95d0790fce786a9c4d",
+      "offset": 8320,
+      "length": 508,
+      "samples": [
+        {
+          "length": 280,
+          "key": true
+        },
+        {
+          "length": 117,
+          "key": false
+        },
+        {
+          "length": 111,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "f5c75bb0a2e99a4ae6894607d12f61ea8e2b64fe17fadd25536286eb6bd2156b",
+      "offset": 8828,
+      "length": 515,
+      "samples": [
+        {
+          "length": 311,
+          "key": true
+        },
+        {
+          "length": 106,
+          "key": false
+        },
+        {
+          "length": 98,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "341c7e67fd75c37aa3f7f257eea6f20fdf496d8e1fb158068ba188243f8bce2a",
+      "offset": 9343,
+      "length": 311,
+      "samples": [
+        {
+          "length": 311,
+          "key": true
+        }
+      ]
+    },
+    {
+      "sha256": "62e3e6e8ccdd60d1dabefea4cadb5549a172d67556b1d3391637599fa1b1f673",
+      "offset": 9654,
+      "length": 509,
+      "samples": [
+        {
+          "length": 509,
+          "key": true
+        }
+      ]
+    },
+    {
+      "sha256": "9e2d1d60ebd962b335f836d3b02692d9657316c38e21e2887d2f825f35e1a2fd",
+      "offset": 10163,
+      "length": 2526,
+      "samples": [
+        {
+          "length": 528,
+          "key": true
+        },
+        {
+          "length": 333,
+          "key": false
+        },
+        {
+          "length": 341,
+          "key": false
+        },
+        {
+          "length": 265,
+          "key": false
+        },
+        {
+          "length": 121,
+          "key": false
+        },
+        {
+          "length": 260,
+          "key": false
+        },
+        {
+          "length": 333,
+          "key": false
+        },
+        {
+          "length": 345,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "694b3471afd34f7d6745f217437279d570c1abccc5b37e66b69a8bdf84f929ff",
+      "offset": 12689,
+      "length": 1940,
+      "samples": [
+        {
+          "length": 523,
+          "key": true
+        },
+        {
+          "length": 334,
+          "key": false
+        },
+        {
+          "length": 223,
+          "key": false
+        },
+        {
+          "length": 258,
+          "key": false
+        },
+        {
+          "length": 325,
+          "key": false
+        },
+        {
+          "length": 277,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "6341afd62b0ba46bebb43189dda84dd87c77a7ccc851995b97bbb2b35e3cd9bd",
+      "offset": 14629,
+      "length": 1182,
+      "samples": [
+        {
+          "length": 486,
+          "key": true
+        },
+        {
+          "length": 385,
+          "key": false
+        },
+        {
+          "length": 311,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "75e3b693bab9a47597da7f06fe7b4e2dde7a5c4b55b60d54f372d10ae6ab5721",
+      "offset": 15811,
+      "length": 871,
+      "samples": [
+        {
+          "length": 509,
+          "key": true
+        },
+        {
+          "length": 135,
+          "key": false
+        },
+        {
+          "length": 227,
+          "key": false
+        }
+      ]
+    },
+    {
+      "sha256": "73a9c91269b3aae300be1d1eac55a5ec24907cc079b887a10498def8a1a1ec01",
+      "offset": 16682,
+      "length": 525,
+      "samples": [
+        {
+          "length": 525,
+          "key": true
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "name": "opaque-odd.avl",
+      "manifest": {
+        "formatVersion": "0.1",
+        "generator": "aval-compiler/0.1",
+        "canvas": {
+          "width": 45,
+          "height": 27,
+          "fit": "contain",
+          "pixelAspect": [
+            1,
+            1
+          ],
+          "colorSpace": "srgb"
+        },
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "renditions": [
+          {
+            "id": "opaque.1x",
+            "profile": "avc-annexb-opaque-v0",
+            "codec": "avc1.42E020",
+            "codedWidth": 48,
+            "codedHeight": 32,
+            "alphaLayout": {
+              "type": "opaque-v0",
+              "colorRect": [
+                0,
+                0,
+                45,
+                27
+              ]
+            },
+            "bitrate": {
+              "average": 400000,
+              "peak": 800000
+            },
+            "capabilities": [
+              "webcodecs",
+              "webgl2"
+            ]
+          }
+        ],
+        "units": [
+          {
+            "id": "body",
+            "kind": "body",
+            "playback": "loop",
+            "frameCount": 8,
+            "ports": [
+              {
+                "id": "default",
+                "entryFrame": 0,
+                "portalFrames": [
+                  7
+                ]
+              }
+            ],
+            "samples": [
+              {
+                "rendition": "opaque.1x",
+                "sampleStart": 0,
+                "sampleCount": 8,
+                "sha256": "e69213964e6dd39677de23e920b05618e25e7493eac218e840ac1e5f5e963079"
+              }
+            ]
+          }
+        ],
+        "initialState": "default",
+        "states": [
+          {
+            "id": "default",
+            "bodyUnit": "body"
+          }
+        ],
+        "edges": [],
+        "bindings": [],
+        "readiness": {
+          "policy": "all-routes",
+          "bootstrapUnits": [
+            "body"
+          ],
+          "immediateEdges": []
+        },
+        "limits": {
+          "maxCompiledBytes": 9007199254740991,
+          "maxRuntimeBytes": 9007199254740991,
+          "decodedPixelBytes": 6144,
+          "persistentCacheBytes": 0,
+          "runtimeWorkingSetBytes": 81292
+        }
+      },
+      "alphaPolicy": {
+        "requested": "auto",
+        "selected": "opaque",
+        "audit": {
+          "uniqueReferencedFrames": 8,
+          "minimumAlpha": 255,
+          "allOpaque": true,
+          "firstNonopaque": null
+        },
+        "warnings": []
+      },
+      "sources": [
+        {
+          "id": "frames",
+          "hasAlpha": true,
+          "alphaAudit": {
+            "uniqueReferencedFrames": 8,
+            "minimumAlpha": 255,
+            "allOpaque": true,
+            "firstNonopaque": null
+          },
+          "width": 45,
+          "height": 27,
+          "frameCount": 30,
+          "frameRate": {
+            "numerator": 30,
+            "denominator": 1
+          },
+          "pixelFormat": "rgba"
+        }
+      ],
+      "renditions": [
+        {
+          "id": "opaque.1x",
+          "profile": "avc-annexb-opaque-v0",
+          "geometry": {
+            "profile": "avc-annexb-opaque-v0",
+            "visibleColorRect": [
+              0,
+              0,
+              45,
+              27
+            ],
+            "decodedStorageRect": [
+              0,
+              0,
+              46,
+              28
+            ],
+            "codedWidth": 48,
+            "codedHeight": 32,
+            "visibleColorArea": 1215,
+            "decodedRgbaBytes": 5152,
+            "codedRgbaBytes": 6144
+          },
+          "codedWidth": 48,
+          "codedHeight": 32,
+          "bitrate": {
+            "average": 400000,
+            "peak": 800000
+          },
+          "encodedBytes": 2704,
+          "accessUnits": 8,
+          "inspection": {
+            "parameterSet": {
+              "profileIdc": 66,
+              "constraintSet2": true,
+              "levelIdc": 32,
+              "codedWidth": 48,
+              "codedHeight": 32,
+              "crop": {
+                "left": 0,
+                "right": 2,
+                "top": 0,
+                "bottom": 4,
+                "visibleWidth": 46,
+                "visibleHeight": 28
+              },
+              "maxNumRefFrames": 1,
+              "maxNumReorderFrames": 0,
+              "maxDecFrameBuffering": 1,
+              "hrdPresent": false,
+              "fixedFrameRate": true,
+              "squareSampleAspect": true,
+              "color": {
+                "fullRange": false,
+                "colourPrimaries": 1,
+                "transferCharacteristics": 1,
+                "matrixCoefficients": 1
+              }
+            },
+            "macroblocksPerFrame": 6,
+            "units": [
+              {
+                "id": "body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 3,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 4,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 5,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 6,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 7,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "canonicalizations": [
+            {
+              "unitId": "body",
+              "constraintSet2Canonicalized": true
+            }
+          ],
+          "pixelPipeline": {
+            "yuvProfile": "bt709-limited-yuv420p-v0",
+            "dilation": "nearest-radius-4-v0"
+          },
+          "alphaQuality": null,
+          "compositeQuality": null
+        }
+      ],
+      "continuity": [
+        {
+          "name": "body loop",
+          "kind": "loop",
+          "status": "pass",
+          "from": {
+            "unit": "body",
+            "frame": 10,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "body",
+            "frame": 3,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.10276380192219091,
+            "alphaBoundaryRms": 0,
+            "neighborP95": 0.17824571817885676,
+            "alphaNeighborP95": 0,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        }
+      ],
+      "encodedPayloadBytes": 2704
+    },
+    {
+      "name": "packed-alpha-loop.avl",
+      "manifest": {
+        "formatVersion": "0.1",
+        "generator": "aval-compiler/0.1",
+        "canvas": {
+          "width": 45,
+          "height": 27,
+          "fit": "contain",
+          "pixelAspect": [
+            1,
+            1
+          ],
+          "colorSpace": "srgb"
+        },
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "renditions": [
+          {
+            "id": "packed.1x",
+            "profile": "avc-annexb-packed-alpha-v0",
+            "codec": "avc1.42E020",
+            "codedWidth": 48,
+            "codedHeight": 64,
+            "alphaLayout": {
+              "type": "stacked-v0",
+              "colorRect": [
+                0,
+                0,
+                45,
+                27
+              ],
+              "alphaRect": [
+                0,
+                36,
+                45,
+                27
+              ]
+            },
+            "bitrate": {
+              "average": 4000000,
+              "peak": 8000000
+            },
+            "capabilities": [
+              "webcodecs",
+              "webgl2"
+            ]
+          }
+        ],
+        "units": [
+          {
+            "id": "body",
+            "kind": "body",
+            "playback": "loop",
+            "frameCount": 8,
+            "ports": [
+              {
+                "id": "default",
+                "entryFrame": 0,
+                "portalFrames": [
+                  7
+                ]
+              }
+            ],
+            "samples": [
+              {
+                "rendition": "packed.1x",
+                "sampleStart": 0,
+                "sampleCount": 8,
+                "sha256": "d56eaf5dbd021ecb8cf3453c9efc3b6bc724909c56b54ab68f34a3e33fd095dc"
+              }
+            ]
+          }
+        ],
+        "initialState": "default",
+        "states": [
+          {
+            "id": "default",
+            "bodyUnit": "body"
+          }
+        ],
+        "edges": [],
+        "bindings": [],
+        "readiness": {
+          "policy": "all-routes",
+          "bootstrapUnits": [
+            "body"
+          ],
+          "immediateEdges": []
+        },
+        "limits": {
+          "maxCompiledBytes": 9007199254740991,
+          "maxRuntimeBytes": 9007199254740991,
+          "decodedPixelBytes": 12288,
+          "persistentCacheBytes": 0,
+          "runtimeWorkingSetBytes": 154700
+        }
+      },
+      "alphaPolicy": {
+        "requested": "auto",
+        "selected": "packed",
+        "audit": {
+          "uniqueReferencedFrames": 8,
+          "minimumAlpha": 0,
+          "allOpaque": false,
+          "firstNonopaque": {
+            "source": "frames",
+            "frame": 3,
+            "x": 0,
+            "y": 0,
+            "alpha": 0
+          }
+        },
+        "warnings": []
+      },
+      "sources": [
+        {
+          "id": "frames",
+          "hasAlpha": true,
+          "alphaAudit": {
+            "uniqueReferencedFrames": 8,
+            "minimumAlpha": 0,
+            "allOpaque": false,
+            "firstNonopaque": {
+              "source": "frames",
+              "frame": 3,
+              "x": 0,
+              "y": 0,
+              "alpha": 0
+            }
+          },
+          "width": 45,
+          "height": 27,
+          "frameCount": 30,
+          "frameRate": {
+            "numerator": 30,
+            "denominator": 1
+          },
+          "pixelFormat": "rgba"
+        }
+      ],
+      "renditions": [
+        {
+          "id": "packed.1x",
+          "profile": "avc-annexb-packed-alpha-v0",
+          "geometry": {
+            "profile": "avc-annexb-packed-alpha-v0",
+            "visibleColorRect": [
+              0,
+              0,
+              45,
+              27
+            ],
+            "visibleAlphaRect": [
+              0,
+              36,
+              45,
+              27
+            ],
+            "decodedStorageRect": [
+              0,
+              0,
+              46,
+              64
+            ],
+            "codedWidth": 48,
+            "codedHeight": 64,
+            "visibleColorArea": 1215,
+            "decodedRgbaBytes": 11776,
+            "codedRgbaBytes": 12288
+          },
+          "codedWidth": 48,
+          "codedHeight": 64,
+          "bitrate": {
+            "average": 4000000,
+            "peak": 8000000
+          },
+          "encodedBytes": 2384,
+          "accessUnits": 8,
+          "inspection": {
+            "parameterSet": {
+              "profileIdc": 66,
+              "constraintSet2": true,
+              "levelIdc": 32,
+              "codedWidth": 48,
+              "codedHeight": 64,
+              "crop": {
+                "left": 0,
+                "right": 2,
+                "top": 0,
+                "bottom": 0,
+                "visibleWidth": 46,
+                "visibleHeight": 64
+              },
+              "maxNumRefFrames": 1,
+              "maxNumReorderFrames": 0,
+              "maxDecFrameBuffering": 1,
+              "hrdPresent": false,
+              "fixedFrameRate": true,
+              "squareSampleAspect": true,
+              "color": {
+                "fullRange": false,
+                "colourPrimaries": 1,
+                "transferCharacteristics": 1,
+                "matrixCoefficients": 1
+              }
+            },
+            "macroblocksPerFrame": 12,
+            "units": [
+              {
+                "id": "body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 3,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 4,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 5,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 6,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 7,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "canonicalizations": [
+            {
+              "unitId": "body",
+              "constraintSet2Canonicalized": true
+            }
+          ],
+          "pixelPipeline": {
+            "yuvProfile": "bt709-limited-yuv420p-v0",
+            "dilation": "nearest-radius-4-v0"
+          },
+          "alphaQuality": {
+            "rendition": "packed.1x",
+            "frameCount": 8,
+            "aggregate": {
+              "sampleCount": 9720,
+              "meanAbsoluteError": 0.007694666343903817,
+              "p99AbsoluteError": 0.0196078431372549,
+              "minimumDecodedAlpha": 0,
+              "maximumDecodedAlpha": 251
+            },
+            "worstFrame": {
+              "rendition": "packed.1x",
+              "unit": "body",
+              "frameIndex": 0,
+              "sampleCount": 1215,
+              "meanAbsoluteError": 0.007694666343903817,
+              "p99AbsoluteError": 0.0196078431372549,
+              "minimumDecodedAlpha": 0,
+              "maximumDecodedAlpha": 251
+            }
+          },
+          "compositeQuality": {
+            "policy": "report-only",
+            "rendition": "packed.1x",
+            "frameCount": 8,
+            "backgrounds": [
+              {
+                "background": "black",
+                "rgb": [
+                  0,
+                  0,
+                  0
+                ],
+                "sampleCount": 29160,
+                "meanAbsoluteError": 0.007958524973775518,
+                "p99AbsoluteError": 0.03137254901960784
+              },
+              {
+                "background": "white",
+                "rgb": [
+                  255,
+                  255,
+                  255
+                ],
+                "sampleCount": 29160,
+                "meanAbsoluteError": 0.0022910782968880283,
+                "p99AbsoluteError": 0.01568627450980392
+              },
+              {
+                "background": "magenta",
+                "rgb": [
+                  255,
+                  0,
+                  255
+                ],
+                "sampleCount": 29160,
+                "meanAbsoluteError": 0.004031576965491272,
+                "p99AbsoluteError": 0.0196078431372549
+              }
+            ]
+          }
+        }
+      ],
+      "continuity": [
+        {
+          "name": "body loop",
+          "kind": "loop",
+          "status": "pass",
+          "from": {
+            "unit": "body",
+            "frame": 10,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "body",
+            "frame": 3,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.10286782277385138,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17809676572571514,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        }
+      ],
+      "encodedPayloadBytes": 2384
+    },
+    {
+      "name": "packed-alpha-all-routes.avl",
+      "manifest": {
+        "formatVersion": "0.1",
+        "generator": "aval-compiler/0.1",
+        "canvas": {
+          "width": 45,
+          "height": 27,
+          "fit": "contain",
+          "pixelAspect": [
+            1,
+            1
+          ],
+          "colorSpace": "srgb"
+        },
+        "frameRate": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "renditions": [
+          {
+            "id": "packed.0.333x",
+            "profile": "avc-annexb-packed-alpha-v0",
+            "codec": "avc1.42E020",
+            "codedWidth": 16,
+            "codedHeight": 32,
+            "alphaLayout": {
+              "type": "stacked-v0",
+              "colorRect": [
+                0,
+                0,
+                15,
+                9
+              ],
+              "alphaRect": [
+                0,
+                18,
+                15,
+                9
+              ]
+            },
+            "bitrate": {
+              "average": 2000000,
+              "peak": 4000000
+            },
+            "capabilities": [
+              "webcodecs",
+              "webgl2"
+            ]
+          },
+          {
+            "id": "packed.1x",
+            "profile": "avc-annexb-packed-alpha-v0",
+            "codec": "avc1.42E020",
+            "codedWidth": 48,
+            "codedHeight": 64,
+            "alphaLayout": {
+              "type": "stacked-v0",
+              "colorRect": [
+                0,
+                0,
+                45,
+                27
+              ],
+              "alphaRect": [
+                0,
+                36,
+                45,
+                27
+              ]
+            },
+            "bitrate": {
+              "average": 4000000,
+              "peak": 8000000
+            },
+            "capabilities": [
+              "webcodecs",
+              "webgl2"
+            ]
+          }
+        ],
+        "units": [
+          {
+            "id": "done-body",
+            "kind": "body",
+            "playback": "finite",
+            "frameCount": 1,
+            "ports": [
+              {
+                "id": "default",
+                "entryFrame": 0,
+                "portalFrames": [
+                  0
+                ]
+              }
+            ],
+            "samples": [
+              {
+                "rendition": "packed.0.333x",
+                "sampleStart": 0,
+                "sampleCount": 1,
+                "sha256": "a62735199b2b5e01c6648e704206b73dada13a8f69cf9ecbf2f9b58b8dc9f10b"
+              },
+              {
+                "rendition": "packed.1x",
+                "sampleStart": 30,
+                "sampleCount": 1,
+                "sha256": "62e3e6e8ccdd60d1dabefea4cadb5549a172d67556b1d3391637599fa1b1f673"
+              }
+            ]
+          },
+          {
+            "id": "hover-body",
+            "kind": "body",
+            "playback": "loop",
+            "frameCount": 8,
+            "ports": [
+              {
+                "id": "default",
+                "entryFrame": 0,
+                "portalFrames": [
+                  7
+                ]
+              }
+            ],
+            "samples": [
+              {
+                "rendition": "packed.0.333x",
+                "sampleStart": 1,
+                "sampleCount": 8,
+                "sha256": "527844f75e9da3854968bae4d2e952ec5f2f6ab5fe21cd3b801479eee360b732"
+              },
+              {
+                "rendition": "packed.1x",
+                "sampleStart": 31,
+                "sampleCount": 8,
+                "sha256": "9e2d1d60ebd962b335f836d3b02692d9657316c38e21e2887d2f825f35e1a2fd"
+              }
+            ]
+          },
+          {
+            "id": "hover-shift",
+            "kind": "reversible",
+            "frameCount": 6,
+            "residency": {
+              "endpoints": [
+                {
+                  "state": "hover",
+                  "port": "default",
+                  "frames": 6
+                },
+                {
+                  "state": "idle",
+                  "port": "default",
+                  "frames": 6
+                }
+              ]
+            },
+            "samples": [
+              {
+                "rendition": "packed.0.333x",
+                "sampleStart": 9,
+                "sampleCount": 6,
+                "sha256": "c4e2b649c0016a763be7a22ce5c6dd50a19b2ece7c521dc0cb746785d0a0ab4d"
+              },
+              {
+                "rendition": "packed.1x",
+                "sampleStart": 39,
+                "sampleCount": 6,
+                "sha256": "694b3471afd34f7d6745f217437279d570c1abccc5b37e66b69a8bdf84f929ff"
+              }
+            ]
+          },
+          {
+            "id": "idle-body",
+            "kind": "body",
+            "playback": "loop",
+            "frameCount": 8,
+            "ports": [
+              {
+                "id": "default",
+                "entryFrame": 0,
+                "portalFrames": [
+                  7
+                ]
+              }
+            ],
+            "samples": [
+              {
+                "rendition": "packed.0.333x",
+                "sampleStart": 15,
+                "sampleCount": 8,
+                "sha256": "54471f897b9d91f6ea3619b26e17477e300a8fabda238b61d057944886f48e05"
+              },
+              {
+                "rendition": "packed.1x",
+                "sampleStart": 45,
+                "sampleCount": 8,
+                "sha256": "d56eaf5dbd021ecb8cf3453c9efc3b6bc724909c56b54ab68f34a3e33fd095dc"
+              }
+            ]
+          },
+          {
+            "id": "intro",
+            "kind": "one-shot",
+            "frameCount": 3,
+            "samples": [
+              {
+                "rendition": "packed.0.333x",
+                "sampleStart": 23,
+                "sampleCount": 3,
+                "sha256": "6790a817b37a0bdbf489c686f7e6555674bb027ad1b80c95d0790fce786a9c4d"
+              },
+              {
+                "rendition": "packed.1x",
+                "sampleStart": 53,
+                "sampleCount": 3,
+                "sha256": "6341afd62b0ba46bebb43189dda84dd87c77a7ccc851995b97bbb2b35e3cd9bd"
+              }
+            ]
+          },
+          {
+            "id": "loading-body",
+            "kind": "body",
+            "playback": "finite",
+            "frameCount": 3,
+            "ports": [
+              {
+                "id": "default",
+                "entryFrame": 0,
+                "portalFrames": [
+                  2
+                ]
+              }
+            ],
+            "samples": [
+              {
+                "rendition": "packed.0.333x",
+                "sampleStart": 26,
+                "sampleCount": 3,
+                "sha256": "f5c75bb0a2e99a4ae6894607d12f61ea8e2b64fe17fadd25536286eb6bd2156b"
+              },
+              {
+                "rendition": "packed.1x",
+                "sampleStart": 56,
+                "sampleCount": 3,
+                "sha256": "75e3b693bab9a47597da7f06fe7b4e2dde7a5c4b55b60d54f372d10ae6ab5721"
+              }
+            ]
+          },
+          {
+            "id": "loading-bridge",
+            "kind": "bridge",
+            "frameCount": 1,
+            "samples": [
+              {
+                "rendition": "packed.0.333x",
+                "sampleStart": 29,
+                "sampleCount": 1,
+                "sha256": "341c7e67fd75c37aa3f7f257eea6f20fdf496d8e1fb158068ba188243f8bce2a"
+              },
+              {
+                "rendition": "packed.1x",
+                "sampleStart": 59,
+                "sampleCount": 1,
+                "sha256": "73a9c91269b3aae300be1d1eac55a5ec24907cc079b887a10498def8a1a1ec01"
+              }
+            ]
+          }
+        ],
+        "initialState": "idle",
+        "states": [
+          {
+            "id": "done",
+            "bodyUnit": "done-body"
+          },
+          {
+            "id": "hover",
+            "bodyUnit": "hover-body"
+          },
+          {
+            "id": "idle",
+            "bodyUnit": "idle-body",
+            "initialUnit": "intro"
+          },
+          {
+            "id": "loading",
+            "bodyUnit": "loading-body"
+          }
+        ],
+        "edges": [
+          {
+            "id": "done-idle",
+            "from": "done",
+            "to": "idle",
+            "start": {
+              "type": "portal",
+              "sourcePort": "default",
+              "targetPort": "default",
+              "maxWaitFrames": 12
+            },
+            "continuity": "exact-authored",
+            "trigger": {
+              "type": "event",
+              "name": "reset"
+            }
+          },
+          {
+            "id": "hover-idle",
+            "from": "hover",
+            "to": "idle",
+            "start": {
+              "type": "portal",
+              "sourcePort": "default",
+              "targetPort": "default",
+              "maxWaitFrames": 12
+            },
+            "continuity": "exact-reverse",
+            "trigger": {
+              "type": "event",
+              "name": "hover-off"
+            },
+            "transition": {
+              "kind": "reversible",
+              "unit": "hover-shift",
+              "direction": "reverse",
+              "reverseOf": "idle-hover"
+            }
+          },
+          {
+            "id": "idle-hover",
+            "from": "idle",
+            "to": "hover",
+            "start": {
+              "type": "portal",
+              "sourcePort": "default",
+              "targetPort": "default",
+              "maxWaitFrames": 12
+            },
+            "continuity": "exact-authored",
+            "trigger": {
+              "type": "event",
+              "name": "hover-on"
+            },
+            "transition": {
+              "kind": "reversible",
+              "unit": "hover-shift",
+              "direction": "forward"
+            }
+          },
+          {
+            "id": "idle-loading",
+            "from": "idle",
+            "to": "loading",
+            "start": {
+              "type": "portal",
+              "sourcePort": "default",
+              "targetPort": "default",
+              "maxWaitFrames": 24
+            },
+            "continuity": "exact-authored",
+            "trigger": {
+              "type": "event",
+              "name": "activate-loading"
+            },
+            "transition": {
+              "kind": "locked",
+              "unit": "loading-bridge"
+            }
+          },
+          {
+            "id": "loading-done",
+            "from": "loading",
+            "to": "done",
+            "start": {
+              "type": "finish",
+              "targetPort": "default",
+              "maxWaitFrames": 12
+            },
+            "continuity": "exact-authored",
+            "trigger": {
+              "type": "completion"
+            }
+          },
+          {
+            "id": "loading-idle",
+            "from": "loading",
+            "to": "idle",
+            "start": {
+              "type": "cut",
+              "targetPort": "default",
+              "maxWaitFrames": 1
+            },
+            "continuity": "cut",
+            "targetRunwayFrames": 6,
+            "trigger": {
+              "type": "event",
+              "name": "cancel-loading"
+            }
+          }
+        ],
+        "bindings": [
+          {
+            "source": "activate",
+            "event": "activate-loading"
+          },
+          {
+            "source": "engagement.off",
+            "event": "reset"
+          },
+          {
+            "source": "focus.out",
+            "event": "cancel-loading"
+          },
+          {
+            "source": "pointer.enter",
+            "event": "hover-on"
+          },
+          {
+            "source": "pointer.leave",
+            "event": "hover-off"
+          }
+        ],
+        "readiness": {
+          "policy": "all-routes",
+          "bootstrapUnits": [
+            "hover-body",
+            "hover-shift",
+            "idle-body",
+            "intro",
+            "loading-body",
+            "loading-bridge"
+          ],
+          "immediateEdges": [
+            "idle-hover",
+            "idle-loading"
+          ]
+        },
+        "limits": {
+          "maxCompiledBytes": 9007199254740991,
+          "maxRuntimeBytes": 9007199254740991,
+          "decodedPixelBytes": 12288,
+          "persistentCacheBytes": 294912,
+          "runtimeWorkingSetBytes": 457165
+        }
+      },
+      "alphaPolicy": {
+        "requested": "packed",
+        "selected": "packed",
+        "audit": {
+          "uniqueReferencedFrames": 29,
+          "minimumAlpha": 0,
+          "allOpaque": false,
+          "firstNonopaque": {
+            "source": "frames",
+            "frame": 0,
+            "x": 0,
+            "y": 0,
+            "alpha": 0
+          }
+        },
+        "warnings": []
+      },
+      "sources": [
+        {
+          "id": "frames",
+          "hasAlpha": true,
+          "alphaAudit": {
+            "uniqueReferencedFrames": 29,
+            "minimumAlpha": 0,
+            "allOpaque": false,
+            "firstNonopaque": {
+              "source": "frames",
+              "frame": 0,
+              "x": 0,
+              "y": 0,
+              "alpha": 0
+            }
+          },
+          "width": 45,
+          "height": 27,
+          "frameCount": 30,
+          "frameRate": {
+            "numerator": 30,
+            "denominator": 1
+          },
+          "pixelFormat": "rgba"
+        }
+      ],
+      "renditions": [
+        {
+          "id": "packed.0.333x",
+          "profile": "avc-annexb-packed-alpha-v0",
+          "geometry": {
+            "profile": "avc-annexb-packed-alpha-v0",
+            "visibleColorRect": [
+              0,
+              0,
+              15,
+              9
+            ],
+            "visibleAlphaRect": [
+              0,
+              18,
+              15,
+              9
+            ],
+            "decodedStorageRect": [
+              0,
+              0,
+              16,
+              28
+            ],
+            "codedWidth": 16,
+            "codedHeight": 32,
+            "visibleColorArea": 135,
+            "decodedRgbaBytes": 1792,
+            "codedRgbaBytes": 2048
+          },
+          "codedWidth": 16,
+          "codedHeight": 32,
+          "bitrate": {
+            "average": 2000000,
+            "peak": 4000000
+          },
+          "encodedBytes": 4566,
+          "accessUnits": 30,
+          "inspection": {
+            "parameterSet": {
+              "profileIdc": 66,
+              "constraintSet2": true,
+              "levelIdc": 32,
+              "codedWidth": 16,
+              "codedHeight": 32,
+              "crop": {
+                "left": 0,
+                "right": 0,
+                "top": 0,
+                "bottom": 4,
+                "visibleWidth": 16,
+                "visibleHeight": 28
+              },
+              "maxNumRefFrames": 1,
+              "maxNumReorderFrames": 0,
+              "maxDecFrameBuffering": 1,
+              "hrdPresent": false,
+              "fixedFrameRate": true,
+              "squareSampleAspect": true,
+              "color": {
+                "fullRange": false,
+                "colourPrimaries": 1,
+                "transferCharacteristics": 1,
+                "matrixCoefficients": 1
+              }
+            },
+            "macroblocksPerFrame": 2,
+            "units": [
+              {
+                "id": "done-body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "hover-body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 3,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 4,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 5,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 6,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 7,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "hover-shift",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 3,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 4,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 5,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "idle-body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 3,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 4,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 5,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 6,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 7,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "intro",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "loading-body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "loading-bridge",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "canonicalizations": [
+            {
+              "unitId": "done-body",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "hover-body",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "hover-shift",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "idle-body",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "intro",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "loading-body",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "loading-bridge",
+              "constraintSet2Canonicalized": true
+            }
+          ],
+          "pixelPipeline": {
+            "yuvProfile": "bt709-limited-yuv420p-v0",
+            "dilation": "nearest-radius-4-v0"
+          },
+          "alphaQuality": {
+            "rendition": "packed.0.333x",
+            "frameCount": 30,
+            "aggregate": {
+              "sampleCount": 4050,
+              "meanAbsoluteError": 0.005911401597676107,
+              "p99AbsoluteError": 0.01568627450980392,
+              "minimumDecodedAlpha": 0,
+              "maximumDecodedAlpha": 254
+            },
+            "worstFrame": {
+              "rendition": "packed.0.333x",
+              "unit": "hover-body",
+              "frameIndex": 1,
+              "sampleCount": 135,
+              "meanAbsoluteError": 0.0059840232389252,
+              "p99AbsoluteError": 0.01568627450980392,
+              "minimumDecodedAlpha": 0,
+              "maximumDecodedAlpha": 253
+            }
+          },
+          "compositeQuality": {
+            "policy": "report-only",
+            "rendition": "packed.0.333x",
+            "frameCount": 30,
+            "backgrounds": [
+              {
+                "background": "black",
+                "rgb": [
+                  0,
+                  0,
+                  0
+                ],
+                "sampleCount": 12150,
+                "meanAbsoluteError": 0.004349229403695634,
+                "p99AbsoluteError": 0.0196078431372549
+              },
+              {
+                "background": "white",
+                "rgb": [
+                  255,
+                  255,
+                  255
+                ],
+                "sampleCount": 12150,
+                "meanAbsoluteError": 0.00340321149035746,
+                "p99AbsoluteError": 0.01568627450980392
+              },
+              {
+                "background": "magenta",
+                "rgb": [
+                  255,
+                  0,
+                  255
+                ],
+                "sampleCount": 12150,
+                "meanAbsoluteError": 0.0033021867183087228,
+                "p99AbsoluteError": 0.01568627450980392
+              }
+            ]
+          }
+        },
+        {
+          "id": "packed.1x",
+          "profile": "avc-annexb-packed-alpha-v0",
+          "geometry": {
+            "profile": "avc-annexb-packed-alpha-v0",
+            "visibleColorRect": [
+              0,
+              0,
+              45,
+              27
+            ],
+            "visibleAlphaRect": [
+              0,
+              36,
+              45,
+              27
+            ],
+            "decodedStorageRect": [
+              0,
+              0,
+              46,
+              64
+            ],
+            "codedWidth": 48,
+            "codedHeight": 64,
+            "visibleColorArea": 1215,
+            "decodedRgbaBytes": 11776,
+            "codedRgbaBytes": 12288
+          },
+          "codedWidth": 48,
+          "codedHeight": 64,
+          "bitrate": {
+            "average": 4000000,
+            "peak": 8000000
+          },
+          "encodedBytes": 9937,
+          "accessUnits": 30,
+          "inspection": {
+            "parameterSet": {
+              "profileIdc": 66,
+              "constraintSet2": true,
+              "levelIdc": 32,
+              "codedWidth": 48,
+              "codedHeight": 64,
+              "crop": {
+                "left": 0,
+                "right": 2,
+                "top": 0,
+                "bottom": 0,
+                "visibleWidth": 46,
+                "visibleHeight": 64
+              },
+              "maxNumRefFrames": 1,
+              "maxNumReorderFrames": 0,
+              "maxDecFrameBuffering": 1,
+              "hrdPresent": false,
+              "fixedFrameRate": true,
+              "squareSampleAspect": true,
+              "color": {
+                "fullRange": false,
+                "colourPrimaries": 1,
+                "transferCharacteristics": 1,
+                "matrixCoefficients": 1
+              }
+            },
+            "macroblocksPerFrame": 12,
+            "units": [
+              {
+                "id": "done-body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "hover-body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 3,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 4,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 5,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 6,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 7,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "hover-shift",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 3,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 4,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 5,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "idle-body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 3,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 4,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 5,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 6,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 7,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "intro",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "loading-body",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  },
+                  {
+                    "frameIndex": 1,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  },
+                  {
+                    "frameIndex": 2,
+                    "key": false,
+                    "idr": false,
+                    "sliceType": "P",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "loading-bridge",
+                "frames": [
+                  {
+                    "frameIndex": 0,
+                    "key": true,
+                    "idr": true,
+                    "sliceType": "I",
+                    "sliceCount": 1,
+                    "nalUnitTypes": [
+                      9,
+                      7,
+                      8,
+                      5
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "canonicalizations": [
+            {
+              "unitId": "done-body",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "hover-body",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "hover-shift",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "idle-body",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "intro",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "loading-body",
+              "constraintSet2Canonicalized": true
+            },
+            {
+              "unitId": "loading-bridge",
+              "constraintSet2Canonicalized": true
+            }
+          ],
+          "pixelPipeline": {
+            "yuvProfile": "bt709-limited-yuv420p-v0",
+            "dilation": "nearest-radius-4-v0"
+          },
+          "alphaQuality": {
+            "rendition": "packed.1x",
+            "frameCount": 30,
+            "aggregate": {
+              "sampleCount": 36450,
+              "meanAbsoluteError": 0.0076972484467037845,
+              "p99AbsoluteError": 0.0196078431372549,
+              "minimumDecodedAlpha": 0,
+              "maximumDecodedAlpha": 252
+            },
+            "worstFrame": {
+              "rendition": "packed.1x",
+              "unit": "done-body",
+              "frameIndex": 0,
+              "sampleCount": 1215,
+              "meanAbsoluteError": 0.007707576857903655,
+              "p99AbsoluteError": 0.0196078431372549,
+              "minimumDecodedAlpha": 0,
+              "maximumDecodedAlpha": 252
+            }
+          },
+          "compositeQuality": {
+            "policy": "report-only",
+            "rendition": "packed.1x",
+            "frameCount": 30,
+            "backgrounds": [
+              {
+                "background": "black",
+                "rgb": [
+                  0,
+                  0,
+                  0
+                ],
+                "sampleCount": 109350,
+                "meanAbsoluteError": 0.00798275011879466,
+                "p99AbsoluteError": 0.03137254901960784
+              },
+              {
+                "background": "white",
+                "rgb": [
+                  255,
+                  255,
+                  255
+                ],
+                "sampleCount": 109350,
+                "meanAbsoluteError": 0.002201493674744704,
+                "p99AbsoluteError": 0.01568627450980392
+              },
+              {
+                "background": "magenta",
+                "rgb": [
+                  255,
+                  0,
+                  255
+                ],
+                "sampleCount": 109350,
+                "meanAbsoluteError": 0.003984363933044639,
+                "p99AbsoluteError": 0.0196078431372549
+              }
+            ]
+          }
+        }
+      ],
+      "continuity": [
+        {
+          "name": "loading-idle cut",
+          "kind": "cut",
+          "status": "cut",
+          "from": {
+            "unit": "loading-body",
+            "frame": null,
+            "direction": "runtime"
+          },
+          "to": {
+            "unit": "idle-body",
+            "frame": 3,
+            "direction": "forward"
+          },
+          "metrics": null
+        },
+        {
+          "name": "hover-body loop",
+          "kind": "loop",
+          "status": "pass",
+          "from": {
+            "unit": "hover-body",
+            "frame": 24,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "hover-body",
+            "frame": 17,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.10299253959801306,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17821630656523763,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "idle-body loop",
+          "kind": "loop",
+          "status": "pass",
+          "from": {
+            "unit": "idle-body",
+            "frame": 10,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "idle-body",
+            "frame": 3,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.10286782277385138,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17809676572571514,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "intro intro",
+          "kind": "intro",
+          "status": "pass",
+          "from": {
+            "unit": "intro",
+            "frame": 2,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "idle-body",
+            "frame": 3,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.17807236196703208,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17813125817375966,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "done-idle departure",
+          "kind": "departure",
+          "status": "pass",
+          "from": {
+            "unit": "done-body",
+            "frame": 26,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "idle-body",
+            "frame": 3,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.17801701565921868,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17809676572571514,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "hover-idle departure",
+          "kind": "departure",
+          "status": "pass",
+          "from": {
+            "unit": "hover-body",
+            "frame": 24,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "hover-shift",
+            "frame": 16,
+            "direction": "reverse"
+          },
+          "metrics": {
+            "boundaryRms": 0.1452942211923208,
+            "alphaBoundaryRms": 0,
+            "neighborP95": 0.17821630656523763,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "hover-idle arrival",
+          "kind": "arrival",
+          "status": "pass",
+          "from": {
+            "unit": "hover-shift",
+            "frame": 11,
+            "direction": "reverse"
+          },
+          "to": {
+            "unit": "idle-body",
+            "frame": 3,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.14529207254249138,
+            "alphaBoundaryRms": 0,
+            "neighborP95": 0.17810237472437612,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "idle-hover departure",
+          "kind": "departure",
+          "status": "pass",
+          "from": {
+            "unit": "idle-body",
+            "frame": 10,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "hover-shift",
+            "frame": 11,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.17803125413499274,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17810237472437612,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "idle-hover arrival",
+          "kind": "arrival",
+          "status": "pass",
+          "from": {
+            "unit": "hover-shift",
+            "frame": 16,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "hover-body",
+            "frame": 17,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.1781046463326106,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17821630656523763,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "idle-loading departure",
+          "kind": "departure",
+          "status": "pass",
+          "from": {
+            "unit": "idle-body",
+            "frame": 10,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "loading-bridge",
+            "frame": 25,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.17801131902508638,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17809676572571514,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "idle-loading arrival",
+          "kind": "arrival",
+          "status": "pass",
+          "from": {
+            "unit": "loading-bridge",
+            "frame": 25,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "loading-body",
+            "frame": 26,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.17801131902508638,
+            "alphaBoundaryRms": 0.04057204129667897,
+            "neighborP95": 0.17801701565921868,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        },
+        {
+          "name": "loading-done departure",
+          "kind": "departure",
+          "status": "pass",
+          "from": {
+            "unit": "loading-body",
+            "frame": 28,
+            "direction": "forward"
+          },
+          "to": {
+            "unit": "done-body",
+            "frame": 26,
+            "direction": "forward"
+          },
+          "metrics": {
+            "boundaryRms": 0.14529194587110325,
+            "alphaBoundaryRms": 0,
+            "neighborP95": 0.17801701565921868,
+            "alphaNeighborP95": 0.04057204129667897,
+            "identicalBoundary": false,
+            "repeatedEndpointPause": false
+          }
+        }
+      ],
+      "encodedPayloadBytes": 14503
+    }
+  ]
+}

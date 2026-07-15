@@ -1,7 +1,7 @@
 import type {
   GraphSettlementError,
   MotionGraphEffect
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 export type RequestSettlementEffect = Readonly<
   Extract<MotionGraphEffect, { readonly type: "settle" }>

@@ -18,13 +18,12 @@ const sequences = ["opaque-frames", "packed-frames"];
 
 const provenance = {
   provenanceVersion: "0.1",
-  generatedAt: "2026-07-12",
+  generatedAt: "2026-07-14",
   fixture: "m6-web-packed-alpha",
   license: await digest("source/ASSET-LICENSE.md"),
   generator: await digest("source/generate.mjs"),
   generatorModules: await Promise.all([
-    "frame-fixtures.mjs",
-    "png-fixture-helpers.mjs"
+    "frame-fixtures.mjs"
   ].map((name) => digest(`source/${name}`))),
   runtime: {
     node: process.version,

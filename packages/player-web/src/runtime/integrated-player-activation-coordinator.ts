@@ -1,14 +1,14 @@
 import type {
   MotionGraphEngine,
   MotionGraphResult
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { EffectHost } from "./effect-host.js";
 import {
   IntegratedPlaybackInvariantError,
   PlaybackFallbackError,
   type IntegratedCandidateAttempt,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player-contracts.js";
 import type { IntegratedAnimatedActivationCommit } from "./integrated-animated-preparation.js";
 import type { IntegratedOperationGate } from "./integrated-operation-gate.js";
@@ -48,7 +48,7 @@ interface IntegratedPlayerActivationState {
 interface IntegratedPlayerActivationCoordinatorOptions {
   readonly graph: MotionGraphEngine;
   readonly effects: EffectHost;
-  readonly staticStore: IntegratedStaticSurfaceStore;
+  readonly fallbackStore: IntegratedFallbackStore;
   readonly trace: IntegratedTraceHarness;
   readonly operationGate: IntegratedOperationGate;
   readonly state: Readonly<IntegratedPlayerActivationState>;
@@ -68,7 +68,7 @@ interface IntegratedPlayerActivationCoordinatorOptions {
 export class IntegratedPlayerActivationCoordinator {
   readonly #graph: MotionGraphEngine;
   readonly #effects: EffectHost;
-  readonly #staticStore: IntegratedStaticSurfaceStore;
+  readonly #fallbackStore: IntegratedFallbackStore;
   readonly #trace: IntegratedTraceHarness;
   readonly #operationGate: IntegratedOperationGate;
   readonly #state: Readonly<IntegratedPlayerActivationState>;
@@ -84,7 +84,7 @@ export class IntegratedPlayerActivationCoordinator {
   ) {
     this.#graph = options.graph;
     this.#effects = options.effects;
-    this.#staticStore = options.staticStore;
+    this.#fallbackStore = options.fallbackStore;
     this.#trace = options.trace;
     this.#operationGate = options.operationGate;
     this.#state = options.state;
@@ -128,11 +128,11 @@ export class IntegratedPlayerActivationCoordinator {
         }
         commit.attempt.drawInitial(commit.activation, presentation);
       });
-      // Keep the strict static visibly covering until the prepared first
+      // Keep the host fallback visibly covering until the prepared first
       // animated frame has crossed the synchronous draw barrier. A reveal
       // failure now occurs with an owned active candidate and therefore runs
       // through the ordinary cover-before-cleanup recovery lane.
-      this.#staticStore.revealAnimated();
+      this.#fallbackStore.revealAnimated();
       throwIfIntegratedAborted(commit.signal);
       this.#recordOperation(animated, commit.attempt);
       return commit.result;
@@ -153,7 +153,7 @@ export class IntegratedPlayerActivationCoordinator {
         commit.expectedPresentation
       )) {
         throw new IntegratedPlaybackInvariantError(
-          "re-entry activation diverged from body frame zero"
+          "re-entry activation diverged from its prepared presentation"
         );
       }
       commit.attempt.playback.synchronizeGraph(animated);
@@ -173,7 +173,7 @@ export class IntegratedPlayerActivationCoordinator {
           "animated re-entry motion transition became stale"
         );
       }
-      this.#staticStore.revealAnimated();
+      this.#fallbackStore.revealAnimated();
       this.#recordOperation(animated, commit.attempt);
       return commit.result;
     });
@@ -181,7 +181,7 @@ export class IntegratedPlayerActivationCoordinator {
 
   public rollbackAnimatedActivation(attempt: IntegratedCandidateAttempt): void {
     // A precommit attempt never revealed animated pixels, so the retained
-    // strict static is already authoritative. Rollback only detaches state;
+    // fallback state is already authoritative. Rollback only detaches state;
     // replaying a fallible visibility host would add no visual transition.
     if (this.#state.getActiveCandidate() === attempt) {
       this.#state.setActiveCandidate(null);
@@ -199,7 +199,7 @@ export class IntegratedPlayerActivationCoordinator {
       // RealtimeDriver clears running/pending ownership before invoking the
       // hostile cancellation host. A cancellation exception therefore cannot
       // unwind the serialized reduction and strand its transition; report it
-      // observationally and continue to the strict-static cover barrier.
+      // observationally and continue to the host-fallback cover barrier.
       this.#reportFailure(normalizeRuntimeFailure(
         "readiness-failure",
         error,
@@ -284,13 +284,13 @@ export class IntegratedPlayerActivationCoordinator {
 
   public coverContextSurface(): string {
     return this.#operationGate.run(() => {
-      const state = this.#staticStore.currentState();
+      const state = this.#fallbackStore.currentState();
       if (state === null) {
         throw new PlaybackFallbackError(
-          "context loss has no retained strict static surface"
+          "context loss has no retained fallback state"
         );
       }
-      this.#staticStore.coverCurrent();
+      this.#fallbackStore.coverCurrent();
       return state;
     });
   }
@@ -303,12 +303,12 @@ export class IntegratedPlayerActivationCoordinator {
           `staged ${operation} surface became stale`
         );
       }
-      if (this.#staticStore.currentState() !== state) {
+      if (this.#fallbackStore.currentState() !== state) {
         throw new IntegratedPlaybackInvariantError(
           `staged ${operation} surface has the wrong state identity`
         );
       }
-      this.#staticStore.coverCurrent();
+      this.#fallbackStore.coverCurrent();
     });
   }
 
@@ -367,7 +367,7 @@ export class IntegratedPlayerActivationCoordinator {
         this.#state.setSelectedRendition(null);
         this.#state.setReadyResult(null);
         const failed = this.#graph.failStatic(
-          "context loss has no usable strict static surface"
+          "context loss has no usable fallback state"
         );
         const failedForHost = this.#effects.applyFailure(failed);
         this.#recordOperationBestEffort(
@@ -520,19 +520,19 @@ export class IntegratedPlayerActivationCoordinator {
       const failure = normalizeRuntimeFailure(
         "renderer-failure",
         error,
-        { operation: "reduced-motion-static-surface" }
+        { operation: "reduced-motion-host-fallback" }
       );
       let staticCovered = false;
       let retainedStaticMatches = false;
       try {
         retainedStaticMatches = retainedVisualState !== null &&
-          this.#staticStore.currentState() === retainedVisualState;
+          this.#fallbackStore.currentState() === retainedVisualState;
       } catch {
         // The reduction staging failure remains authoritative.
       }
       if (retainedStaticMatches) {
         try {
-          this.#staticStore.coverCurrent();
+          this.#fallbackStore.coverCurrent();
           staticCovered = true;
         } catch {
           // The animated candidate remains the only proven matching pixels.

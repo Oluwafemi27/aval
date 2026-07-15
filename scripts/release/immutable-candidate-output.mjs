@@ -8,7 +8,7 @@ export async function prepareImmutableCandidateOutput({ candidate, legacyIndex }
   await requireAbsent(finalCandidate, "candidate output");
   await requireAbsent(finalLegacyIndex, "legacy loose artifact index");
   await mkdir(dirname(finalCandidate), { recursive: true });
-  const temporaryRoot = await mkdtemp(join(dirname(finalCandidate), ".rendered-motion-candidate-"));
+  const temporaryRoot = await mkdtemp(join(dirname(finalCandidate), ".aval-candidate-"));
   const stagedCandidate = join(temporaryRoot, "candidate");
   const temporaryIndex = join(temporaryRoot, "artifact-index.json");
   let published = false;

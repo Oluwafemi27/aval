@@ -25,7 +25,7 @@ const LIMITS = {
 describe("bounded process runner", () => {
   it("owns the exact proxy-free private child environment", () => {
     const environment = Object.fromEntries(Object.entries(
-      createProcessEnvironment("/private/rma-operation")
+      createProcessEnvironment("/private/aval-operation")
     ).filter((entry): entry is [string, string] => entry[1] !== undefined).map(
       ([key, value]) => [
         key,
@@ -37,10 +37,10 @@ describe("bounded process runner", () => {
       ...(process.platform === "win32" ? { SYSTEMROOT: "<SYSTEMROOT>" } : {}),
       LC_ALL: "C",
       LANG: "C",
-      HOME: "/private/rma-operation",
-      TMPDIR: "/private/rma-operation",
-      TMP: "/private/rma-operation",
-      TEMP: "/private/rma-operation"
+      HOME: "/private/aval-operation",
+      TMPDIR: "/private/aval-operation",
+      TMP: "/private/aval-operation",
+      TEMP: "/private/aval-operation"
     });
   });
 
@@ -87,7 +87,7 @@ describe("bounded process runner", () => {
     })).rejects.toMatchObject({ code: "CANCELLED" } satisfies Partial<CompilerError>);
 
     await expect(runBoundedProcess({
-      executable: "definitely-not-a-real-rma-tool",
+      executable: "definitely-not-a-real-aval-tool",
       arguments: [],
       cwd: cwd(),
       limits: LIMITS
@@ -167,7 +167,7 @@ describe("bounded process runner", () => {
   it.each(["read", "short-read"] as const)(
     "keeps a private stdin spool path out of %s diagnostics",
     async (failure) => {
-      const root = await mkdtemp(join(tmpdir(), "rma-private-spool-secret-"));
+      const root = await mkdtemp(join(tmpdir(), "aval-private-spool-secret-"));
       const privatePath = join(root, "customer-project-secret.yuv");
       try {
         if (failure === "short-read") await writeFile(privatePath, Uint8Array.of(7));
@@ -277,7 +277,7 @@ describe("bounded process runner", () => {
   });
 
   it("cancels an active process and removes its private working directory", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-runner-cancel-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-runner-cancel-"));
     const controller = new AbortController();
     const operation = runBoundedProcess({
       executable: execPath,
@@ -294,7 +294,7 @@ describe("bounded process runner", () => {
   });
 
   it("removes its private working directory after process failure", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-runner-failure-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-runner-failure-"));
     try {
       await expect(runBoundedProcess({
         executable: execPath,
@@ -310,7 +310,7 @@ describe("bounded process runner", () => {
   });
 
   it("maps private working-directory creation failures without exposing the root", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-private-create-secret-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-private-create-secret-"));
     const privateRoot = join(root, "customer-project-secret", "missing-parent");
     try {
       let error: unknown;
@@ -349,7 +349,7 @@ describe("bounded process runner", () => {
   it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "maps a private working-directory cleanup failure without exposing its path",
     async () => {
-      const root = await mkdtemp(join(tmpdir(), "rma-private-cleanup-secret-"));
+      const root = await mkdtemp(join(tmpdir(), "aval-private-cleanup-secret-"));
       try {
         let error: unknown;
         try {
@@ -392,7 +392,7 @@ describe("bounded process runner", () => {
   );
 
   it("uses a mode-0700 proxy-free environment and cleans it after success", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-runner-private-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-runner-private-"));
     try {
       const result = await runBoundedProcess({
         executable: execPath,

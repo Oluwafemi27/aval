@@ -6,12 +6,9 @@ import type {
   ParsedFrontIndex,
   RenditionV01,
   StateV01,
-  StaticBlobRange,
-  StaticFrameV01,
-  ValidatedStaticPngProfile,
   UnitV01,
   UnitBlobRange
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import {
   RuntimePlaybackError,
@@ -66,19 +63,9 @@ export interface RuntimeCatalogRecordIndex {
   values(): readonly Readonly<RuntimeCatalogAccessUnit>[];
 }
 
-export interface RuntimeCatalogStaticFrame {
-  readonly frame: Readonly<StaticFrameV01>;
-  readonly range: Readonly<StaticBlobRange>;
-  readonly blobKey?: string;
-  readonly png: Readonly<ValidatedStaticPngProfile>;
-}
-
 export interface CatalogMapBuildInput {
   readonly frontIndex: Readonly<ParsedFrontIndex>;
   readonly declaredFileLength: number;
-  readonly resolveStaticPng: (
-    staticFrame: string
-  ) => Readonly<ValidatedStaticPngProfile>;
 }
 
 export interface CatalogMaps {
@@ -88,7 +75,6 @@ export interface CatalogMaps {
   readonly edges: Map<string, Readonly<EdgeV01>>;
   readonly ports: Map<string, Readonly<RuntimeCatalogPortEntry>>;
   readonly records: Map<string, Readonly<RuntimeCatalogAccessUnit>>;
-  readonly staticFrames: Map<string, Readonly<RuntimeCatalogStaticFrame>>;
 }
 
 export function buildCatalogMaps(
@@ -104,8 +90,7 @@ export function buildCatalogMaps(
     frontIndex === null ||
     !Number.isSafeInteger(byteLength) ||
     byteLength < 1 ||
-    frontIndex.header?.declaredFileLength !== byteLength ||
-    typeof input.resolveStaticPng !== "function"
+    frontIndex.header?.declaredFileLength !== byteLength
   ) {
     throw indexError("asset catalog front-index geometry is invalid");
   }
@@ -119,7 +104,6 @@ export function buildCatalogMaps(
   const edges = indexById<EdgeV01>(manifest.edges, "edge");
   const ports = new Map<string, Readonly<RuntimeCatalogPortEntry>>();
   const records = new Map<string, Readonly<RuntimeCatalogAccessUnit>>();
-  const staticFrames = new Map<string, Readonly<RuntimeCatalogStaticFrame>>();
   const unitBlobs = indexUnitBlobs(frontIndex, byteLength);
 
   for (const unit of manifest.units) {
@@ -193,57 +177,18 @@ export function buildCatalogMaps(
     );
   }
 
-  const staticDescriptorById = indexById(
-    manifest.staticFrames,
-    "static frame"
-  );
-  for (let index = 0; index < frontIndex.staticBlobs.length; index += 1) {
-    const range = frontIndex.staticBlobs[index];
-    if (range === undefined) {
-      throw indexError("validated static PNG range relation is missing");
-    }
-    const frame = staticDescriptorById.get(range.staticFrame);
-    if (frame === undefined) {
-      throw indexError("validated static range relation is missing");
-    }
-    checkedCatalogRangeEnd(range.offset, range.length, byteLength);
-    const staticFrame = frame.id;
-    const entry: RuntimeCatalogStaticFrame = {
-      frame,
-      range,
-      blobKey: runtimeStaticBlobKey(staticFrame),
-      get png(): Readonly<ValidatedStaticPngProfile> {
-        return input.resolveStaticPng(staticFrame);
-      }
-    };
-    insertUnique(
-      staticFrames,
-      frame.id,
-      Object.freeze(entry),
-      "validated asset contains a duplicate static range"
-    );
-  }
-  if (staticFrames.size !== manifest.staticFrames.length) {
-    throw indexError("validated static ranges do not cover every descriptor");
-  }
-
   return Object.freeze({
     renditions,
     units,
     states,
     edges,
     ports,
-    records,
-    staticFrames
+    records
   });
 }
 
 export function runtimeUnitBlobKey(rendition: string, unit: string): string {
   return `unit:${rendition}:${unit}`;
-}
-
-export function runtimeStaticBlobKey(staticFrame: string): string {
-  return `static:${staticFrame}`;
 }
 
 function indexUnitBlobs(

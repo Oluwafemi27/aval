@@ -3,10 +3,10 @@
   "compilerOptions": {
     "noEmit": true,
     "paths": {
-      "@rendered-motion/element": [
+      "@aval/element": [
         "./src/index.ts"
       ],
-      "@rendered-motion/element/auto": [
+      "@aval/element/auto": [
         "./src/auto.ts"
       ]
     },

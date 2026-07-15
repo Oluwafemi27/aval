@@ -1,7 +1,7 @@
-import type { RenderedMotionElement } from "@rendered-motion/element";
+import type { AvalElement } from "@aval/element";
 
 export function createM8DiagnosticsPanel(
-  element: RenderedMotionElement
+  element: AvalElement
 ): Readonly<{ node: HTMLElement; refresh(trace?: boolean): void; dispose(): void }> {
   const node = document.createElement("pre");
   const refresh = (trace = false): void => {

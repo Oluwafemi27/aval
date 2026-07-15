@@ -77,7 +77,7 @@ export function splitAnnexBAccessUnit(
       ALLOWED_NAL_TYPES.has(type) ||
         (allowEncoderSei && type === AVC_NAL_TYPE_SEI),
       path,
-      `NAL unit type ${String(type)} is not permitted by AVC v0`,
+      `NAL unit type ${String(type)} is not permitted by the production AVC profile`,
       payloadOffset
     );
     const referenceIdc = (header >> 5) & 0x03;

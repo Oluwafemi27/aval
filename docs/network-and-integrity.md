@@ -10,9 +10,10 @@ bounded complete-response fallback.
 Fetch exposes a decoded stream for a complete `200` while its response headers
 still describe the encoded representation. The loader therefore ignores
 `Content-Encoding` and `Content-Length` for complete responses, bounds decoded
-bytes by the file cap, and then validates the complete decoded RMA. Exact range
-lengths and offsets remain identity-only. Gzip or Brotli on a complete response
-is supported, though usually wasteful for already-compressed media payloads.
+bytes by the file cap, and then validates the complete decoded AVAL asset. Exact
+range lengths and offsets remain identity-only. Gzip or Brotli on a complete
+response is supported, though usually wasteful for already-compressed media
+payloads.
 
 An `integrity="sha256-..."` token requests whole-asset authenticity. Because a
 range cannot authenticate unseen bytes, external integrity intentionally uses

@@ -68,7 +68,7 @@ export function parseCanonicalBundleJson(bytes: Uint8Array, path: string, maximu
 }
 
 function shouldRetainAttachment(mediaType: string): boolean {
-  return mediaType === "application/json" || mediaType === "application/jsonl" || mediaType === "application/vnd.rendered-motion.frame-ledger+json";
+  return mediaType === "application/json" || mediaType === "application/jsonl" || mediaType === "application/vnd.aval.frame-ledger+json";
 }
 
 function requireMediaSpecificBound(reference: DigestReference, policy: ReportBundlePolicy): void {

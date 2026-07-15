@@ -74,9 +74,9 @@ describe("page resource manager byte accounting", () => {
     );
     expect(manager.snapshot()).toEqual(beforePlayerFailure);
 
-    const secondLease = manager.reserve(second, "verified-static", 4);
+    const secondLease = manager.reserve(second, "verified-unit", 4);
     const beforePageFailure = manager.snapshot();
-    expect(() => manager.reserve(second, "png-copy", 1)).toThrowError(
+    expect(() => manager.reserve(second, "blob-assembly", 1)).toThrowError(
       expect.objectContaining({ code: "resource-rejection" })
     );
     expect(manager.snapshot()).toEqual(beforePageFailure);
@@ -179,17 +179,17 @@ describe("page resource manager byte accounting", () => {
   it("atomically reclassifies an authentic live lease without changing totals", () => {
     const manager = managerWithCaps(4, 4);
     const participant = manager.registerParticipant();
-    const lease = manager.reserve(participant, "incoming-static-surface", 4);
+    const lease = manager.reserve(participant, "worker-transfer", 4);
     const before = manager.snapshot();
 
     reclassifyPageResourceByteLease(
       manager,
       lease,
-      "current-static-surface"
+      "decoder-output"
     );
 
     expect(lease.snapshot()).toMatchObject({
-      category: "current-static-surface",
+      category: "decoder-output",
       bytes: 4,
       released: false
     });
@@ -197,16 +197,16 @@ describe("page resource manager byte accounting", () => {
     expect(after.physicalBytes).toBe(before.physicalBytes);
     expect(after.byteLeaseCount).toBe(before.byteLeaseCount);
     expect(after.categories.find(({ category }) =>
-      category === "incoming-static-surface")?.bytes).toBe(0);
+      category === "worker-transfer")?.bytes).toBe(0);
     expect(after.categories.find(({ category }) =>
-      category === "current-static-surface")?.bytes).toBe(4);
+      category === "decoder-output")?.bytes).toBe(4);
     expect(manager.participantSnapshot(participant).logicalBytes).toBe(4);
 
     // The operation is an idempotent category transition, not a reservation.
     reclassifyPageResourceByteLease(
       manager,
       lease,
-      "current-static-surface"
+      "decoder-output"
     );
     expect(manager.snapshot()).toEqual(after);
     lease.release();
@@ -217,7 +217,7 @@ describe("page resource manager byte accounting", () => {
     const second = managerWithCaps(8, 8);
     const participant = first.registerParticipant();
     second.registerParticipant();
-    const lease = first.reserve(participant, "incoming-static-surface", 3);
+    const lease = first.reserve(participant, "worker-transfer", 3);
     const hostile = Object.defineProperty({}, "snapshot", {
       get() {
         throw new Error("must not inspect a forged lease");
@@ -227,12 +227,12 @@ describe("page resource manager byte accounting", () => {
     expect(() => reclassifyPageResourceByteLease(
       second,
       lease,
-      "current-static-surface"
+      "decoder-output"
     )).toThrow(TypeError);
     expect(() => reclassifyPageResourceByteLease(
       first,
       hostile,
-      "current-static-surface"
+      "decoder-output"
     )).toThrow(TypeError);
     expect(first.snapshot().physicalBytes).toBe(3);
 
@@ -240,13 +240,13 @@ describe("page resource manager byte accounting", () => {
     expect(() => reclassifyPageResourceByteLease(
       first,
       lease,
-      "decoded-static-cache"
+      "persistent-animation"
     )).toThrowError(expect.objectContaining({ code: "disposed" }));
     first.dispose();
     expect(() => reclassifyPageResourceByteLease(
       first,
       lease,
-      "decoded-static-cache"
+      "persistent-animation"
     )).toThrowError(expect.objectContaining({ code: "disposed" }));
   });
 
@@ -255,12 +255,12 @@ describe("page resource manager byte accounting", () => {
     const participant = manager.registerParticipant({
       reclaimable: []
     });
-    const lease = manager.reserve(participant, "incoming-static-surface", 8);
+    const lease = manager.reserve(participant, "worker-transfer", 8);
 
     reclassifyPageResourceByteLease(
       manager,
       lease,
-      "decoded-static-cache"
+      "persistent-animation"
     );
     lease.release();
     lease.release();
@@ -329,7 +329,7 @@ describe("page resource manager byte accounting", () => {
     const first = manager.registerParticipant();
     const second = manager.registerParticipant();
     const firstLease = manager.reserve(first, "asset-metadata", 4);
-    const secondLease = manager.reserve(second, "verified-static", 5);
+    const secondLease = manager.reserve(second, "verified-unit", 5);
 
     manager.disposeParticipant(first);
     expect(firstLease.snapshot()).toMatchObject({ released: true, bytes: 4 });
@@ -349,7 +349,7 @@ describe("page resource manager byte accounting", () => {
   it("disposal retires all leases and leaves an all-zero immutable snapshot", () => {
     const manager = managerWithCaps(64, 32);
     const participant = manager.registerParticipant();
-    const lease = manager.reserve(participant, "decoded-static-cache", 12);
+    const lease = manager.reserve(participant, "persistent-animation", 12);
 
     manager.dispose();
     manager.dispose();

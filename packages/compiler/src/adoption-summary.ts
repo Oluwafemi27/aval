@@ -34,7 +34,6 @@ export interface CompileAdoptionSummary {
   readonly reports: Readonly<{
     continuityPassed: number;
     continuityCuts: number;
-    strictStatics: number;
     alphaAuditedFrames: number;
   }>;
   readonly sha256: string;
@@ -77,7 +76,6 @@ export function createCompileAdoptionSummary(
   };
   const alphaPolicy = details.alphaPolicy;
   const continuity = details.continuity ?? [];
-  const statics = details.statics ?? [];
   const fileName = safeAssetFileName(basename(result.outputPath));
   return Object.freeze({
     summaryVersion: "0.1" as const,
@@ -100,13 +98,12 @@ export function createCompileAdoptionSummary(
     reports: Object.freeze({
       continuityPassed: continuity.filter(({ status }) => status === "pass").length,
       continuityCuts: continuity.filter(({ status }) => status === "cut").length,
-      strictStatics: statics.length,
       alphaAuditedFrames: alphaPolicy?.audit.uniqueReferencedFrames ?? 0
     }),
     sha256: result.sha256,
     snippets: Object.freeze({
-      npm: `npm install @rendered-motion/element@${SYNCHRONIZED_PUBLIC_VERSION}`,
-      html: `<rendered-motion src="./${fileName}"><span slot="fallback">Add an author-owned static fallback here.</span></rendered-motion>`
+      npm: `npm install @aval/element@${SYNCHRONIZED_PUBLIC_VERSION}`,
+      html: `<aval-player src="./${fileName}"><span slot="fallback">Add an author-owned static fallback here.</span></aval-player>`
     })
   });
 }
@@ -123,7 +120,7 @@ export function formatCompileAdoptionSummary(
     `Geometry: ${String(summary.geometry.visibleWidth)}x${String(summary.geometry.visibleHeight)} visible, ${String(summary.geometry.codedWidth)}x${String(summary.geometry.codedHeight)} coded, alpha ${summary.alpha}`,
     `Asset: ${String(summary.bytes)} bytes; SHA-256 ${summary.sha256}`,
     `Runtime estimate: ${String(summary.resourceEstimate.maxRuntimeBytes)} bytes`,
-    `Reports: continuity ${String(summary.reports.continuityPassed)} passed, statics ${String(summary.reports.strictStatics)}, alpha frames ${String(summary.reports.alphaAuditedFrames)}`,
+    `Reports: continuity ${String(summary.reports.continuityPassed)} passed, alpha frames ${String(summary.reports.alphaAuditedFrames)}`,
     summary.snippets.npm,
     summary.snippets.html
   ].join("\n");
@@ -135,5 +132,5 @@ function frameTime(frame: number, numerator: number, denominator: number): strin
 }
 
 function safeAssetFileName(value: string): string {
-  return /^[A-Za-z0-9._-]{1,128}$/u.test(value) ? value : "motion.rma";
+  return /^[A-Za-z0-9._-]{1,128}$/u.test(value) ? value : "motion.avl";
 }

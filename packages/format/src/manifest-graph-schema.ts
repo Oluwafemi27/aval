@@ -21,7 +21,6 @@ import type {
   BindingSourceV01,
   BindingV01,
   EdgeV01,
-  FallbackV01,
   FormatBudgets,
   ReadinessV01,
   StartV01,
@@ -51,11 +50,10 @@ export function cloneStates(
   const states = inputs.map((entry, index) => {
     const statePath = `${path}[${String(index)}]`;
     const input = record(entry, statePath);
-    exactKeys(input, ["id", "bodyUnit", "staticFrame"], statePath, ["initialUnit"]);
+    exactKeys(input, ["id", "bodyUnit"], statePath, ["initialUnit"]);
     const base = {
       id: identifier(input.id, `${statePath}.id`),
-      bodyUnit: identifier(input.bodyUnit, `${statePath}.bodyUnit`),
-      staticFrame: identifier(input.staticFrame, `${statePath}.staticFrame`)
+      bodyUnit: identifier(input.bodyUnit, `${statePath}.bodyUnit`)
     };
     if (!owns(input, "initialUnit")) {
       return Object.freeze(base);
@@ -287,15 +285,4 @@ function cloneIdArray(
   );
   requireStringOrder(ids, path);
   return Object.freeze(ids);
-}
-
-export function cloneFallback(value: unknown, path: string): FallbackV01 {
-  const input = record(value, path);
-  exactKeys(input, ["unsupported", "reducedMotion"], path);
-  literal(input.unsupported, "per-state-static", `${path}.unsupported`);
-  literal(input.reducedMotion, "per-state-static", `${path}.reducedMotion`);
-  return Object.freeze({
-    unsupported: "per-state-static",
-    reducedMotion: "per-state-static"
-  });
 }

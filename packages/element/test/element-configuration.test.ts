@@ -36,7 +36,7 @@ describe("element configuration", () => {
 
   it("keeps retrieval identity limited to src, integrity, and credentials", () => {
     const first = readElementConfiguration((name) => ({
-      src: "/a.rma",
+      src: "/a.avl",
       state: "idle"
     } as Record<string, string>)[name] ?? null).configuration;
     const stateOnly = Object.freeze({ ...first, state: "active" });
@@ -58,7 +58,7 @@ describe("element configuration", () => {
     expect(normalizeFit("cover")).toBe("cover");
     expect(normalizeFit(null)).toBeNull();
     expect(normalizeState("custom.success")).toBe("custom.success");
-    expect(normalizeSize(16_384)).toBe(16_384);
+    expect(normalizeSize(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER);
     expect(normalizeSource("x".repeat(4_096))).toHaveLength(4_096);
     expect(normalizeInteractionFor("x".repeat(256))).toHaveLength(256);
     expect(normalizeIntegrity("sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="))
@@ -68,9 +68,28 @@ describe("element configuration", () => {
     }
     expect(() => normalizeState("Hovered State")).toThrow();
     expect(() => normalizeSize(0)).toThrow();
-    expect(() => normalizeSize(16_385)).toThrow();
+    expect(() => normalizeSize(Number.MAX_SAFE_INTEGER + 1)).toThrow();
     expect(() => normalizeSource("x".repeat(4_097))).toThrow();
     expect(() => normalizeInteractionFor("x".repeat(257))).toThrow();
+  });
+
+  it("accepts safe-integer size hints above the former element cap", () => {
+    const read = readElementConfiguration((name) => ({
+      width: "1048576",
+      height: String(Number.MAX_SAFE_INTEGER)
+    } as Record<string, string>)[name] ?? null);
+
+    expect(read.configuration).toMatchObject({
+      width: 1_048_576,
+      height: Number.MAX_SAFE_INTEGER
+    });
+    expect(read.failures).toEqual([]);
+
+    const padded = readElementConfiguration((name) =>
+      name === "width" ? "000000000000000001048576" : null
+    );
+    expect(padded.configuration.width).toBe(1_048_576);
+    expect(padded.failures).toEqual([]);
   });
 
   it("defaults hostile attributes and records bounded failures", () => {
@@ -95,7 +114,7 @@ describe("element configuration", () => {
     ]);
   });
 
-  it("rejects huge scalar attributes before regex or set work", () => {
+  it("rejects huge scalar attributes without numeric conversion", () => {
     const huge = "9".repeat(1_048_576);
     const read = readElementConfiguration((name) => ({
       integrity: huge,

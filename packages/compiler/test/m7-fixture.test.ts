@@ -12,15 +12,15 @@ const M7_ROOT = join(REPOSITORY_ROOT, "fixtures/conformance/m7");
 describe("M7 transport fixture compiler provenance", () => {
   it("is byte-identical to the reviewed M6 compiler publication", async () => {
     const [source, reference, m6Text, m7Text] = await Promise.all([
-      readFile(join(M6_ROOT, "packed-alpha-all-routes.rma")),
-      readFile(join(M7_ROOT, "reference-packed.rma")),
+      readFile(join(M6_ROOT, "packed-alpha-all-routes.avl")),
+      readFile(join(M7_ROOT, "reference-packed.avl")),
       readFile(join(M6_ROOT, "provenance.json"), "utf8"),
       readFile(join(M7_ROOT, "reference-packed.provenance.json"), "utf8")
     ]);
     const m6 = JSON.parse(m6Text);
     const m7 = JSON.parse(m7Text);
     const publication = m6.assets.find(
-      ({ name }: { name: string }) => name === "packed-alpha-all-routes.rma"
+      ({ name }: { name: string }) => name === "packed-alpha-all-routes.avl"
     );
 
     expect(publication).toBeDefined();

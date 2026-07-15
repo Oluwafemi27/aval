@@ -93,12 +93,13 @@ function replayTape(tape: readonly TapeOperation[], seed: number): Replay {
     resumed.operation === "resume-animated" &&
       resumed.effects.length === 1 &&
       resumed.effects[0]?.type === "readinesschange" &&
-      resumed.presentation?.kind === "body" &&
+      resumed.presentation?.kind === "intro" &&
       resumed.presentation.state === resumed.snapshot.visualState &&
-      resumed.presentation.frameIndex === 0,
+      resumed.presentation.frameIndex === 0 &&
+      resumed.snapshot.initialUnitPending,
     seed,
     -0.5,
-    "static resume did not re-enter current body frame zero exactly"
+    "static resume did not restart the unfinished intro exactly"
   );
   results.push(resumed);
   previous = resumed.snapshot;
@@ -359,10 +360,10 @@ function assertPresentationBounds(
   if (presentation.kind === "static") {
     const state = STATE_BY_ID.get(presentation.state);
     invariant(
-      state?.staticFrameId === presentation.staticFrameId,
+      state !== undefined,
       seed,
       operationIndex,
-      "static presentation references the wrong frame"
+      "static presentation references an unknown state"
     );
     return;
   }
@@ -538,7 +539,6 @@ const FUZZ_GRAPH = {
   states: [
     {
       id: "idle",
-      staticFrameId: "idle-static",
       initialUnit: { unitId: "intro-unit", frameCount: 2 },
       body: {
         unitId: "idle-body",
@@ -549,7 +549,6 @@ const FUZZ_GRAPH = {
     },
     {
       id: "hovered",
-      staticFrameId: "hovered-static",
       body: {
         unitId: "hovered-body",
         kind: "loop",
@@ -559,7 +558,6 @@ const FUZZ_GRAPH = {
     },
     {
       id: "success",
-      staticFrameId: "success-static",
       body: {
         unitId: "success-body",
         kind: "finite",

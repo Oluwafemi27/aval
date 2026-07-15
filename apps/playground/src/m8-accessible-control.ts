@@ -1,16 +1,16 @@
 import {
-  defineRenderedMotionElement,
-  type RenderedMotionElement
-} from "@rendered-motion/element";
+  defineAvalElement,
+  type AvalElement
+} from "@aval/element";
 
-defineRenderedMotionElement();
+defineAvalElement();
 
-export function mountAccessibleRenderedMotionControl(root: HTMLElement): void {
+export function mountAccessibleAvalControl(root: HTMLElement): void {
   const button = document.createElement("button");
   button.id = "favorite-control";
   button.type = "button";
   button.setAttribute("aria-pressed", "false");
-  const motion = document.createElement("rendered-motion") as RenderedMotionElement;
+  const motion = document.createElement("aval-player") as AvalElement;
   motion.setAttribute("aria-hidden", "true");
   motion.interactionFor = button.id;
   const fallback = document.createElement("img");

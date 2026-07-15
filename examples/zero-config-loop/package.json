@@ -1,9 +1,9 @@
 {
-  "name": "rendered-motion-zero-config-loop-example",
+  "name": "aval-zero-config-loop-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": { "build": "vite build" },
-  "dependencies": { "@rendered-motion/element": "1.0.0" },
+  "dependencies": { "@aval/element": "1.0.0" },
   "devDependencies": { "vite": "8.1.4" }
 }

@@ -1,19 +1,19 @@
 import type {
-  RenderedMotionElement,
-  RenderedMotionElementAttributes,
-  RenderedMotionErrorDetail,
-  RenderedMotionFit,
-  RenderedMotionReadinessChangeDetail,
+  AvalElement,
+  AvalElementAttributes,
+  AvalErrorDetail,
+  AvalFit,
+  AvalReadinessChangeDetail,
   StaticReason
-} from "@rendered-motion/element";
+} from "@aval/element";
 
-declare const element: RenderedMotionElement;
-declare const detail: Readonly<RenderedMotionErrorDetail>;
-declare const readinessDetail: Readonly<RenderedMotionReadinessChangeDetail>;
+declare const element: AvalElement;
+declare const detail: Readonly<AvalErrorDetail>;
+declare const readinessDetail: Readonly<AvalReadinessChangeDetail>;
 
 element.motion = "auto";
 element.autoplay = "manual";
-element.fit = "cover" satisfies RenderedMotionFit;
+element.fit = "cover" satisfies AvalFit;
 element.state = "author.state";
 void element.prepare({ timeoutMs: 1_000 });
 void element.setState("author.state");
@@ -23,8 +23,8 @@ element.pause();
 void element.resume();
 element.getDiagnostics({ trace: true });
 
-const attributes: RenderedMotionElementAttributes = {
-  src: "/motion.rma",
+const attributes: AvalElementAttributes = {
+  src: "/motion.avl",
   motion: "reduce",
   autoplay: "visible",
   fit: "contain",
@@ -43,5 +43,5 @@ element.visualState = "forged";
 // @ts-expect-error immutable failure detail
 detail.fatal = false;
 // @ts-expect-error fit is closed
-const badFit: RenderedMotionFit = "scale-down";
+const badFit: AvalFit = "scale-down";
 void badFit;

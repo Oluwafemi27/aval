@@ -10,7 +10,7 @@ records.
 
 ## Trust boundaries
 
-- `.rma` headers, manifests, indexes, AVC, PNG, and offsets are hostile bytes.
+- `.avl` headers, manifests, indexes, AVC, PNG, and offsets are hostile bytes.
 - HTTP status, range metadata, validators, encodings, redirects, chunks, and
   body length are hostile until their exact contract and digest pass.
 - Element attributes, authored identifiers, DOM events, observers, and public

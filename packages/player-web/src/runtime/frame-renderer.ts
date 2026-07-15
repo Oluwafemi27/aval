@@ -1,7 +1,7 @@
 import {
   maximumAvcDecoderSurfaceDimension,
   type AvcRenditionGeometry
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { STREAMING_TEXTURE_LAYER_COUNT } from "./checked-runtime-bytes.js";
 import {

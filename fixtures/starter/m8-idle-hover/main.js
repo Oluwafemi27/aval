@@ -1,1 +1,1 @@
-import "@rendered-motion/element/auto";
+import "@aval/element/auto";

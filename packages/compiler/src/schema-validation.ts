@@ -1,4 +1,4 @@
-import { IDENTIFIER_PATTERN } from "@rendered-motion/format";
+import { IDENTIFIER_PATTERN } from "@aval/format";
 
 import { CompilerError } from "./diagnostics.js";
 

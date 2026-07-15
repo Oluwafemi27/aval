@@ -15,6 +15,7 @@ import {
   makeAccessUnit,
   makeAud,
   makePps,
+  makeSlice,
   makeSps,
   nal
 } from "./avc-fixture.js";
@@ -143,11 +144,59 @@ describe("AVC encoder rendition preparation", () => {
       })
     );
   });
+
+  it("derives its raw NAL budget from authored frame count", () => {
+    const frameCount = 21_845;
+    const prepared = prepareAvcEncoderRendition({
+      profile: profile(),
+      units: [{
+        id: "idle",
+        bytes: rawLongUnitStream(frameCount),
+        expectedAccessUnitCount: frameCount
+      }]
+    });
+
+    expect(prepared.units[0]?.accessUnits).toHaveLength(frameCount);
+  }, 20_000);
+
+  it("prepares bounded-v1 encoder output and rejects an out-of-range final QP", () => {
+    const bounded = {
+      ...profile(),
+      quantizationPolicy: "bounded-qp-v1" as const
+    };
+    expect(() => prepareAvcEncoderRendition({
+      profile: bounded,
+      units: [{
+        id: "idle",
+        bytes: rawUnitStream(0xc0, {
+          picInitQpMinus26: 10,
+          sliceQpDeltas: [-36, 15]
+        }),
+        expectedAccessUnitCount: 2
+      }]
+    })).not.toThrow();
+
+    expectProfileError(() => prepareAvcEncoderRendition({
+      profile: bounded,
+      units: [{
+        id: "idle",
+        bytes: rawUnitStream(0xc0, {
+          picInitQpMinus26: 25,
+          sliceQpDeltas: [1, 0]
+        }),
+        expectedAccessUnitCount: 2
+      }]
+    }));
+  });
 });
 
 function rawUnitStream(
   compatibility: 0xc0 | 0xe0,
-  options: { readonly fixedFrameRate?: boolean } = {}
+  options: {
+    readonly fixedFrameRate?: boolean;
+    readonly picInitQpMinus26?: number;
+    readonly sliceQpDeltas?: readonly [number, number];
+  } = {}
 ): Uint8Array {
   const sei = nal(0x06, Uint8Array.of(0x05, 0x01, 0x80), 3);
   return concat(
@@ -162,17 +211,51 @@ function rawUnitStream(
           ? {}
           : { fixedFrameRate: options.fixedFrameRate })
       }),
-      pps: makePps(),
+      pps: makePps(options.picInitQpMinus26 === undefined
+        ? {}
+        : { picInitQpMinus26: options.picInitQpMinus26 }),
       // In normal FFmpeg output SEI follows PPS and precedes the IDR.
-      slices: [sei, makeAccessUnit({ idr: true, frameNum: 0 }).bytes]
+      slices: [sei, makeSlice({
+        idr: true,
+        frameNum: 0,
+        sliceType: "I",
+        sliceQpDelta: options.sliceQpDeltas?.[0] ?? 0
+      })]
     }).bytes,
     makeAccessUnit({
       idr: false,
       frameNum: 1,
       aud: makeAud(1),
-      slices: [sei, makeAccessUnit({ idr: false, frameNum: 1 }).bytes]
+      slices: [sei, makeSlice({
+        idr: false,
+        frameNum: 1,
+        sliceType: "P",
+        sliceQpDelta: options.sliceQpDeltas?.[1] ?? 0
+      })]
     }).bytes
   );
+}
+
+function rawLongUnitStream(frameCount: number): Uint8Array {
+  const sei = nal(0x06, Uint8Array.of(0x05, 0x01, 0x80), 3);
+  const parts: Uint8Array[] = [makeAccessUnit({
+    idr: true,
+    frameNum: 0,
+    aud: makeAud(0),
+    sps: makeSps({ compatibility: 0xc0, bt709Limited: true }),
+    pps: makePps(),
+    slices: [sei, makeAccessUnit({ idr: true, frameNum: 0 }).bytes]
+  }).bytes];
+  for (let frameIndex = 1; frameIndex < frameCount; frameIndex += 1) {
+    const frameNum = frameIndex % 16;
+    parts.push(makeAccessUnit({
+      idr: false,
+      frameNum,
+      aud: makeAud(1),
+      slices: [sei, makeAccessUnit({ idr: false, frameNum }).bytes]
+    }).bytes);
+  }
+  return concat(...parts);
 }
 
 function profile(): AvcConstrainedBaselineProfile {
@@ -183,7 +266,8 @@ function profile(): AvcConstrainedBaselineProfile {
     averageBitrate: 1_000_000,
     peakBitrate: 2_000_000,
     cpbBufferBits: 2_000_000,
-    requireBt709LimitedRange: true
+    requireBt709LimitedRange: true,
+    quantizationPolicy: "fixed-qp26-v0"
   };
 }
 

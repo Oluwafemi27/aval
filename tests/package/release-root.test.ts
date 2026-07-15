@@ -8,7 +8,7 @@ import { collectSelfContainedReportSet } from "../../scripts/release/release-rep
 
 describe("self-contained release report root", () => {
   it("relocates every reference inside the release root and binds summaries transitively", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-release-root-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-release-root-"));
     try {
       const reports = join(root, "reports");
       const profile = join(reports, "profile-a");
@@ -39,7 +39,7 @@ describe("self-contained release report root", () => {
   });
 
   it("rejects unreferenced bytes and reference-root escapes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-release-orphan-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-release-orphan-"));
     try {
       const reports = join(root, "reports");
       await mkdir(reports);

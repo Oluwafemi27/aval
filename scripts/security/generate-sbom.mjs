@@ -25,9 +25,9 @@ const document = {
   spdxVersion: "SPDX-2.3",
   dataLicense: "CC0-1.0",
   SPDXID: "SPDXRef-DOCUMENT",
-  name: "rendered-motion-workspace-1.0.0",
-  documentNamespace: `https://spdx.org/spdxdocs/rendered-motion-workspace-1.0.0-${createHash("sha256").update(lockBytes).digest("hex")}`,
-  creationInfo: { created: deterministicCreatedAt(), creators: ["Tool: rendered-motion-workspace-sbom-v1"] },
+  name: "aval-workspace-1.0.0",
+  documentNamespace: `https://spdx.org/spdxdocs/aval-workspace-1.0.0-${createHash("sha256").update(lockBytes).digest("hex")}`,
+  creationInfo: { created: deterministicCreatedAt(), creators: ["Tool: aval-workspace-sbom-v1"] },
   packages,
   files: [],
   relationships: packages.map((item) => ({ spdxElementId: "SPDXRef-DOCUMENT", relationshipType: "DESCRIBES", relatedSpdxElement: item.SPDXID }))

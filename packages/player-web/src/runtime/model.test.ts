@@ -212,6 +212,7 @@ describe("runtime model boundary", () => {
       "readiness-failed",
       "preparation-timeout",
       "animation-failure",
+      "fallback-failure",
       "visibility-suspended",
       "decoder-queued"
     ]);
@@ -231,6 +232,7 @@ describe("runtime model boundary", () => {
       "readiness-failed": "sticky",
       "preparation-timeout": "sticky",
       "animation-failure": "sticky",
+      "fallback-failure": "sticky",
       "visibility-suspended": "transient",
       "decoder-queued": "transient"
     });
@@ -308,20 +310,12 @@ describe("runtime model boundary", () => {
       "quarantine",
       "blob-assembly",
       "verified-unit",
-      "verified-static",
       "worker-transfer",
       "decoder-output",
       "persistent-animation",
       "streaming-texture",
       "frame-staging",
-      "png-copy",
-      "png-zlib",
-      "png-scratch",
-      "decoded-static-cache",
-      "current-static-surface",
-      "incoming-static-surface",
-      "animated-canvas-backing",
-      "static-canvas-backing"
+      "animated-canvas-backing"
     ]);
     expect(Object.isFrozen(RUNTIME_TRANSPORT_MODES)).toBe(true);
     expect(Object.isFrozen(RUNTIME_BLOB_RESIDENCY_STATES)).toBe(true);

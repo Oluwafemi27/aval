@@ -7,8 +7,8 @@ slice
 
 **Authority:**
 
-- [Web Rendered Motion Format Design](2026-07-11-web-rendered-motion-format-design.md)
-- [Web Rendered Motion Implementation Plan](../plans/2026-07-11-web-rendered-motion-implementation.md)
+- [AVAL Format Design](2026-07-11-aval-format-design.md)
+- [AVAL Implementation Plan](../plans/2026-07-11-aval-implementation.md)
 - [M5.5 Integrated Scheduler and Readiness Design](2026-07-12-m55-integrated-scheduler-readiness-design.md)
 - [M6 Transparency and Static Fallback Design](2026-07-12-m6-transparency-static-fallback-design.md)
 - [M7 Loader, Integrity, and Resource Manager Design](2026-07-12-m7-loader-integrity-resource-manager-design.md)
@@ -40,7 +40,7 @@ M9 proves four different things without collapsing them into one claim:
 
 The `1.0.0` package version stabilizes the documented JavaScript, TypeScript,
 custom-element, CLI, project-file, and diagnostic contracts. It does not
-change the compiled wire format: `.rma` remains version `0.1`, and the editable
+change the compiled wire format: `.avl` remains version `0.1`, and the editable
 compiler project remains version `0.2`. Package semver, project schema version,
 and wire-format version are independent version spaces.
 
@@ -98,14 +98,14 @@ timestamps to be mislabeled as scan-out evidence.
 
 The release set is:
 
-- `@rendered-motion/graph`;
-- `@rendered-motion/format`;
-- `@rendered-motion/compiler`;
-- `@rendered-motion/player-web`; and
-- `@rendered-motion/element`.
+- `@aval/graph`;
+- `@aval/format`;
+- `@aval/compiler`;
+- `@aval/player-web`; and
+- `@aval/element`.
 
-M9 resolves the M8 prototype naming gate: the descriptive scope and default
-`rendered-motion` tag become the stable 1.0 names unless one coordinated naming
+M9 resolves the M8 prototype naming gate: the package scope and default
+`aval-player` tag become the stable 1.0 names unless one coordinated naming
 change lands before the final candidate is built. Public
 packages use synchronized versions and exact internal package dependencies for
 the 1.0 line, so an untested mixture cannot be installed silently. The root

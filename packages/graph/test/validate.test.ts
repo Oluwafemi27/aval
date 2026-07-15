@@ -136,7 +136,6 @@ describe("validateMotionGraphDefinition", () => {
     const sharedStatic = simpleGraph();
     sharedStatic.states[1] = {
       ...sharedStatic.states[1]!,
-      staticFrameId: "idle-static"
     };
     expect(() => validateMotionGraphDefinition(sharedStatic)).not.toThrow();
 
@@ -445,12 +444,17 @@ describe("validateMotionGraphDefinition", () => {
     };
     expectInvalid(wrongContinuity, /must declare continuity exact-reverse/);
 
-    const tooLong = reversibleGraph();
-    tooLong.edges[0] = replaceReversible(tooLong.edges[0]!, {
-      frameCount: GRAPH_LIMITS.maxReversibleFrames + 1,
+    const formerlyTooLong = reversibleGraph();
+    formerlyTooLong.edges[0] = replaceReversible(formerlyTooLong.edges[0]!, {
+      frameCount: 25,
       direction: "forward"
     });
-    expectInvalid(tooLong, /frameCount must be at most 24/);
+    formerlyTooLong.edges[1] = replaceReversible(formerlyTooLong.edges[1]!, {
+      frameCount: 25,
+      direction: "reverse",
+      reverseOf: "idle-to-hover"
+    });
+    expect(() => validateMotionGraphDefinition(formerlyTooLong)).not.toThrow();
   });
 
   it("prevents illegal animation-unit aliases", () => {
@@ -584,7 +588,6 @@ function state(id: string, kind: GraphBodyKind): GraphStateDefinition {
   const frameCount = kind === "held" ? 1 : 4;
   return {
     id,
-    staticFrameId: `${id}-static`,
     body: {
       unitId: `${id}-body`,
       kind,

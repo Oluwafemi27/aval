@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { validateIntegratedContentTickContext } from "./integrated-player-support.js";
+import {
+  raceIntegratedAbort,
+  validateIntegratedContentTickContext
+} from "./integrated-player-support.js";
 
 describe("integrated content tick timing validation", () => {
   it.each([
@@ -26,5 +29,34 @@ describe("integrated content tick timing validation", () => {
       callbackStartMicroseconds: 0,
       eligibleAnimationFrameOrdinal: 1
     })).not.toThrow();
+  });
+});
+
+describe("integrated abort racing", () => {
+  it("observes an operation created before an already-aborted signal is checked", async () => {
+    const reason = new DOMException("superseded", "AbortError");
+    const controller = new AbortController();
+    controller.abort(reason);
+    const operation = Promise.reject<void>(reason);
+    const originalThen = operation.then.bind(operation);
+    let rejectionObserved = false;
+    Object.defineProperty(operation, "then", {
+      configurable: true,
+      value: (
+        onFulfilled?: ((value: void) => unknown) | null,
+        onRejected?: ((error: unknown) => unknown) | null
+      ) => {
+        if (typeof onRejected === "function") rejectionObserved = true;
+        return originalThen(onFulfilled, onRejected);
+      }
+    });
+
+    try {
+      await expect(raceIntegratedAbort(operation, controller.signal))
+        .rejects.toBe(reason);
+      expect(rejectionObserved).toBe(true);
+    } finally {
+      void operation.catch(() => undefined);
+    }
   });
 });

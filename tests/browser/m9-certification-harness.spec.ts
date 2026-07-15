@@ -6,13 +6,13 @@ test("harness exports exact public trace and worker-output evidence without inve
   const banner = page.locator("[data-certification-banner]");
   await expect(banner).toContainText("functional engine run");
   await expect(banner).toContainText("not branded-browser or observed-display certification");
-  await page.waitForFunction(() => "renderedMotionCertification" in window);
+  await page.waitForFunction(() => "avalCertification" in window);
   const result = await page.evaluate(async () => {
-    const api = (window as unknown as { renderedMotionCertification: {
+    const api = (window as unknown as { avalCertification: {
       ready: Promise<void>;
       runPublicHarness(options: Record<string, number>): Promise<Record<string, unknown>>;
       getLastExport(): { sha256: string; canonicalJson: string; bytes: Uint8Array } | null;
-    } }).renderedMotionCertification;
+    } }).avalCertification;
     await api.ready;
     const report = await api.runPublicHarness({
       // Route-volume and route-class coverage are exercised by the dedicated

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content="A local end-user example for the AVAL web component.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22%23171712%22/><path d=%22M16 7a9 9 0 1 0 9 9%22 fill=%22none%22 stroke=%22%23dff264%22 stroke-width=%224%22/></svg>">
+    <title>AVAL · End-user playground</title>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="intro">
+        <div class="wordmark">
+          <span class="wordmark-mark" aria-hidden="true"></span>
+          AVAL
+        </div>
+        <div class="intro-copy">
+          <p class="eyebrow">Local consumer playground</p>
+          <h1>A motion asset that behaves like interface.</h1>
+          <p class="lede">
+            One file contains the loop, interaction states, and reversible transition.
+            Hover, focus, or use the control to try it.
+          </p>
+        </div>
+      </header>
+
+      <section class="demo-card" aria-labelledby="demo-title">
+        <div class="stage">
+          <span class="stage-label">Live asset</span>
+          <button
+            class="motion-target"
+            id="favorite-control"
+            type="button"
+            aria-label="Toggle the favorite animation"
+            aria-pressed="false"
+          >
+            <aval-player
+              id="favorite-motion"
+              src="/favorite.avl"
+              state="idle"
+              interaction-for="favorite-control"
+              width="48"
+              height="48"
+              aria-hidden="true"
+            >
+              <img
+                slot="fallback"
+                src="/favorite.png"
+                alt=""
+                width="48"
+                height="48"
+              >
+            </aval-player>
+          </button>
+          <p class="stage-hint">Hover or focus the icon</p>
+        </div>
+
+        <div class="demo-copy">
+          <p class="eyebrow">Public web component</p>
+          <h2 id="demo-title">Favorite interaction</h2>
+          <p class="description">
+            This is ordinary HTML backed by a checked-in <code>.avl</code> asset.
+            The host-owned PNG stays available when the animated runtime is unsupported.
+          </p>
+
+          <div class="runtime-line" aria-live="polite" aria-atomic="true">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="runtime-status" data-status="loading">Preparing motion…</span>
+          </div>
+
+          <button
+            class="state-toggle"
+            id="toggle-state"
+            type="button"
+            aria-pressed="false"
+            disabled
+          >
+            <span>Toggle favorite</span>
+            <span class="button-arrow" aria-hidden="true">↗</span>
+          </button>
+        </div>
+      </section>
+
+      <footer class="footer-note">
+        <span>Workspace packages · real compiled asset</span>
+        <code>npm run playground</code>
+      </footer>
+    </main>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

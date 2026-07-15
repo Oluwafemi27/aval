@@ -4,7 +4,7 @@ import type {
   RuntimeFailure,
   RuntimeReadinessResult,
   RuntimeVisibilityState
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import type {
   BrowserRuntimeFactoryInput,
@@ -12,11 +12,11 @@ import type {
   BrowserRuntimePlayer
 } from "./browser-runtime-factory.js";
 import { DomEventBridge, type DomEventBridgeStage } from "./dom-event-bridge.js";
-import { RenderedMotionNotReadyError, renderedMotionAbortError } from "./errors.js";
+import { AvalNotReadyError, avalAbortError } from "./errors.js";
 import { isExpectedAbort } from "./public-failure.js";
 import { waitForPublicOperation } from "./public-waits.js";
 import { nextElementSequence } from "./element-sequence.js";
-import type { RenderedMotionCleanupReceipt } from "./public-types.js";
+import type { AvalCleanupReceipt } from "./public-types.js";
 import { RuntimeAcquisitionCleanupError } from "./runtime-acquisition-error.js";
 
 const RUNTIME_BOOTSTRAP_TIMEOUT_MS = 30_000;
@@ -30,7 +30,7 @@ export interface ElementAssetGenerationHost {
   prepared(result: Readonly<RuntimeReadinessResult>): void;
   failure(error: unknown, fatal: boolean): void;
   underflow(count: number): void;
-  cleanup(receipt: Readonly<RenderedMotionCleanupReceipt>): void;
+  cleanup(receipt: Readonly<AvalCleanupReceipt>): void;
 }
 
 export type ElementBrowserRuntimeFactory = (
@@ -50,12 +50,14 @@ export class ElementAssetGeneration {
   #runtimeDisposal: Promise<void> | null = null;
   #acquisitionDisposal: Promise<void> | null = null;
   #acquisitionCleanup: RuntimeAcquisitionCleanupError | null = null;
-  #cleanupReceipt: Readonly<RenderedMotionCleanupReceipt> | null = null;
+  #cleanupReceipt: Readonly<AvalCleanupReceipt> | null = null;
   #preparePromise: Promise<RuntimeReadinessResult> | null = null;
   #readyResult: Readonly<RuntimeReadinessResult> | null = null;
   #disposal: Promise<void> | null = null;
   #terminal = false;
   #underflows = 0;
+  #motionPolicy: MotionPolicy;
+  #hostReducedMotion: boolean;
 
   public constructor(input: Readonly<
     Omit<BrowserRuntimeFactoryInput,
@@ -73,6 +75,8 @@ export class ElementAssetGeneration {
     this.generation = input.generation;
     this.#elementGeneration = input.elementGeneration;
     this.#host = input.host;
+    this.#motionPolicy = input.motionPolicy;
+    this.#hostReducedMotion = input.hostReducedMotion;
     this.#bridge = new DomEventBridge({
       target: input.host.eventTarget,
       generation: input.generation,
@@ -92,6 +96,9 @@ export class ElementAssetGeneration {
       motionPolicy: input.motionPolicy,
       hostReducedMotion: input.hostReducedMotion,
       initialVisibility: input.initialVisibility,
+      ...(input.initialPresentation === undefined
+        ? {}
+        : { initialPresentation: input.initialPresentation }),
       signal: this.#controller.signal,
       eventSink: (event) => this.#publishRuntime(event),
       diagnosticsSink: (failure) => this.#diagnostic(failure),
@@ -105,7 +112,7 @@ export class ElementAssetGeneration {
       this.#createdRuntime = runtime;
       if (this.#terminal) {
         await this.#disposeRuntime(runtime);
-        throw renderedMotionAbortError("asset generation was superseded");
+        throw avalAbortError("asset generation was superseded");
       }
       this.#runtime = runtime;
       try {
@@ -148,7 +155,7 @@ export class ElementAssetGeneration {
   public prepare(
     options: Readonly<{ signal?: AbortSignal; timeoutMs?: number }> = {}
   ): Promise<RuntimeReadinessResult> {
-    if (this.#terminal) return Promise.reject(renderedMotionAbortError());
+    if (this.#terminal) return Promise.reject(avalAbortError());
     if (this.#readyResult !== null) {
       return waitForPublicOperation(Promise.resolve(this.#readyResult), options);
     }
@@ -157,7 +164,7 @@ export class ElementAssetGeneration {
         signal: this.#controller.signal,
         timeoutMs: 30_000
       })).then((result) => {
-        if (this.#terminal) throw renderedMotionAbortError();
+        if (this.#terminal) throw avalAbortError();
         this.#readyResult = result;
         this.#host.prepared(result);
         return result;
@@ -170,7 +177,7 @@ export class ElementAssetGeneration {
 
   public async setState(state: string): Promise<void> {
     const runtime = this.#runtime;
-    if (runtime === null || this.#terminal) throw new RenderedMotionNotReadyError();
+    if (runtime === null || this.#terminal) throw new AvalNotReadyError();
     await runtime.requestState(state);
   }
 
@@ -191,9 +198,9 @@ export class ElementAssetGeneration {
   }
 
   public async resume(): Promise<void> {
-    if (this.#terminal) throw renderedMotionAbortError();
+    if (this.#terminal) throw avalAbortError();
     const runtime = await this.#runtimePromise;
-    if (this.#terminal) throw renderedMotionAbortError();
+    if (this.#terminal) throw avalAbortError();
     await runtime.resume();
   }
 
@@ -202,11 +209,22 @@ export class ElementAssetGeneration {
     hostReducedMotion: boolean | null
   ): Promise<void> {
     if (this.#terminal) return;
+    if (
+      policy === this.#motionPolicy &&
+      (hostReducedMotion === null || hostReducedMotion === this.#hostReducedMotion)
+    ) return;
     const runtime = await this.#runtimePromise;
     if (this.#terminal) return;
-    await runtime.setMotionPolicy(policy);
-    if (hostReducedMotion !== null) {
+    if (policy !== this.#motionPolicy) {
+      await runtime.setMotionPolicy(policy);
+      this.#motionPolicy = policy;
+    }
+    if (
+      hostReducedMotion !== null &&
+      hostReducedMotion !== this.#hostReducedMotion
+    ) {
       await runtime.setHostReducedMotion(hostReducedMotion);
+      this.#hostReducedMotion = hostReducedMotion;
     }
   }
 
@@ -229,7 +247,7 @@ export class ElementAssetGeneration {
     return this.#runtime;
   }
 
-  public cleanupReceipt(): Readonly<RenderedMotionCleanupReceipt> | null {
+  public cleanupReceipt(): Readonly<AvalCleanupReceipt> | null {
     return this.#cleanupReceipt;
   }
 
@@ -237,7 +255,7 @@ export class ElementAssetGeneration {
     if (this.#disposal !== null) return this.#disposal;
     this.#terminal = true;
     this.#bridge.close();
-    this.#controller.abort(renderedMotionAbortError("asset generation disposed"));
+    this.#controller.abort(avalAbortError("asset generation disposed"));
     const operation = (async () => {
       const terminal = (async () => {
         let cleanupError: unknown = null;
@@ -266,12 +284,12 @@ export class ElementAssetGeneration {
           this.generation
         ));
         throw new Error(
-          "rendered-motion runtime acquisition did not settle during cleanup"
+          "aval-player runtime acquisition did not settle during cleanup"
         );
       }
       await terminal;
       if (this.#cleanupReceipt?.completed !== true) {
-        throw new Error("rendered-motion runtime cleanup receipt is incomplete");
+        throw new Error("aval-player runtime cleanup receipt is incomplete");
       }
     })();
     this.#disposal = operation;
@@ -323,7 +341,7 @@ export class ElementAssetGeneration {
     return operation;
   }
 
-  #publishCleanup(receipt: Readonly<RenderedMotionCleanupReceipt>): void {
+  #publishCleanup(receipt: Readonly<AvalCleanupReceipt>): void {
     if (
       this.#cleanupReceipt?.completed === true &&
       receipt.completed === false
@@ -355,7 +373,7 @@ async function createLazyBrowserRuntimePlayer(
 
 export class RuntimeModuleImportError extends Error {
   public constructor() {
-    super("rendered-motion runtime module could not be loaded");
+    super("aval-player runtime module could not be loaded");
     this.name = "RuntimeModuleImportError";
   }
 }
@@ -384,11 +402,11 @@ class RuntimeBootstrapTimeoutError extends Error {
   public readonly failure: Readonly<RuntimeFailure>;
 
   public constructor() {
-    super("rendered-motion runtime bootstrap timed out");
+    super("aval-player runtime bootstrap timed out");
     this.name = "RuntimeBootstrapTimeoutError";
     this.failure = Object.freeze({
       code: "watchdog-timeout",
-      message: "rendered-motion runtime bootstrap timed out",
+      message: "aval-player runtime bootstrap timed out",
       context: Object.freeze({ operation: "bootstrap" })
     });
   }
@@ -414,7 +432,7 @@ async function settleWithin(
 function incompleteAcquisitionReceipt(
   elementGeneration: number,
   sourceGeneration: number
-): Readonly<RenderedMotionCleanupReceipt> {
+): Readonly<AvalCleanupReceipt> {
   return Object.freeze({
     elementGeneration,
     sourceGeneration,
@@ -452,7 +470,7 @@ function incompleteAcquisitionReceipt(
 function ownerlessAcquisitionReceipt(
   elementGeneration: number,
   sourceGeneration: number
-): Readonly<RenderedMotionCleanupReceipt> {
+): Readonly<AvalCleanupReceipt> {
   return Object.freeze({
     ...incompleteAcquisitionReceipt(elementGeneration, sourceGeneration),
     completed: true,

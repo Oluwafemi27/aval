@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 
 describe("protected workflow input authority", () => {
   it("accepts an exact default-branch ancestor and rejects shell/control substitutions", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-workflow-input-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-workflow-input-"));
     try {
       await git(root, "init", "-q", "-b", "main");
       await git(root, "config", "user.email", "workflow@example.invalid");

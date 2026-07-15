@@ -1,4 +1,4 @@
-# Rendered Motion 1.0.0 certification index
+# AVAL 1.0.0 certification index
 
 No named-profile run has been published yet.
 

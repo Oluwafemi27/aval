@@ -5,56 +5,56 @@ import type {
   RuntimeReadiness,
   RuntimeReadinessResult,
   StaticReason
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
-export const RENDERED_MOTION_TAG_NAME = "rendered-motion" as const;
-export const RENDERED_MOTION_ELEMENT_API_MAJOR = 1 as const;
+export const AVAL_TAG_NAME = "aval-player" as const;
+export const AVAL_ELEMENT_API_MAJOR = 1 as const;
 
-export type RenderedMotionAutoplay = "visible" | "manual";
-export type RenderedMotionBindings = "auto" | "none";
-export type RenderedMotionCrossOrigin = "anonymous" | "use-credentials";
-export type RenderedMotionFit = "contain" | "cover" | "fill" | "none";
-export type RenderedMotionMotion = MotionPolicy;
-export type RenderedMotionMode = "animated" | "static" | null;
+export type AvalAutoplay = "visible" | "manual";
+export type AvalBindings = "auto" | "none";
+export type AvalCrossOrigin = "anonymous" | "use-credentials";
+export type AvalFit = "contain" | "cover" | "fill" | "none";
+export type AvalMotion = MotionPolicy;
+export type AvalMode = "animated" | "static" | null;
 
-export interface RenderedMotionPrepareOptions {
+export interface AvalPrepareOptions {
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
 }
 
-export interface RenderedMotionPublicFailure {
-  readonly code: RuntimeFailureCode | RenderedMotionElementFailureCode;
+export interface AvalPublicFailure {
+  readonly code: RuntimeFailureCode | AvalElementFailureCode;
   readonly message: string;
   readonly operation: string | null;
 }
 
-export type RenderedMotionElementFailureCode =
+export type AvalElementFailureCode =
   | "invalid-configuration"
   | "unsupported-browser"
   | "interaction-target-unavailable"
   | "element-cleanup-incomplete";
 
-export interface RenderedMotionReadinessChangeDetail {
+export interface AvalReadinessChangeDetail {
   readonly generation: number;
   readonly from: RuntimeReadiness;
   readonly to: RuntimeReadiness;
   readonly reason?: StaticReason;
 }
 
-export interface RenderedMotionRequestedStateChangeDetail {
+export interface AvalRequestedStateChangeDetail {
   readonly generation: number;
   readonly from: string;
   readonly to: string;
   readonly sequence: number;
 }
 
-export interface RenderedMotionVisualStateChangeDetail {
+export interface AvalVisualStateChangeDetail {
   readonly generation: number;
   readonly from: string;
   readonly to: string;
 }
 
-export interface RenderedMotionTransitionDetail {
+export interface AvalTransitionDetail {
   readonly generation: number;
   readonly edge: string;
   readonly from: string;
@@ -62,51 +62,51 @@ export interface RenderedMotionTransitionDetail {
   readonly sequence?: number;
 }
 
-export interface RenderedMotionUnderflowDetail {
+export interface AvalUnderflowDetail {
   readonly generation: number;
   readonly incident: number;
   readonly heldPresentationOrdinal: string;
   readonly cumulativeCount: number;
 }
 
-export interface RenderedMotionFallbackDetail {
+export interface AvalFallbackDetail {
   readonly generation: number;
   readonly reason: StaticReason;
   readonly requestedState: string | null;
   readonly visualState: string | null;
 }
 
-export interface RenderedMotionErrorDetail {
+export interface AvalErrorDetail {
   readonly generation: number;
-  readonly failure: Readonly<RenderedMotionPublicFailure>;
+  readonly failure: Readonly<AvalPublicFailure>;
   readonly fatal: boolean;
 }
 
-export interface RenderedMotionElementEventMap {
-  readonly readinesschange: CustomEvent<Readonly<RenderedMotionReadinessChangeDetail>>;
-  readonly requestedstatechange: CustomEvent<Readonly<RenderedMotionRequestedStateChangeDetail>>;
-  readonly visualstatechange: CustomEvent<Readonly<RenderedMotionVisualStateChangeDetail>>;
-  readonly transitionstart: CustomEvent<Readonly<RenderedMotionTransitionDetail>>;
-  readonly transitionend: CustomEvent<Readonly<RenderedMotionTransitionDetail>>;
-  readonly underflow: CustomEvent<Readonly<RenderedMotionUnderflowDetail>>;
-  readonly fallback: CustomEvent<Readonly<RenderedMotionFallbackDetail>>;
-  readonly error: CustomEvent<Readonly<RenderedMotionErrorDetail>>;
+export interface AvalElementEventMap {
+  readonly readinesschange: CustomEvent<Readonly<AvalReadinessChangeDetail>>;
+  readonly requestedstatechange: CustomEvent<Readonly<AvalRequestedStateChangeDetail>>;
+  readonly visualstatechange: CustomEvent<Readonly<AvalVisualStateChangeDetail>>;
+  readonly transitionstart: CustomEvent<Readonly<AvalTransitionDetail>>;
+  readonly transitionend: CustomEvent<Readonly<AvalTransitionDetail>>;
+  readonly underflow: CustomEvent<Readonly<AvalUnderflowDetail>>;
+  readonly fallback: CustomEvent<Readonly<AvalFallbackDetail>>;
+  readonly error: CustomEvent<Readonly<AvalErrorDetail>>;
 }
 
-export interface RenderedMotionTraceRecord {
+export interface AvalTraceRecord {
   readonly index: number;
   readonly kind: string;
   readonly generation: number;
 }
 
-export interface RenderedMotionRuntimeMediaCursor {
+export interface AvalRuntimeMediaCursor {
   readonly path: string;
   readonly unit: string;
   readonly unitInstance: number;
   readonly localFrame: number;
 }
 
-export interface RenderedMotionRuntimeTraceRecord {
+export interface AvalRuntimeTraceRecord {
   readonly index: number;
   readonly kind: "operation" | "content-tick" | "readiness" | "fallback" | "cleanup";
   readonly presentationOrdinal: string | null;
@@ -125,15 +125,15 @@ export interface RenderedMotionRuntimeTraceRecord {
   readonly scheduler: Readonly<{
     readonly generation: number | null;
     readonly activePath: string | null;
-    readonly sourceCursor: Readonly<RenderedMotionRuntimeMediaCursor> | null;
-    readonly submittedCursor: Readonly<RenderedMotionRuntimeMediaCursor> | null;
-    readonly decodedCursor: Readonly<RenderedMotionRuntimeMediaCursor> | null;
-    readonly displayedCursor: Readonly<RenderedMotionRuntimeMediaCursor> | null;
+    readonly sourceCursor: Readonly<AvalRuntimeMediaCursor> | null;
+    readonly submittedCursor: Readonly<AvalRuntimeMediaCursor> | null;
+    readonly decodedCursor: Readonly<AvalRuntimeMediaCursor> | null;
+    readonly displayedCursor: Readonly<AvalRuntimeMediaCursor> | null;
     readonly ringSize: number;
     readonly ringCapacity: number;
     readonly smoothSession: boolean;
   }>;
-  readonly submitted: readonly Readonly<RenderedMotionRuntimeMediaCursor>[];
+  readonly submitted: readonly Readonly<AvalRuntimeMediaCursor>[];
   readonly media: Readonly<Record<string, unknown>> | null;
   readonly readbackTag: string | null;
   readonly readiness: RuntimeReadiness;
@@ -147,7 +147,7 @@ export interface RenderedMotionRuntimeTraceRecord {
   }>;
 }
 
-export interface RenderedMotionDiagnosticsCounters {
+export interface AvalDiagnosticsCounters {
   readonly prepare: number;
   readonly sourceReplacement: number;
   readonly pause: number;
@@ -164,7 +164,7 @@ export interface RenderedMotionDiagnosticsCounters {
  * share the page runtime; page-scoped totals are therefore reported
  * separately.
  */
-export interface RenderedMotionCleanupReceipt {
+export interface AvalCleanupReceipt {
   readonly elementGeneration: number;
   readonly sourceGeneration: number;
   readonly completed: boolean;
@@ -197,7 +197,7 @@ export interface RenderedMotionCleanupReceipt {
   readonly pageParkedDecoderTicketCount: number;
 }
 
-export interface RenderedMotionElementOwnershipSnapshot {
+export interface AvalElementOwnershipSnapshot {
   readonly listenerCount: number;
   readonly observerCount: number;
   readonly brokerSubscriptionCount: number;
@@ -209,13 +209,13 @@ export interface RenderedMotionElementOwnershipSnapshot {
   readonly completed: boolean;
 }
 
-export interface RenderedMotionTerminalCleanupProof {
+export interface AvalTerminalCleanupProof {
   readonly completed: boolean;
   readonly sourceCleanupCompleted: boolean;
-  readonly elementOwnership: Readonly<RenderedMotionElementOwnershipSnapshot>;
+  readonly elementOwnership: Readonly<AvalElementOwnershipSnapshot>;
 }
 
-export interface RenderedMotionDiagnostics {
+export interface AvalDiagnostics {
   readonly elementGeneration: number;
   readonly sourceGeneration: number;
   readonly inputGeneration: number;
@@ -225,7 +225,7 @@ export interface RenderedMotionDiagnostics {
   readonly connected: boolean;
   readonly finalDisposed: boolean;
   readonly readiness: RuntimeReadiness;
-  readonly mode: RenderedMotionMode;
+  readonly mode: AvalMode;
   readonly assurance: "best-effort" | null;
   readonly staticReason: StaticReason | null;
   readonly requestedState: string | null;
@@ -236,15 +236,15 @@ export interface RenderedMotionDiagnostics {
   readonly stateNames: readonly string[];
   readonly eventNames: readonly string[];
   readonly inputBindings: readonly Readonly<BindingV01>[];
-  readonly configuredMotion: RenderedMotionMotion;
+  readonly configuredMotion: AvalMotion;
   readonly hostReducedMotion: boolean | null;
-  readonly autoplay: RenderedMotionAutoplay;
-  readonly fit: RenderedMotionFit | null;
-  readonly lastFailure: Readonly<RenderedMotionPublicFailure> | null;
-  readonly counters: Readonly<RenderedMotionDiagnosticsCounters>;
-  readonly cleanup: Readonly<RenderedMotionCleanupReceipt> | null;
-  readonly elementOwnership: Readonly<RenderedMotionElementOwnershipSnapshot>;
-  readonly terminalCleanup: Readonly<RenderedMotionTerminalCleanupProof> | null;
+  readonly autoplay: AvalAutoplay;
+  readonly fit: AvalFit | null;
+  readonly lastFailure: Readonly<AvalPublicFailure> | null;
+  readonly counters: Readonly<AvalDiagnosticsCounters>;
+  readonly cleanup: Readonly<AvalCleanupReceipt> | null;
+  readonly elementOwnership: Readonly<AvalElementOwnershipSnapshot>;
+  readonly terminalCleanup: Readonly<AvalTerminalCleanupProof> | null;
   readonly outstanding: Readonly<Record<string, number>>;
   readonly runtime: Readonly<{
     selectedRendition: string | null;
@@ -266,13 +266,13 @@ export interface RenderedMotionDiagnostics {
     contextRecoveryCount: number;
   }>;
   readonly motion: Readonly<{
-    configured: RenderedMotionMotion;
+    configured: AvalMotion;
     hostReducedMotion: boolean | null;
     effective: "reduce" | "full";
     actual: string | null;
   }>;
   readonly playIntent: Readonly<{
-    autoplay: RenderedMotionAutoplay;
+    autoplay: AvalAutoplay;
     manualPlaying: boolean;
     paused: boolean;
   }>;
@@ -287,7 +287,7 @@ export interface RenderedMotionDiagnostics {
     rebuildPending: boolean;
   }>;
   readonly presentation: Readonly<{
-    fit: RenderedMotionFit | null;
+    fit: AvalFit | null;
     cssWidth: number;
     cssHeight: number;
     backingWidth: number;
@@ -296,34 +296,33 @@ export interface RenderedMotionDiagnostics {
     effectiveDprY: number;
     resolutionScale: number;
     clampReasons: readonly string[];
-    staticAnimatedMappingEqual: boolean;
   }>;
-  readonly elementTrace?: readonly Readonly<RenderedMotionTraceRecord>[];
-  readonly runtimeTrace?: readonly Readonly<RenderedMotionRuntimeTraceRecord>[];
+  readonly elementTrace?: readonly Readonly<AvalTraceRecord>[];
+  readonly runtimeTrace?: readonly Readonly<AvalRuntimeTraceRecord>[];
 }
 
-export interface RenderedMotionElementAttributes {
+export interface AvalElementAttributes {
   readonly src?: string;
   readonly integrity?: string;
-  readonly crossorigin?: RenderedMotionCrossOrigin | "";
-  readonly motion?: RenderedMotionMotion;
-  readonly autoplay?: RenderedMotionAutoplay;
-  readonly fit?: RenderedMotionFit;
-  readonly bindings?: RenderedMotionBindings;
+  readonly crossorigin?: AvalCrossOrigin | "";
+  readonly motion?: AvalMotion;
+  readonly autoplay?: AvalAutoplay;
+  readonly fit?: AvalFit;
+  readonly bindings?: AvalBindings;
   readonly state?: string;
   readonly "interaction-for"?: string;
   readonly width?: number | `${number}`;
   readonly height?: number | `${number}`;
 }
 
-export interface RenderedMotionElement extends HTMLElement {
+export interface AvalElement extends HTMLElement {
   src: string;
   integrity: string;
-  crossOrigin: RenderedMotionCrossOrigin;
-  motion: RenderedMotionMotion;
-  autoplay: RenderedMotionAutoplay;
-  fit: RenderedMotionFit | null;
-  bindings: RenderedMotionBindings;
+  crossOrigin: AvalCrossOrigin;
+  motion: AvalMotion;
+  autoplay: AvalAutoplay;
+  fit: AvalFit | null;
+  bindings: AvalBindings;
   state: string | null;
   interactionFor: string;
   interactionTarget: Element | null;
@@ -331,7 +330,7 @@ export interface RenderedMotionElement extends HTMLElement {
   height: number | null;
 
   readonly readiness: RuntimeReadiness;
-  readonly mode: RenderedMotionMode;
+  readonly mode: AvalMode;
   readonly assurance: "best-effort" | null;
   readonly staticReason: StaticReason | null;
   readonly requestedState: string | null;
@@ -343,18 +342,18 @@ export interface RenderedMotionElement extends HTMLElement {
   readonly eventNames: readonly string[];
   readonly inputBindings: readonly Readonly<BindingV01>[];
 
-  prepare(options?: Readonly<RenderedMotionPrepareOptions>): Promise<RuntimeReadinessResult>;
+  prepare(options?: Readonly<AvalPrepareOptions>): Promise<RuntimeReadinessResult>;
   setState(name: string): Promise<void>;
   send(event: string): boolean;
   readyFor(state: string): boolean;
   pause(): void;
   resume(): Promise<void>;
-  getDiagnostics(options?: Readonly<{ readonly trace?: boolean }>): Readonly<RenderedMotionDiagnostics>;
+  getDiagnostics(options?: Readonly<{ readonly trace?: boolean }>): Readonly<AvalDiagnostics>;
   dispose(): Promise<void>;
 
-  addEventListener<K extends keyof RenderedMotionElementEventMap>(
+  addEventListener<K extends keyof AvalElementEventMap>(
     type: K,
-    listener: (this: RenderedMotionElement, event: RenderedMotionElementEventMap[K]) => unknown,
+    listener: (this: AvalElement, event: AvalElementEventMap[K]) => unknown,
     options?: boolean | AddEventListenerOptions
   ): void;
   addEventListener<K extends keyof HTMLElementEventMap>(
@@ -367,9 +366,9 @@ export interface RenderedMotionElement extends HTMLElement {
     listener: EventListenerOrEventListenerObject | null,
     options?: boolean | AddEventListenerOptions
   ): void;
-  removeEventListener<K extends keyof RenderedMotionElementEventMap>(
+  removeEventListener<K extends keyof AvalElementEventMap>(
     type: K,
-    listener: (this: RenderedMotionElement, event: RenderedMotionElementEventMap[K]) => unknown,
+    listener: (this: AvalElement, event: AvalElementEventMap[K]) => unknown,
     options?: boolean | EventListenerOptions
   ): void;
   removeEventListener<K extends keyof HTMLElementEventMap>(
@@ -384,13 +383,13 @@ export interface RenderedMotionElement extends HTMLElement {
   ): void;
 }
 
-export type RenderedMotionElementConstructor = CustomElementConstructor & {
-  readonly prototype: RenderedMotionElement;
+export type AvalElementConstructor = CustomElementConstructor & {
+  readonly prototype: AvalElement;
 };
 
 declare global {
   interface HTMLElementTagNameMap {
-    "rendered-motion": RenderedMotionElement;
+    "aval-player": AvalElement;
   }
 }
 

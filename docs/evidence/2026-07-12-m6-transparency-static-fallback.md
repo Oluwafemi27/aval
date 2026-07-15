@@ -96,9 +96,9 @@ The three M6 source projects and compiled assets are:
 
 | Fixture | Source-project SHA-256 | Asset bytes | Asset SHA-256 | Manifest SHA-256 |
 | --- | --- | ---: | --- | --- |
-| `opaque-odd.rma` | `6a7965c9674a47009c456b385b088c45b7c8ec8b5f3ca05ebff6f0dd47292fd3` | 9,344 | `47ee7c6b23323e89def9f1073057b7465c98b62a4dbe63f2dc038b565d72478f` | `433dadd9d2cbef304505ca742e76ba35f5cb5836b2a0d73dea289d3c4d3460f7` |
-| `packed-alpha-loop.rma` | `9d3d2d74cce19601e030708ac2621d7690601de0231ba5e1950ba11000b0dc22` | 9,064 | `98966b2b0ea32e66edb431d6d741e7abaf64b6cbeb1bf617133c4d5739d2c7ed` | `e0d8a05bd8b7dd136671ee5bdf0c23e78fe45c3b9d7f76e3d39434b0c52a7843` |
-| `packed-alpha-all-routes.rma` | `5d82ef90b04be6c52e06fc8fc0eb7fb215e16706d44dda11034f838bab17346f` | 37,968 | `aa66fbca787138b692e7fed691cbabec58dd9f9576b63b13d4ed9c69269d9a0f` | `37e526bda7a4e0f049d1d6f7ba1e50e45d25a8f4fea8e0b4b4ada355f82cae12` |
+| `opaque-odd.avl` | `6a7965c9674a47009c456b385b088c45b7c8ec8b5f3ca05ebff6f0dd47292fd3` | 9,344 | `47ee7c6b23323e89def9f1073057b7465c98b62a4dbe63f2dc038b565d72478f` | `433dadd9d2cbef304505ca742e76ba35f5cb5836b2a0d73dea289d3c4d3460f7` |
+| `packed-alpha-loop.avl` | `9d3d2d74cce19601e030708ac2621d7690601de0231ba5e1950ba11000b0dc22` | 9,064 | `98966b2b0ea32e66edb431d6d741e7abaf64b6cbeb1bf617133c4d5739d2c7ed` | `e0d8a05bd8b7dd136671ee5bdf0c23e78fe45c3b9d7f76e3d39434b0c52a7843` |
+| `packed-alpha-all-routes.avl` | `5d82ef90b04be6c52e06fc8fc0eb7fb215e16706d44dda11034f838bab17346f` | 37,968 | `aa66fbca787138b692e7fed691cbabec58dd9f9576b63b13d4ed9c69269d9a0f` | `37e526bda7a4e0f049d1d6f7ba1e50e45d25a8f4fea8e0b4b4ada355f82cae12` |
 
 The all-routes asset contains 14,503 encoded bytes and 14,904 strict-static
 bytes. A real compiler invocation, CLI validation, and CLI inspection produced
@@ -566,10 +566,10 @@ The final dry-run package inspections reported:
 
 | Package | Tarball bytes | Unpacked bytes | Files |
 | --- | ---: | ---: | ---: |
-| `@rendered-motion/graph` | 44,159 | 248,987 | 27 |
-| `@rendered-motion/format` | 135,099 | 617,900 | 93 |
-| `@rendered-motion/compiler` | 320,000 | 1,560,757 | 357 |
-| `@rendered-motion/player-web` | 453,548 | 2,350,023 | 216 |
+| `@aval/graph` | 44,159 | 248,987 | 27 |
+| `@aval/format` | 135,099 | 617,900 | 93 |
+| `@aval/compiler` | 320,000 | 1,560,757 | 357 |
+| `@aval/player-web` | 453,548 | 2,350,023 | 216 |
 
 Package inspection found no browser cache, FFmpeg scratch spool, absolute path,
 raw timing trace, source fixture, or unpacked asset introduced as an unintended
@@ -578,7 +578,7 @@ output; the other inspected packages contain their intended source/declaration
 surfaces. M9 still owns the final public publication and release-packaging
 claim.
 
-The real compiler rebuilt `packed-alpha-all-routes.rma` to 37,968 bytes with
+The real compiler rebuilt `packed-alpha-all-routes.avl` to 37,968 bytes with
 SHA-256 `aa66fbca787138b692e7fed691cbabec58dd9f9576b63b13d4ed9c69269d9a0f`;
 byte comparison against the checked fixture, CLI validation of all 60 access
 units/14 unit blobs/three strict statics, and CLI inspection all passed. Both

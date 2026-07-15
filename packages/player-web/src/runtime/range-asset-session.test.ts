@@ -3,7 +3,7 @@ import {
   parseFrontIndex,
   parseHeader,
   validateCompleteAsset
-} from "@rendered-motion/format";
+} from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -400,7 +400,7 @@ describe("entity-pinned range metadata session", () => {
   });
 
   it.each([
-    { url: "https://other.example.test/motion.rma", etag: '"entity-v1"' },
+    { url: "https://other.example.test/motion.avl", etag: '"entity-v1"' },
     { etag: '"entity-v2"' },
     { etag: null },
     { etag: 'W/"entity-v1"' }
@@ -429,7 +429,7 @@ describe("entity-pinned range metadata session", () => {
   it.each([
     { start: FORMAT_HEADER_LENGTH + 1 },
     { totalDelta: 1 },
-    { url: "https://other.example.test/motion.rma" },
+    { url: "https://other.example.test/motion.avl" },
     { etag: '"entity-v2"' },
     { contentEncoding: "gzip" }
   ] as const)("rejects invalid front-index response contract %#", async (change) => {
@@ -665,7 +665,7 @@ describe("entity-pinned range metadata session", () => {
   });
 });
 
-const FINAL_URL = "https://cdn.example.test/motion.rma";
+const FINAL_URL = "https://cdn.example.test/motion.avl";
 
 function request(integrity?: string, timeoutMs?: number) {
   return normalizeRuntimeAssetRequest({

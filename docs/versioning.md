@@ -1,7 +1,7 @@
 # Versioning
 
 Five public packages share one package version and use exact internal package
-dependencies. Package semver, `.rma` wire version, and compiler-project version
+dependencies. Package semver, `.avl` wire version, and compiler-project version
 are independent:
 
 | Space | 1.0 release value |

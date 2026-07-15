@@ -1,4 +1,4 @@
-export const RENDERED_MOTION_ATTRIBUTES = Object.freeze([
+export const AVAL_ATTRIBUTES = Object.freeze([
   "src",
   "integrity",
   "crossorigin",
@@ -12,10 +12,10 @@ export const RENDERED_MOTION_ATTRIBUTES = Object.freeze([
   "height"
 ] as const);
 
-export type RenderedMotionAttribute =
-  (typeof RENDERED_MOTION_ATTRIBUTES)[number];
+export type AvalAttribute =
+  (typeof AVAL_ATTRIBUTES)[number];
 
-export const RENDERED_MOTION_UPGRADE_PROPERTIES = Object.freeze([
+export const AVAL_UPGRADE_PROPERTIES = Object.freeze([
   "src",
   "integrity",
   "crossOrigin",

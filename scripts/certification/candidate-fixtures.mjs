@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 
-/** Extract trusted graph models from the exact `.rma` artifacts in a validated candidate. */
+/** Extract trusted graph models from the exact `.avl` artifacts in a validated candidate. */
 export async function loadCandidateFixtureAuthority(candidate, candidateManifestPath, certification, options = {}) {
   const format = await import(resolve("packages/format/dist/index.js"));
   const candidateRoot = dirname(resolve(candidateManifestPath));
@@ -17,7 +17,7 @@ export async function loadCandidateFixtureAuthority(candidate, candidateManifest
       if (Buffer.compare(bytes, certification.canonicalJsonBytes(model)) !== 0) throw new Error("candidate display pattern is not canonical JSON");
       displayPatterns.set(artifact.sha256, model);
     }
-    if (!artifact.path.startsWith("fixtures/") || !artifact.path.endsWith(".rma")) continue;
+    if (!artifact.path.startsWith("fixtures/") || !artifact.path.endsWith(".avl")) continue;
     const bytes = await readCandidateArtifact(candidateRoot, artifact, Math.min(maximumArtifactBytes, format.FORMAT_DEFAULT_BUDGETS.maxFileBytes), certification, options.verificationHook);
     const validated = format.validateCompleteAsset({ bytes });
     models.set(artifact.sha256, certification.runtimeFixtureModelFromManifest(validated.frontIndex.manifest));

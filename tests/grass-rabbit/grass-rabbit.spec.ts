@@ -1,0 +1,818 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import { expect, test } from "@playwright/test";
+import type { AvalElement } from "@aval/element";
+import { parseFrontIndex } from "@aval/format";
+
+const ASSET_PATH = resolve(
+  "examples/grass-rabbit/public/grass-rabbit.avl"
+);
+const PROJECT_PATH = resolve("examples/grass-rabbit/motion.json");
+const BUILD_REPORT_PATH = resolve(
+  "examples/grass-rabbit/public/grass-rabbit.avl.build.json"
+);
+
+test("preserves the authored 1280x720 graph and exact frame ranges", async () => {
+  const project = JSON.parse(await readFile(PROJECT_PATH, "utf8")) as {
+    sources: { path: string }[];
+    renditions: {
+      encoding: {
+        codec: string;
+        preset: string;
+        rateControl: {
+          mode: string;
+          crf: number;
+          maxBitrate: number;
+        };
+      };
+    }[];
+    units: { id: string; range: [number, number] }[];
+  };
+  const report = JSON.parse(await readFile(BUILD_REPORT_PATH, "utf8")) as {
+    warnings: string[];
+    buildDetails: {
+      accessUnits: number;
+      sources: {
+        frameCount: number;
+        normalization: { projectFrameCount: number };
+        inputFiles: { bytes: number; path: string; sha256: string }[];
+      }[];
+      continuity: { name: string; status: string }[];
+      invocations: {
+        arguments: string[];
+        operation: string;
+        tool: string;
+      }[];
+    };
+  };
+  const assetBytes = new Uint8Array(await readFile(ASSET_PATH));
+  const front = parseFrontIndex(assetBytes);
+  const manifest = front.manifest;
+  const units = new Map(manifest.units.map((unit) => [unit.id, unit]));
+  const rendition = manifest.renditions[0];
+
+  expect(manifest.canvas).toMatchObject({
+    width: 1280,
+    height: 720,
+    fit: "contain"
+  });
+  expect(manifest.frameRate).toEqual({ numerator: 24, denominator: 1 });
+  expect("staticFrames" in manifest).toBe(false);
+  expect("fallback" in manifest).toBe(false);
+  expect("staticBlobs" in front).toBe(false);
+  expect("statics" in report.buildDetails).toBe(false);
+  expect("staticPayloadBytes" in report.buildDetails).toBe(false);
+  expect(Math.max(...front.unitBlobs.map(({ offset, length }) =>
+    offset + length
+  ))).toBe(assetBytes.byteLength);
+  expect(project.sources.map(({ path }) => path)).toEqual([
+    "source/grass-test-with-intro.mp4"
+  ]);
+  expect(report.buildDetails.sources[0]?.inputFiles).toEqual([
+    expect.objectContaining({
+      bytes: 7_321_326,
+      path: "source/grass-test-with-intro.mp4",
+      sha256: "546acee64cc36c13f8765e215a0a20fb5742026c57364c59560fa86bb68988b1"
+    })
+  ]);
+  expect(report.buildDetails.sources[0]).toMatchObject({
+    frameCount: 311,
+    normalization: { projectFrameCount: 311 }
+  });
+  expect(report.buildDetails.accessUnits).toBe(311);
+  expect(project.renditions[0]?.encoding).toEqual({
+    codec: "h264",
+    preset: "veryslow",
+    rateControl: {
+      mode: "crf",
+      crf: 30,
+      maxBitrate: 10000000
+    }
+  });
+  const encodeInvocations = report.buildDetails.invocations.filter(
+    ({ operation }) => operation.startsWith("encode:avc.1x:")
+  );
+  expect(encodeInvocations).toHaveLength(5);
+  for (const invocation of encodeInvocations) {
+    expect(invocation.tool).toBe("ffmpeg");
+    expect(invocation.arguments).toEqual(expect.arrayContaining([
+      "-preset",
+      "veryslow",
+      "-crf",
+      "30",
+      "-maxrate",
+      "10000000",
+      "-bufsize",
+      "10000000"
+    ]));
+    expect(invocation.arguments).not.toContain("-b:v");
+  }
+  expect(report.buildDetails.continuity
+    .filter(({ status }) => status === "review")
+    .map(({ name }) => name))
+    .toEqual([]);
+  expect(report.buildDetails.continuity).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "intro intro", status: "pass" })
+  ]));
+  expect(report.warnings).toEqual([]);
+  expect(project.units.map(({ id, range }) => ({ id, range }))).toEqual([
+    { id: "intro", range: [0, 30] },
+    { id: "idle-loop", range: [30, 100] },
+    { id: "hover-in", range: [100, 167] },
+    { id: "hover-loop", range: [167, 263] },
+    { id: "hover-out", range: [263, 311] }
+  ]);
+  expect(rendition).toMatchObject({
+    id: "avc.1x",
+    profile: "avc-annexb-opaque-v1",
+    codedWidth: 1280,
+    codedHeight: 720,
+    alphaLayout: { colorRect: [0, 0, 1280, 720] }
+  });
+  expect(units.get("idle-loop")).toMatchObject({
+    kind: "body",
+    playback: "loop",
+    frameCount: 70
+  });
+  expect(units.get("intro")).toMatchObject({
+    id: "intro",
+    kind: "one-shot",
+    frameCount: 30
+  });
+  expect(units.get("hover-in")).toMatchObject({
+    kind: "body",
+    playback: "finite",
+    ports: [{ id: "default", entryFrame: 0, portalFrames: [66] }],
+    frameCount: 67
+  });
+  expect(units.get("hover-loop")).toMatchObject({
+    kind: "body",
+    playback: "loop",
+    frameCount: 96
+  });
+  expect(units.get("hover-out")).toMatchObject({
+    kind: "body",
+    playback: "finite",
+    ports: [{ id: "default", entryFrame: 0, portalFrames: [47] }],
+    frameCount: 48
+  });
+  expect(manifest.states).toEqual([
+    { id: "entering", bodyUnit: "hover-in" },
+    { id: "exiting", bodyUnit: "hover-out" },
+    { id: "hover", bodyUnit: "hover-loop" },
+    { id: "idle", bodyUnit: "idle-loop", initialUnit: "intro" }
+  ]);
+  expect(manifest.readiness).toEqual({
+    bootstrapUnits: ["hover-in", "idle-loop", "intro"],
+    immediateEdges: ["idle.entering"],
+    policy: "all-routes"
+  });
+  expect(manifest.edges.map((edge) => ({
+    id: edge.id,
+    from: edge.from,
+    to: edge.to,
+    trigger: edge.trigger,
+    start: edge.start.type
+  }))).toEqual([
+    {
+      id: "entering.exiting",
+      from: "entering",
+      to: "exiting",
+      trigger: { type: "event", name: "hover.leave" },
+      start: "finish"
+    },
+    {
+      id: "entering.hover",
+      from: "entering",
+      to: "hover",
+      trigger: { type: "completion" },
+      start: "finish"
+    },
+    {
+      id: "exiting.idle",
+      from: "exiting",
+      to: "idle",
+      trigger: { type: "completion" },
+      start: "finish"
+    },
+    {
+      id: "hover.exiting",
+      from: "hover",
+      to: "exiting",
+      trigger: { type: "event", name: "hover.leave" },
+      start: "portal"
+    },
+    {
+      id: "idle.entering",
+      from: "idle",
+      to: "entering",
+      trigger: { type: "event", name: "hover.enter" },
+      start: "portal"
+    }
+  ]);
+  expect(manifest.bindings).toEqual([
+    { source: "engagement.off", event: "hover.leave" },
+    { source: "engagement.on", event: "hover.enter" }
+  ]);
+});
+
+test("reports the authored phase that is actually displayed", async ({
+  page
+}) => {
+  await page.goto("/");
+  const motion = page.locator("#grass-rabbit");
+  const stateLabel = page.locator("#rabbit-state");
+
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as AvalElement
+    ).readiness), { timeout: 5_000 })
+    .toBe("interactiveReady");
+  await expect
+    .poll(() => motion.evaluate((node) => {
+      const trace = (node as AvalElement)
+        .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+      const presentation = trace.at(-1)?.graph?.presentation as Readonly<{
+        unitId?: string;
+      }> | null | undefined;
+      return presentation?.unitId ?? null;
+    }))
+    .toBe("intro");
+  await expect(stateLabel).toHaveText("intro");
+
+  await expect
+    .poll(() => motion.evaluate((node) => {
+      const trace = (node as AvalElement)
+        .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+      const presentation = trace.at(-1)?.graph?.presentation as Readonly<{
+        unitId?: string;
+      }> | null | undefined;
+      return presentation?.unitId ?? null;
+    }), { timeout: 5_000 })
+    .toBe("idle-loop");
+  await expect(stateLabel).toHaveText("idle");
+  await expect(stateLabel).not.toHaveAttribute("data-visible");
+
+  await motion.hover();
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as AvalElement
+    ).visualState), { timeout: 5_000 })
+    .toBe("entering");
+  await expect(stateLabel).toHaveText("entering");
+  await expect(stateLabel).toHaveAttribute("data-visible", "");
+});
+
+test("keeps the interaction hotspot hidden until the video is rendered", async ({
+  page
+}) => {
+  let releaseAsset!: () => void;
+  const assetHeld = new Promise<void>((resolve) => {
+    releaseAsset = resolve;
+  });
+
+  await page.route("**/grass-rabbit.avl", async (route) => {
+    await assetHeld;
+    await route.continue();
+  });
+  await page.goto("/");
+
+  const motion = page.locator("#grass-rabbit");
+  const hotspot = page.locator(".interaction-hotspot");
+  await expect(hotspot).toHaveCSS("opacity", "0");
+
+  releaseAsset();
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as AvalElement
+    ).readiness), { timeout: 5_000 })
+    .toBe("interactiveReady");
+  await expect(hotspot).toHaveCSS("opacity", "1");
+});
+
+test("plays the intro once in the responsive product page", async ({
+  page
+}) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+
+  await page.mouse.move(0, 0);
+  await page.goto("/");
+  const motion = page.locator("#grass-rabbit");
+  await expect
+    .poll(
+      () => motion.evaluate((node) => (
+        node as HTMLElement & { readiness: string }
+      ).readiness),
+      { timeout: 5_000 }
+    )
+    .toBe("interactiveReady");
+
+  const introActivation = await motion.evaluate((node) => {
+    const trace = (node as AvalElement)
+      .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+    const record = trace.find((entry) => {
+      const presentation = entry.graph?.presentation as Readonly<{
+        kind?: string;
+        frameIndex?: number;
+      }> | null | undefined;
+      return presentation?.kind === "intro" &&
+        presentation.frameIndex === 0;
+    });
+    const presentation = record?.graph?.presentation as Readonly<{
+      kind?: string;
+      state?: string;
+      unitId?: string;
+      frameIndex?: number;
+    }> | null | undefined;
+    return record === undefined ? null : {
+      kind: presentation?.kind ?? null,
+      state: presentation?.state ?? null,
+      unit: presentation?.unitId ?? null,
+      frame: presentation?.frameIndex ?? null,
+      readbackTag: record.readbackTag
+    };
+  });
+  expect(introActivation).toEqual({
+    kind: "intro",
+    state: "idle",
+    unit: "intro",
+    frame: 0,
+    readbackTag: "intro:idle:intro:0"
+  });
+
+  const startupMs = await page.evaluate(() => performance.now());
+  expect(startupMs).toBeLessThan(5_000);
+
+  const initialLayers = await motion.evaluate((node) => {
+    return {
+      canvasCount: node.shadowRoot?.querySelectorAll("canvas").length ?? 0,
+      hasStaticLayer: node.shadowRoot?.querySelector(
+        '[data-aval-layer="static"]'
+      ) !== null,
+      fallbackCount: node.querySelectorAll("[slot=fallback]").length
+    };
+  });
+  expect(initialLayers).toEqual({
+    canvasCount: 1,
+    hasStaticLayer: false,
+    fallbackCount: 0
+  });
+
+  const interactiveSurface = await motion.evaluate((node) => {
+    const animated = node.shadowRoot!.querySelector<HTMLCanvasElement>(
+      'canvas[data-aval-layer="animated"]'
+    );
+    const fallbackSlot = node.shadowRoot!.querySelector<HTMLSlotElement>(
+      'slot[data-aval-layer="fallback"]'
+    );
+    const diagnostics = (node as HTMLElement & {
+      getDiagnostics(): {
+        presentation: {
+          cssWidth: number;
+          cssHeight: number;
+          backingWidth: number;
+          backingHeight: number;
+          effectiveDprX: number;
+          effectiveDprY: number;
+        };
+      };
+    }).getDiagnostics();
+    return animated === null ? null : {
+      width: animated.width,
+      height: animated.height,
+      display: getComputedStyle(animated).display,
+      canvasCount: node.shadowRoot!.querySelectorAll("canvas").length,
+      fallbackHidden: fallbackSlot?.hidden ?? false,
+      presentation: diagnostics.presentation
+    };
+  });
+  expect(interactiveSurface).toEqual({
+    width: 1280,
+    height: 720,
+    display: "block",
+    canvasCount: 1,
+    fallbackHidden: true,
+    presentation: expect.objectContaining({
+      cssWidth: 640,
+      cssHeight: 360,
+      backingWidth: 1280,
+      backingHeight: 720,
+      effectiveDprX: 2,
+      effectiveDprY: 2
+    })
+  });
+
+  const screenshot = await motion.screenshot({ scale: "device" });
+  const sampledFrame = await page.evaluate(async (source) => {
+    const image = new Image();
+    image.src = source;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (context === null) throw new Error("screenshot sampler is unavailable");
+    context.drawImage(image, 0, 0);
+    const colors = new Set<string>();
+    for (let row = 0; row < 8; row += 1) {
+      for (let column = 0; column < 8; column += 1) {
+        const x = Math.min(
+          canvas.width - 1,
+          Math.floor((column + 0.5) * canvas.width / 8)
+        );
+        const y = Math.min(
+          canvas.height - 1,
+          Math.floor((row + 0.5) * canvas.height / 8)
+        );
+        colors.add(context.getImageData(x, y, 1, 1).data.join(","));
+      }
+    }
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      uniqueSampledColors: colors.size
+    };
+  }, `data:image/png;base64,${screenshot.toString("base64")}`);
+  expect(sampledFrame).toEqual({
+    width: 1280,
+    height: 720,
+    uniqueSampledColors: expect.any(Number)
+  });
+  expect(sampledFrame.uniqueSampledColors).toBeGreaterThan(8);
+
+  const layout = await motion.evaluate((node) => {
+    const bounds = node.getBoundingClientRect();
+    const bodyStyle = getComputedStyle(document.body);
+    const title = document.querySelector("[data-title]");
+    const description = document.querySelector("[data-description]");
+    return {
+      background: bodyStyle.backgroundColor,
+      width: bounds.width,
+      height: bounds.height,
+      centerX: bounds.left + bounds.width / 2,
+      viewportX: innerWidth / 2,
+      title: title?.textContent?.trim() ?? null,
+      description: description?.textContent?.trim() ?? null
+    };
+  });
+  expect(layout).toMatchObject({
+    background: "rgb(0, 0, 0)",
+    width: 640,
+    height: 360,
+    viewportX: 640,
+    title: "Introducing AVAL",
+    description: "A new open-source format for interactive video on the web, with a built-in state machine, frame-accurate transitions, and packed-alpha transparency."
+  });
+  expect(Math.abs(layout.centerX - layout.viewportX)).toBeLessThanOrEqual(0.5);
+
+  await expect
+    .poll(() => motion.evaluate((node) => {
+      const trace = (node as AvalElement)
+        .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+      const presentation = trace.at(-1)?.graph?.presentation as Readonly<{
+        kind?: string;
+        unitId?: string;
+        frameIndex?: number;
+      }> | null | undefined;
+      return presentation?.kind === "body" &&
+        presentation.unitId === "idle-loop" &&
+        typeof presentation.frameIndex === "number" &&
+        presentation.frameIndex >= 2;
+    }), { timeout: 10_000 })
+    .toBe(true);
+
+  const introLedger = await motion.evaluate((node) => {
+    const diagnostics = (node as AvalElement)
+      .getDiagnostics({ trace: true });
+    const trace = diagnostics.runtimeTrace ?? [];
+    const content = trace.flatMap((record) => {
+      const presentation = record.graph?.presentation as Readonly<{
+        kind?: string;
+        unitId?: string;
+        frameIndex?: number;
+      }> | null | undefined;
+      const media = record.media as Readonly<{
+        kind?: string;
+        frame?: Readonly<{ unit?: string; localFrame?: number }>;
+      }> | null;
+      if (record.kind !== "content-tick") return [];
+      return [{
+        index: record.index,
+        kind: presentation?.kind ?? null,
+        unit: presentation?.unitId ?? null,
+        frame: presentation?.frameIndex ?? null,
+        mediaKind: media?.kind ?? null,
+        mediaUnit: media?.frame?.unit ?? null,
+        mediaFrame: media?.frame?.localFrame ?? null
+      }];
+    });
+    const intro = content.filter(({ kind, unit }) =>
+      kind === "intro" && unit === "intro"
+    );
+    const firstIdle = content.find(({ kind, unit }) =>
+      kind === "body" && unit === "idle-loop"
+    );
+    return {
+      counters: diagnostics.counters,
+      intro,
+      firstIdle: firstIdle ?? null,
+      introAfterIdle: firstIdle === undefined ? true : content.some((record) =>
+        record.index > firstIdle.index && record.kind === "intro"
+      )
+    };
+  });
+  expect(introLedger.intro.map(({ frame }) => frame)).toEqual(
+    Array.from({ length: 29 }, (_, index) => index + 1)
+  );
+  for (const record of introLedger.intro) {
+    expect(record).toMatchObject({
+      kind: "intro",
+      unit: "intro",
+      mediaKind: "frame",
+      mediaUnit: "intro",
+      mediaFrame: record.frame
+    });
+  }
+  expect(introLedger.firstIdle).toMatchObject({
+    kind: "body",
+    unit: "idle-loop",
+    frame: 0,
+    mediaKind: "frame",
+    mediaUnit: "idle-loop",
+    mediaFrame: 0
+  });
+  expect(introLedger.introAfterIdle).toBe(false);
+  expect(introLedger.counters.underflow).toBe(0);
+  const firstIdleTraceIndex = introLedger.firstIdle!.index;
+
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as HTMLElement & { visualState: string | null }
+    ).visualState))
+    .toBe("idle");
+  await page.mouse.move(0, 0);
+  await motion.hover();
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as HTMLElement & { visualState: string | null }
+    ).visualState), { timeout: 15_000 })
+    .toBe("entering");
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as HTMLElement & { visualState: string | null }
+    ).visualState), { timeout: 15_000 })
+    .toBe("hover");
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as HTMLElement & { isTransitioning: boolean }
+    ).isTransitioning))
+    .toBe(false);
+
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as HTMLElement & { visualState: string | null }
+    ).visualState), { timeout: 15_000 })
+    .toBe("exiting");
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as HTMLElement & { visualState: string | null }
+    ).visualState), { timeout: 15_000 })
+    .toBe("idle");
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as HTMLElement & { isTransitioning: boolean }
+    ).isTransitioning))
+    .toBe(false);
+  const finalDiagnostics = await motion.evaluate((node, firstIdleIndex) => {
+    const diagnostics = (node as AvalElement)
+      .getDiagnostics({ trace: true });
+    return {
+      counters: diagnostics.counters,
+      lastFailure: diagnostics.lastFailure,
+      replayedIntro: (diagnostics.runtimeTrace ?? []).some((record) => {
+        const presentation = record.graph?.presentation as Readonly<{
+          kind?: string;
+        }> | null | undefined;
+        return record.index > firstIdleIndex && presentation?.kind === "intro";
+      })
+    };
+  }, firstIdleTraceIndex);
+  expect(finalDiagnostics).toMatchObject({
+    counters: {
+      underflow: 0,
+      fallback: introLedger.counters.fallback
+    },
+    lastFailure: null,
+    replayedIntro: false
+  });
+  expect(consoleErrors).toEqual([]);
+});
+
+test("plays hover-out directly after hover-in when the pointer leaves early", async ({
+  page
+}) => {
+  let releaseAsset!: () => void;
+  const assetGate = new Promise<void>((resolveGate) => {
+    releaseAsset = resolveGate;
+  });
+  await page.route("**/grass-rabbit.avl", async (route) => {
+    await assetGate;
+    await route.continue();
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const motion = page.locator("#grass-rabbit");
+  await motion.hover();
+  releaseAsset();
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as AvalElement
+    ).readiness), { timeout: 5_000 })
+    .toBe("interactiveReady");
+
+  const startupPresentation = await motion.evaluate((node) => {
+    const trace = (node as AvalElement)
+      .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+    const record = trace.find((entry) => {
+      const presentation = entry.graph?.presentation as Readonly<{
+        kind?: string;
+        frameIndex?: number;
+      }> | null | undefined;
+      return presentation?.kind === "intro" &&
+        presentation.frameIndex === 0;
+    });
+    return record?.graph?.presentation ?? null;
+  });
+  expect(startupPresentation).toMatchObject({
+    kind: "intro",
+    state: "idle",
+    unitId: "intro",
+    frameIndex: 0
+  });
+
+  const traceStart = await motion.evaluate((node) => {
+    const trace = (node as AvalElement)
+      .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+    return trace.at(-1)?.index ?? -1;
+  });
+  await expect
+    .poll(() => motion.evaluate((node) => {
+      const trace = (node as AvalElement)
+        .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+      const presentation = trace.at(-1)?.graph?.presentation as Readonly<{
+        kind?: string;
+        unitId?: string;
+        frameIndex?: number;
+      }> | null | undefined;
+      return (presentation?.kind === "locked" || presentation?.kind === "body") &&
+        presentation.unitId === "hover-in" &&
+        typeof presentation.frameIndex === "number" &&
+        presentation.frameIndex >= 8 && presentation.frameIndex < 66;
+    }), { timeout: 10_000 })
+    .toBe(true);
+
+  const requestedBeforeLeave = await motion.evaluate((node) => (
+    node as AvalElement
+  ).requestedState);
+  expect(requestedBeforeLeave).toBe("entering");
+  await page.locator("body").hover({ position: { x: 8, y: 8 } });
+  await expect
+    .poll(() => motion.evaluate((node) => {
+      const element = node as AvalElement;
+      return !node.matches(":hover") &&
+        element.requestedState === "exiting";
+    }))
+    .toBe(true);
+  await expect
+    .poll(() => motion.evaluate((node) => {
+      const element = node as AvalElement;
+      return element.requestedState === "idle" &&
+        element.visualState === "idle" && !element.isTransitioning;
+    }), { timeout: 15_000 })
+    .toBe(true);
+
+  const routeFrames = await motion.evaluate((node, startIndex) => {
+    const trace = (node as AvalElement)
+      .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+    return trace.flatMap((record) => {
+      if (record.index <= startIndex) return [];
+      const media = record.media as Readonly<{
+        kind?: string;
+        frame?: Readonly<{ unit?: string; localFrame?: number }>;
+      }> | null;
+      if (
+        media?.kind !== "frame" ||
+        typeof media.frame?.unit !== "string" ||
+        typeof media.frame.localFrame !== "number" ||
+        !["hover-in", "hover-loop", "hover-out"].includes(media.frame.unit)
+      ) return [];
+      return [{ unit: media.frame.unit, frame: media.frame.localFrame }];
+    });
+  }, traceStart);
+  const framesFor = (unit: string): number[] => routeFrames
+    .filter((frame) => frame.unit === unit)
+    .map((frame) => frame.frame);
+
+  expect(framesFor("hover-in")).toEqual(
+    Array.from({ length: 67 }, (_, frame) => frame)
+  );
+  expect(framesFor("hover-loop")).toEqual([]);
+  expect(framesFor("hover-out")).toEqual(
+    Array.from({ length: 48 }, (_, frame) => frame)
+  );
+});
+
+test("keeps finite hover bodies on one forward decoder generation", async ({
+  page
+}) => {
+  await page.goto("/");
+  const motion = page.locator("#grass-rabbit");
+  await expect
+    .poll(() => motion.evaluate((node) => (
+      node as AvalElement
+    ).readiness), { timeout: 5_000 })
+    .toBe("interactiveReady");
+
+  await page.mouse.move(0, 0);
+  const baseline = await motion.evaluate((node) => {
+    const diagnostics = (node as AvalElement)
+      .getDiagnostics({ trace: true });
+    return {
+      traceIndex: diagnostics.runtimeTrace?.at(-1)?.index ?? -1,
+      underflows: diagnostics.counters.underflow
+    };
+  });
+  await motion.hover();
+  await expect
+    .poll(() => motion.evaluate((node) => {
+      const trace = (node as AvalElement)
+        .getDiagnostics({ trace: true }).runtimeTrace ?? [];
+      const presentation = trace.at(-1)?.graph?.presentation as Readonly<{
+        unitId?: string;
+        frameIndex?: number;
+      }> | null | undefined;
+      return presentation?.unitId === "hover-in" &&
+        typeof presentation.frameIndex === "number" &&
+        presentation.frameIndex >= 30;
+    }), { timeout: 15_000 })
+    .toBe(true);
+
+  const evidence = await motion.evaluate((node, traceIndex) => {
+    const element = node as AvalElement;
+    const diagnostics = element.getDiagnostics({ trace: true });
+    const frames = (diagnostics.runtimeTrace ?? []).filter((record) => {
+      if (record.index <= traceIndex) return false;
+      const presentation = record.graph?.presentation as Readonly<{
+        unitId?: string;
+        frameIndex?: number;
+      }> | null | undefined;
+      return presentation?.unitId === "hover-in" &&
+        typeof presentation.frameIndex === "number" &&
+        presentation.frameIndex <= 30;
+    });
+    const canvas = node.shadowRoot?.querySelector<HTMLCanvasElement>(
+      'canvas[data-aval-layer="animated"]'
+    );
+    const generations = [...new Set(frames.flatMap((record) =>
+      typeof record.scheduler.generation === "number"
+        ? [record.scheduler.generation]
+        : []
+    ))];
+    const decodeOrdinals = frames.flatMap((record) => {
+      const media = record.media as Readonly<{
+        kind?: string;
+        decodeOrdinal?: number;
+      }> | null;
+      return media?.kind === "frame" && typeof media.decodeOrdinal === "number"
+        ? [media.decodeOrdinal]
+        : [];
+    });
+    return {
+      readiness: diagnostics.readiness,
+      lastFailure: diagnostics.lastFailure,
+      underflows: diagnostics.counters.underflow,
+      generations,
+      minimumRingSize: Math.min(...frames.map((record) =>
+        record.scheduler.ringSize
+      )),
+      decodeOrdinals,
+      canvasHidden: canvas?.hidden ?? true
+    };
+  }, baseline.traceIndex);
+
+  expect(evidence).toMatchObject({
+    readiness: "interactiveReady",
+    lastFailure: null,
+    underflows: baseline.underflows,
+    generations: [expect.any(Number)],
+    canvasHidden: false
+  });
+  expect(evidence.minimumRingSize).toBeGreaterThan(0);
+  expect(evidence.decodeOrdinals).toHaveLength(31);
+  expect(evidence.decodeOrdinals.at(-1)! - evidence.decodeOrdinals[0]!)
+    .toBe(evidence.decodeOrdinals.length - 1);
+});

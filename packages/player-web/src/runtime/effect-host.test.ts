@@ -4,7 +4,7 @@ import {
   type GraphStartPolicy,
   type MotionGraphDefinition,
   type MotionGraphSnapshot
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -355,7 +355,6 @@ function graph(options: {
 function state(id: string) {
   return {
     id,
-    staticFrameId: `${id}-static`,
     body: {
       unitId: `${id}-body`,
       kind: "loop" as const,
@@ -401,6 +400,7 @@ function graphSnapshot(): Readonly<MotionGraphSnapshot> {
   return Object.freeze({
     readiness: "unready",
     phase: "unready",
+    initialUnitPending: false,
     requestedState: null,
     visualState: null,
     prospectiveState: null,

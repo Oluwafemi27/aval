@@ -539,7 +539,6 @@ function lockedFollowOnGraph(): MotionGraphDefinition {
 function state(id: string): GraphStateDefinition {
   return {
     id,
-    staticFrameId: `${id}-static`,
     body: {
       unitId: `${id}-body`,
       kind: "loop",

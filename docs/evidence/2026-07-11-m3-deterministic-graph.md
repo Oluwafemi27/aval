@@ -6,7 +6,7 @@
 
 ## Result
 
-M3 passes its implementation gate. The new `@rendered-motion/graph` package
+M3 passes its implementation gate. The new `@aval/graph` package
 accepts a validated creator-defined graph and produces deterministic,
 immutable presentation commands, ordered semantic effects, and exactly-once
 request-settlement descriptors from explicit inputs and consecutive content
@@ -86,7 +86,7 @@ npm run build           passed; graph declarations and production app built
 npm run test:browser    7 Chromium regression tests passed
 npm audit --audit-level=high
                         0 vulnerabilities
-npm pack --dry-run -w @rendered-motion/graph
+npm pack --dry-run -w @aval/graph
                         package contents inspected successfully
 git diff --check        passed
 ```

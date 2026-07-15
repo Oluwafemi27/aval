@@ -5,7 +5,7 @@ import {
   type GraphStateDefinition,
   type GraphTransitionDefinition,
   type MotionGraphDefinition
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import { CompilerError } from "./diagnostics.js";
 import type {
@@ -28,9 +28,7 @@ export function preflightSourceGraph(project: Pick<
   try {
     definition = {
       initialState: project.initialState,
-      states: project.states.map((state, index) =>
-        lowerState(state, units, index)
-      ),
+      states: project.states.map((state) => lowerState(state, units)),
       edges: project.edges.map((edge) => {
         const transition = edge.transition === undefined
           ? undefined
@@ -64,13 +62,11 @@ export function preflightSourceGraph(project: Pick<
 
 function lowerState(
   state: SourceStateV01,
-  units: ReadonlyMap<string, SourceUnitV01>,
-  stateIndex: number
+  units: ReadonlyMap<string, SourceUnitV01>
 ): GraphStateDefinition {
   const body = requireUnit(units, state.bodyUnit, "body");
   const base = {
     id: state.id,
-    staticFrameId: `static.${String(stateIndex).padStart(2, "0")}`,
     body: Object.freeze({
       unitId: body.id,
       kind: body.playback,

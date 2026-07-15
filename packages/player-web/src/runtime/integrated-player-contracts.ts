@@ -3,7 +3,7 @@ import type {
   MotionGraphResult,
   MotionGraphSnapshot,
   MotionGraphTickOptions
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import type { EffectHostEvent } from "./effect-host.js";
@@ -23,7 +23,7 @@ import type {
 } from "./avc-rendition-selection.js";
 import type { RealtimeUnderflowEvent } from "./realtime-driver.js";
 import type { MotionPolicy } from "./motion-policy.js";
-import type { RuntimeCanvasResourceHost } from "./static-resource-plan.js";
+import type { RuntimeCanvasResourceHost } from "./canvas-resource-plan.js";
 import type { BrowserContextRecoveryEventTarget } from "./browser-context-recovery.js";
 import type { RuntimeAssetSession } from "./runtime-asset-session.js";
 import type {
@@ -35,7 +35,7 @@ type SuccessfulRenditionInspection = Extract<
   { readonly ok: true }
 >;
 
-export interface IntegratedStaticSurfaceStore {
+export interface IntegratedFallbackStore {
   installInitial(options: {
     readonly state: string;
     readonly signal: AbortSignal;
@@ -45,21 +45,15 @@ export interface IntegratedStaticSurfaceStore {
     state: string,
     options: {
       readonly signal: AbortSignal;
-      /** False stages pixels without changing the visible plane. */
+      /** False updates logical state without covering animated output. */
       readonly cover?: boolean;
     }
   ): Promise<unknown>;
-  /** Exact state identity of the currently retained strict surface. */
+  /** Exact logical state identity currently represented by host fallback. */
   currentState(): string | null;
   coverCurrent(): void;
   revealAnimated(): void;
-  /** Optional M7 decoded-static reclamation; hard pins return no victim. */
-  reclaimOldest?(): Readonly<{
-    readonly staticFrame: string;
-    readonly byteLength: number;
-    readonly lastTouchSequence: number;
-  }> | null;
-  /** Resolves after every aborted decoder/presentation callback has retired. */
+  /** Resolves after every aborted fallback callback has retired. */
   settled(): Promise<void>;
   dispose(): void;
 }
@@ -182,9 +176,9 @@ export interface IntegratedRealtimeDriverOptions {
 }
 
 interface IntegratedPlayerCommonOptions {
-  readonly createStaticStore: (
+  readonly createFallbackStore: (
     catalog: RuntimeAssetCatalog
-  ) => IntegratedStaticSurfaceStore;
+  ) => IntegratedFallbackStore;
   readonly candidateFactory: IntegratedCandidateFactory;
   readonly eventSink?: (event: Readonly<EffectHostEvent>) => void;
   readonly diagnosticsSink?: (failure: Readonly<RuntimeFailure>) => void;

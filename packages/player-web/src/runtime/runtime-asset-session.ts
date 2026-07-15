@@ -4,16 +4,13 @@ import {
   parseFrontIndex,
   parseHeader,
   validateCompleteAsset,
-  validatePngProfile,
   type ParsedFrontIndex,
-  type ValidatedAssetLayout,
-  type ValidatedStaticPngProfile
-} from "@rendered-motion/format";
+  type ValidatedAssetLayout
+} from "@aval/format";
 import {
   adoptRuntimeCatalogCompleteSource,
   createMetadataRuntimeAssetCatalog,
   createRuntimeCatalogBlobDescriptors,
-  runtimeStaticBlobKey,
   runtimeUnitBlobKey,
   RuntimeAssetCatalog
 } from "./asset-catalog.js";
@@ -66,7 +63,6 @@ import {
   type RuntimeCompleteSource,
   type RuntimeCompleteSourceRange
 } from "./runtime-complete-source.js";
-import { normalizeRuntimeStaticProfile } from "./runtime-static-profile.js";
 import {
   openRangeAssetSession,
   type RuntimeRangeAssetFormatAdapter,
@@ -86,14 +82,6 @@ import {
 } from "./verified-blob-store.js";
 
 export type { RuntimeAssetSessionResources } from "./runtime-asset-session-resources.js";
-export interface RuntimeStaticPngValidationInput {
-  readonly png: Uint8Array;
-  readonly expectedWidth: number;
-  readonly expectedHeight: number;
-}
-export type RuntimeStaticPngValidator = (
-  input: Readonly<RuntimeStaticPngValidationInput>
-) => Readonly<ValidatedStaticPngProfile>;
 export interface OpenRuntimeAssetOptions {
   readonly resources: RuntimeAssetSessionResources;
   readonly fetcher?: RuntimeFetchAdapter;
@@ -102,7 +90,6 @@ export interface OpenRuntimeAssetOptions {
   readonly maximumFileBytes?: number;
   readonly timers?: LoadWatchdogTimerHost;
   readonly format?: RuntimeRangeAssetFormatAdapter;
-  readonly validateStaticPng?: RuntimeStaticPngValidator;
   readonly allocate?: (byteLength: number) => Uint8Array<ArrayBuffer>;
 }
 export interface OpenRuntimeAssetBytesOptions
@@ -121,13 +108,6 @@ export interface RuntimeAssetSession {
   readonly mode: RuntimeTransportMode;
   readonly catalog: RuntimeAssetCatalog;
   readonly disposed: boolean;
-  ensureStatic(
-    staticFrame: string,
-    options?: Readonly<RuntimeAssetEnsureOptions>
-  ): Promise<Readonly<VerifiedBlobHandle>>;
-  ensureAllStatics(
-    options?: Readonly<RuntimeAssetEnsureOptions>
-  ): Promise<readonly Readonly<VerifiedBlobHandle>[]>;
   ensureUnit(
     rendition: string,
     unit: string,
@@ -144,7 +124,7 @@ export interface RuntimeAssetSession {
   ): Promise<readonly Readonly<VerifiedBlobHandle>[]>;
   /**
    * Release verified unit residency after every candidate/sample owner for the
-   * rendition has retired. Metadata and strict static fallbacks remain live.
+   * rendition has retired. Metadata remains live.
    * Returns the exact persistent payload bytes released.
    */
   evictRenditionUnits(rendition: string): number;
@@ -159,7 +139,6 @@ interface CapturedSessionOptions {
   readonly generation: number;
   readonly maximumFileBytes: number;
   readonly format: RuntimeRangeAssetFormatAdapter;
-  readonly validateStaticPng: RuntimeStaticPngValidator;
   readonly allocate: (byteLength: number) => Uint8Array<ArrayBuffer>;
 }
 interface CompleteByteSource extends RuntimeCompleteSource {
@@ -326,7 +305,6 @@ class RuntimeAssetSessionImpl implements RuntimeAssetSession {
   readonly #operationTimeoutMs: number;
   readonly #store: VerifiedBlobStore;
   readonly #batch: RuntimeAssetBatchCoordinator;
-  readonly #profiles = new Map<string, Readonly<ValidatedStaticPngProfile>>();
   #rangeSource: RuntimeRangeAssetSession | null;
   #completeSource: CompleteByteSource | null;
   #metadataLease: BoundedBodyByteLease | null;
@@ -382,10 +360,7 @@ class RuntimeAssetSessionImpl implements RuntimeAssetSession {
       frontIndex: input.frontIndex,
       declaredFileLength: input.frontIndex.header.declaredFileLength,
       mode: input.mode,
-      blobStore: this.#store,
-      staticProfiles: Object.freeze({
-        resolve: (staticFrame: string) => this.#profiles.get(staticFrame)
-      })
+      blobStore: this.#store
     });
     this.#linkCaller(input.callerSignal);
   }
@@ -394,32 +369,6 @@ class RuntimeAssetSessionImpl implements RuntimeAssetSession {
     return this.#mode;
   }
   public get disposed(): boolean { return this.#disposed; }
-
-  public ensureStatic(
-    staticFrame: string,
-    options: Readonly<RuntimeAssetEnsureOptions> = {}
-  ): Promise<Readonly<VerifiedBlobHandle>> {
-    const selection: RuntimeBlobSelection = { kind: "static", staticFrame };
-    const source = this.#frontIndex.staticBlobs.find(
-      (blob) => blob.staticFrame === staticFrame
-    );
-    if (source === undefined) {
-      return Promise.reject(runtimeError("invalid-asset", { staticFrame }));
-    }
-    return this.#ensure(runtimeStaticBlobKey(staticFrame), selection, options);
-  }
-
-  public ensureAllStatics(
-    options: Readonly<RuntimeAssetEnsureOptions> = {}
-  ): Promise<readonly Readonly<VerifiedBlobHandle>[]> {
-    return this.#ensureMany(this.#frontIndex.staticBlobs.map((blob) => ({
-      key: runtimeStaticBlobKey(blob.staticFrame),
-      selection: {
-        kind: "static" as const,
-        staticFrame: blob.staticFrame
-      }
-    })), options);
-  }
 
   public ensureUnit(
     rendition: string,
@@ -513,7 +462,6 @@ class RuntimeAssetSessionImpl implements RuntimeAssetSession {
     ]).then(() => {
       complete?.release();
       safeRelease(metadataLease);
-      this.#profiles.clear();
     });
     return this.#disposePromise;
   }
@@ -647,32 +595,7 @@ class RuntimeAssetSessionImpl implements RuntimeAssetSession {
     const promote = (): void => source === null
       ? request.promote(verified)
       : promoteBorrowedVerifiedBlob(request, verified, source);
-    if (blob.kind !== "static") {
-      promote();
-      return;
-    }
-    const frame = this.#frontIndex.manifest.staticFrames.find(
-      (candidate) => candidate.id === blob.staticFrame
-    );
-    if (frame === undefined) throw runtimeError("invalid-asset");
-    const suppliedProfile = this.#options.validateStaticPng({
-      png: verified.bytes,
-      expectedWidth: frame.width,
-      expectedHeight: frame.height
-    });
-    const profile = normalizePromotedStaticProfile(
-      suppliedProfile,
-      frame.width,
-      frame.height,
-      blob.blobRange.length
-    );
-    this.#profiles.set(blob.staticFrame, profile);
-    try {
-      promote();
-    } catch (cause) {
-      this.#profiles.delete(blob.staticFrame);
-      throw cause;
-    }
+    promote();
   }
 
   #adoptCompleteReplacement(result: Readonly<RuntimeFullAssetResult>): void {
@@ -754,7 +677,6 @@ function captureOptions(
   let generation: number;
   let maximumFileBytes: number;
   let format: RuntimeRangeAssetFormatAdapter;
-  let png: RuntimeStaticPngValidator;
   let allocate: (byteLength: number) => Uint8Array<ArrayBuffer>;
   try {
     resources = captureRuntimeAssetSessionResources(value.resources);
@@ -765,7 +687,6 @@ function captureOptions(
     maximumFileBytes = value.maximumFileBytes ??
       FORMAT_DEFAULT_BUDGETS.maxFileBytes;
     format = captureFormatAdapter(value.format ?? DEFAULT_FORMAT);
-    png = value.validateStaticPng ?? validatePngProfile;
     allocate = value.allocate ?? allocateBytes;
   } catch {
     throw runtimeError("load-failure");
@@ -774,7 +695,7 @@ function captureOptions(
     !Number.isSafeInteger(generation) || generation < 0 ||
     !Number.isSafeInteger(maximumFileBytes) || maximumFileBytes < 1 ||
     maximumFileBytes > FORMAT_DEFAULT_BUDGETS.maxFileBytes ||
-    typeof png !== "function" || typeof allocate !== "function"
+    typeof allocate !== "function"
   ) {
     throw runtimeError("load-failure");
   }
@@ -786,9 +707,6 @@ function captureOptions(
     generation,
     maximumFileBytes,
     format,
-    validateStaticPng: (input: Readonly<RuntimeStaticPngValidationInput>) =>
-      Reflect.apply(png, undefined, [input]) as
-        Readonly<ValidatedStaticPngProfile>,
     allocate: (byteLength: number) => Reflect.apply(
       allocate,
       undefined,
@@ -874,16 +792,6 @@ async function retireOpenedSource(source:
   } catch {
     // The opening failure remains authoritative over terminal cleanup errors.
   }
-}
-
-function normalizePromotedStaticProfile(
-  value: Readonly<ValidatedStaticPngProfile>,
-  width: number,
-  height: number,
-  pngByteLength: number
-): Readonly<ValidatedStaticPngProfile> {
-  try { return normalizeRuntimeStaticProfile(value, width, height, pngByteLength); }
-  catch { throw runtimeError("load-failure"); }
 }
 
 function allocateBytes(byteLength: number): Uint8Array<ArrayBuffer> {

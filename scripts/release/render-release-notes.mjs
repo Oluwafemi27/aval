@@ -8,7 +8,7 @@ const bytes = await readFile(manifestPath);
 const manifest = JSON.parse(bytes.toString("utf8"));
 const digest = createHash("sha256").update(bytes).digest("hex");
 const lines = [
-  "# Rendered Motion 1.0.0",
+  "# AVAL 1.0.0",
   "",
   `Release manifest SHA-256: \`${digest}\``,
   `Candidate manifest SHA-256: \`${manifest.candidateManifestDigest}\``,

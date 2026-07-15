@@ -140,21 +140,19 @@ describe("resident frame plan", () => {
 
   it.each([
     [MIN_REVERSIBLE_CLIP_FRAMES, "minimum"],
-    [MAX_REVERSIBLE_CLIP_FRAMES, "maximum"]
+    [25, "above the former maximum"]
   ])("accepts the %s-frame reversible clip %s", (count) => {
     expect(() =>
       createResidentFramePlan(validInput({ clip: frames("clip", count) }))
     ).not.toThrow();
   });
 
-  it.each([0, MAX_REVERSIBLE_CLIP_FRAMES + 1])(
-    "rejects a %s-frame reversible clip",
-    (count) => {
-      expect(() =>
-        createResidentFramePlan(validInput({ clip: frames("clip", count) }))
-      ).toThrow("reversible clip must contain 1–24 frames");
-    }
-  );
+  it("rejects an empty reversible clip", () => {
+    expect(() =>
+      createResidentFramePlan(validInput({ clip: [] }))
+    ).toThrow("reversible clip must contain at least 1 frame");
+    expect(MAX_REVERSIBLE_CLIP_FRAMES).toBe(0xffff_ffff);
+  });
 
   it.each([
     [MIN_ENDPOINT_RUNWAY_FRAMES, "minimum"],
@@ -238,46 +236,26 @@ describe("resident frame plan", () => {
     ).toThrow(`exceeds layer limit ${expectedLayers - 1}`);
   });
 
-  it("accepts exactly 24 MiB of deduplicated clip data", () => {
+  it("accepts deduplicated clip data above the former 24 MiB cap", () => {
     const plan = createResidentFramePlan(
       validInput({
-        width: 512,
+        width: 513,
         height: 512,
         sourceRunway: repeated(frame("clip", 0), 6),
         clip: frames("clip", 24),
-        targetRunway: repeated(frame("clip", 23), 6)
+        targetRunway: repeated(frame("clip", 23), 6),
+        deviceLimits: { maxArrayTextureLayers: 128, maxTextureSize: 513 }
       })
     );
 
-    expect(plan.bytesPerFrame).toBe(MEBIBYTE);
-    expect(plan.clipBytes).toBe(MAX_REVERSIBLE_CLIP_BYTES);
-    expect(plan.residentBytes).toBe(MAX_REVERSIBLE_CLIP_BYTES);
-    expect(plan.streamingBytes).toBe(3 * MEBIBYTE);
-    expect(plan.trackedBytes).toBe((139 * MEBIBYTE) / 4);
+    expect(plan.clipBytes).toBeGreaterThan(24 * MEBIBYTE);
+    expect(plan.residentBytes).toBe(plan.clipBytes);
+    expect(plan.trackedBytes).toBeGreaterThan(plan.residentBytes);
+    expect(MAX_REVERSIBLE_CLIP_BYTES).toBe(Number.MAX_SAFE_INTEGER);
   });
 
-  it("rejects the smallest RGBA-aligned value above the clip byte cap", () => {
-    const shared = frame("shared", 0);
-    expect(() =>
-      createResidentFramePlan(
-        validInput({
-          width: MAX_REVERSIBLE_CLIP_BYTES / 4 + 1,
-          height: 1,
-          sourceRunway: repeated(shared, 6),
-          clip: [shared],
-          targetRunway: repeated(shared, 6),
-          deviceLimits: {
-            maxArrayTextureLayers: 128,
-            maxTextureSize: MAX_REVERSIBLE_CLIP_BYTES / 4 + 1
-          }
-        })
-      )
-    ).toThrow("clip bytes exceed the 24 MiB cap");
-  });
-
-  it("accepts 47 MiB of resident data beneath the stricter tracked cap", () => {
+  it("accepts resident and tracked data above the former 48/64 MiB caps", () => {
     const target = frames("target", 12);
-    target[11] = frame("source", 0);
     const plan = createResidentFramePlan(
       validInput({
         width: 512,
@@ -288,103 +266,11 @@ describe("resident frame plan", () => {
       })
     );
 
-    expect(plan.layerCount).toBe(47);
-    expect(plan.clipBytes).toBe(MAX_REVERSIBLE_CLIP_BYTES);
-    expect(plan.residentBytes).toBe(47 * MEBIBYTE);
-    expect(plan.trackedBytes).toBe((127 * MEBIBYTE) / 2);
-  });
-
-  it("rejects 48 MiB of resident data when streaming and staging exceed the tracked cap", () => {
-    expect(() =>
-      createResidentFramePlan(
-        validInput({
-          width: 512,
-          height: 512,
-          sourceRunway: frames("source", 12),
-          clip: frames("clip", 24),
-          targetRunway: frames("target", 12)
-        })
-      )
-    ).toThrow("tracked player bytes exceed the 64 MiB cap");
-  });
-
-  it("rejects the first practical RGBA-aligned value above the resident cap", () => {
-    const pixelsPerFrame = Math.floor(MAX_RESIDENT_FRAME_BYTES / 4 / 47) + 1;
-    const clip = [...frames("clip", 23), frame("clip", 0)];
-
-    expect(47 * pixelsPerFrame * 4).toBeGreaterThan(
-      MAX_RESIDENT_FRAME_BYTES
-    );
-    expect(23 * pixelsPerFrame * 4).toBeLessThanOrEqual(
-      MAX_REVERSIBLE_CLIP_BYTES
-    );
-    expect(() =>
-      createResidentFramePlan(
-        validInput({
-          width: pixelsPerFrame,
-          height: 1,
-          sourceRunway: frames("source", 12),
-          clip,
-          targetRunway: frames("target", 12),
-          deviceLimits: {
-            maxArrayTextureLayers: 128,
-            maxTextureSize: pixelsPerFrame
-          }
-        })
-      )
-    ).toThrow("resident frame bytes exceed the 48 MiB cap");
-  });
-
-  it("accepts exactly 64 MiB of tracked player data", () => {
-    const source = frames("source", 6);
-    const plan = createResidentFramePlan(
-      validInput({
-        width: 1_024,
-        height: 1_024,
-        sourceRunway: source,
-        clip: frames("clip", 3),
-        targetRunway: source.map((key) => ({ ...key }))
-      })
-    );
-
-    expect(plan.layerCount).toBe(9);
-    expect(plan.clipBytes).toBe(12 * MEBIBYTE);
-    expect(plan.residentBytes).toBe(36 * MEBIBYTE);
-    expect(plan.residentAllocationBytes).toBe(45 * MEBIBYTE);
-    expect(plan.streamingBytes).toBe(12 * MEBIBYTE);
-    expect(plan.streamingAllocationBytes).toBe(15 * MEBIBYTE);
-    expect(plan.gpuAllocationBytes).toBe(60 * MEBIBYTE);
-    expect(plan.stagingBytes).toBe(4 * MEBIBYTE);
-    expect(plan.trackedBytes).toBe(MAX_TRACKED_PLAYER_BYTES);
-  });
-
-  it("rejects the smallest pixel-aligned tracked value above 64 MiB for nine layers", () => {
-    const pixelsPerFrame = Math.floor(MAX_TRACKED_PLAYER_BYTES / 64) + 1;
-    const source = frames("source", 6);
-    const clip = frames("clip", 3);
-
-    expect(64 * pixelsPerFrame).toBeGreaterThan(MAX_TRACKED_PLAYER_BYTES);
-    expect(36 * pixelsPerFrame).toBeLessThanOrEqual(
-      MAX_RESIDENT_FRAME_BYTES
-    );
-    expect(12 * pixelsPerFrame).toBeLessThanOrEqual(
-      MAX_REVERSIBLE_CLIP_BYTES
-    );
-    expect(() =>
-      createResidentFramePlan(
-        validInput({
-          width: pixelsPerFrame,
-          height: 1,
-          sourceRunway: source,
-          clip,
-          targetRunway: source.map((key) => ({ ...key })),
-          deviceLimits: {
-            maxArrayTextureLayers: 128,
-            maxTextureSize: pixelsPerFrame
-          }
-        })
-      )
-    ).toThrow("tracked player bytes exceed the 64 MiB cap");
+    expect(plan.layerCount).toBe(48);
+    expect(plan.residentBytes).toBe(48 * MEBIBYTE);
+    expect(plan.trackedBytes).toBeGreaterThan(64 * MEBIBYTE);
+    expect(MAX_RESIDENT_FRAME_BYTES).toBe(Number.MAX_SAFE_INTEGER);
+    expect(MAX_TRACKED_PLAYER_BYTES).toBe(Number.MAX_SAFE_INTEGER);
   });
 
   it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
@@ -474,7 +360,7 @@ describe("resident frame plan", () => {
           }
         })
       )
-    ).toThrow("clip bytes exceed the 24 MiB cap");
+    ).toThrow("exceeds JavaScript's safe-integer range");
   });
 
   it("returns undefined rather than aliasing malformed lookup keys", () => {

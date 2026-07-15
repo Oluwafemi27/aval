@@ -2,11 +2,11 @@ import type {
   RuntimeFailure,
   RuntimeFailureCode,
   StaticReason
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import type {
-  RenderedMotionElementFailureCode,
-  RenderedMotionPublicFailure
+  AvalElementFailureCode,
+  AvalPublicFailure
 } from "./public-types.js";
 
 const MAX_PUBLIC_FAILURE_MESSAGE_LENGTH = 512;
@@ -37,6 +37,7 @@ const STATIC_REASON_RECORD: Readonly<Record<StaticReason, true>> = Object.freeze
   "readiness-failed": true,
   "preparation-timeout": true,
   "animation-failure": true,
+  "fallback-failure": true,
   "visibility-suspended": true,
   "decoder-queued": true
 });
@@ -51,12 +52,12 @@ const ELEMENT_CODES: ReadonlySet<string> = new Set([
 
 export function normalizePublicFailure(
   error: unknown,
-  fallbackCode: RuntimeFailureCode | RenderedMotionElementFailureCode = "readiness-failure"
-): Readonly<RenderedMotionPublicFailure> {
+  fallbackCode: RuntimeFailureCode | AvalElementFailureCode = "readiness-failure"
+): Readonly<AvalPublicFailure> {
   const runtime = readRuntimeFailure(error);
   const code = runtime?.code ?? (
     typeof error === "string" && ELEMENT_CODES.has(error)
-      ? error as RenderedMotionElementFailureCode
+      ? error as AvalElementFailureCode
       : fallbackCode
   );
   const operation = normalizeOperation(
@@ -121,18 +122,18 @@ function normalizeOperation(value: unknown): string | null {
 }
 
 function publicMessage(
-  code: RuntimeFailureCode | RenderedMotionElementFailureCode
+  code: RuntimeFailureCode | AvalElementFailureCode
 ): string {
   switch (code) {
     case "invalid-configuration":
-      return "Rendered motion configuration is invalid";
+      return "AVAL configuration is invalid";
     case "unsupported-browser":
-      return "Rendered motion browser automation is unavailable";
+      return "AVAL browser automation is unavailable";
     case "interaction-target-unavailable":
-      return "Rendered motion interaction target is unavailable";
+      return "AVAL interaction target is unavailable";
     case "element-cleanup-incomplete":
-      return "Rendered motion element cleanup is incomplete";
+      return "AVAL element cleanup is incomplete";
     default:
-      return `Rendered motion operation failed (${code})`;
+      return `AVAL operation failed (${code})`;
   }
 }

@@ -111,13 +111,20 @@ function runSpawnedProcess(
       stop(new CompilerError(
         "PROCESS_TIMEOUT",
         `Process exceeded ${String(input.limits.timeoutMs)} ms`,
-        { hint: "Reduce source duration or complexity; the operation timeout is intentionally bounded." }
+        { hint: "Increase the operation timeout when the authored media requires more processing time." }
       ));
     }, input.limits.timeoutMs);
     timeout.unref();
     input.signal?.addEventListener("abort", abort, { once: true });
 
     child.stdout.on("data", (chunk: Buffer) => {
+      if (stdoutBytes > Number.MAX_SAFE_INTEGER - chunk.byteLength) {
+        stop(new CompilerError(
+          "OUTPUT_LIMIT",
+          "Process stdout exceeds safe byte-count representation"
+        ));
+        return;
+      }
       stdoutBytes += chunk.byteLength;
       if (
         input.expectedStdoutBytes !== undefined &&
@@ -142,6 +149,13 @@ function runSpawnedProcess(
       stdoutEnded = true;
     });
     child.stderr.on("data", (chunk: Buffer) => {
+      if (stderrBytes > Number.MAX_SAFE_INTEGER - chunk.byteLength) {
+        stop(new CompilerError(
+          "OUTPUT_LIMIT",
+          "Process stderr exceeds safe byte-count representation"
+        ));
+        return;
+      }
       stderrBytes += chunk.byteLength;
       if (stderrBytes > input.limits.maxStderrBytes) {
         stop(new CompilerError(
@@ -228,7 +242,21 @@ function runSpawnedProcess(
           ));
           return;
         }
-        const stderrText = Buffer.concat(stderr, stderrBytes).toString("utf8");
+        let stderrText: string;
+        let stdoutResult: Uint8Array;
+        try {
+          stderrText = Buffer.concat(stderr, stderrBytes).toString("utf8");
+          stdoutResult = input.stdoutSink === undefined
+            ? new Uint8Array(Buffer.concat(stdout, stdoutBytes))
+            : new Uint8Array(0);
+        } catch (error) {
+          reject(new CompilerError(
+            "OUTPUT_LIMIT",
+            `Could not retain ${String(stdoutBytes)} process stdout bytes`,
+            { cause: error }
+          ));
+          return;
+        }
         if (closedCode !== 0) {
           reject(new CompilerError(
             "FFMPEG_FAILED",
@@ -244,9 +272,7 @@ function runSpawnedProcess(
           return;
         }
         resolve(Object.freeze({
-          stdout: input.stdoutSink === undefined
-            ? new Uint8Array(Buffer.concat(stdout, stdoutBytes))
-            : new Uint8Array(0),
+          stdout: stdoutResult,
           stderr: stderrText,
           exitCode: 0
         }));
@@ -302,7 +328,7 @@ async function createPrivateWorkingDirectory(
     ? {}
     : input.privateWorkingDirectory;
   const root = configuration.root ?? tmpdir();
-  const prefix = configuration.prefix ?? "rma-process-";
+  const prefix = configuration.prefix ?? "aval-process-";
   let directory: string | undefined;
   try {
     directory = await mkdtemp(join(root, prefix));

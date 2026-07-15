@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { verifyRegistryReleaseSet } from "../../scripts/release/verify-registry.mjs";
 
 const integrity = `sha512-${Buffer.alloc(64, 4).toString("base64")}`;
-const names = ["graph", "format", "player-web", "element", "compiler"].map((name) => `@rendered-motion/${name}`);
+const names = ["graph", "format", "player-web", "element", "compiler"].map((name) => `@aval/${name}`);
 const releaseSet = { packages: names.map((name) => ({ name, registryIntegrity: integrity })) };
 
 describe("exact registry release verification", () => {

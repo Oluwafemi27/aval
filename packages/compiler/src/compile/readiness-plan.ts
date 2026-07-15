@@ -1,4 +1,4 @@
-import type { ReadinessV01 } from "@rendered-motion/format";
+import type { ReadinessV01 } from "@aval/format";
 
 import { CompilerError } from "../diagnostics.js";
 import type { SourceProjectV01 } from "../model.js";

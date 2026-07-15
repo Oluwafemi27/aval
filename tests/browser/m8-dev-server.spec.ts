@@ -6,10 +6,10 @@ import { expect, test } from "@playwright/test";
 
 import { startDevServer } from "../../packages/compiler/dist/commands/dev-server.js";
 
-test("rma dev serves a self-contained public-element playground", async ({ page }) => {
+test("avl dev serves a self-contained public-element playground", async ({ page }) => {
   const assetPath = resolve(
     process.cwd(),
-    "fixtures/conformance/m8/user-states-all-routes-alpha.rma"
+    "fixtures/conformance/m8/user-states-all-routes-alpha.avl"
   );
   const bytes = await readFile(assetPath);
   const server = await startDevServer({ assetPath, port: 0 });
@@ -50,7 +50,6 @@ test("rma dev serves a self-contained public-element playground", async ({ page 
         alpha: "packed",
         continuityPassed: 1,
         continuityCuts: 1,
-        strictStatics: 3,
         alphaAuditedFrames: 30
       }
     });
@@ -72,7 +71,7 @@ test("rma dev serves a self-contained public-element playground", async ({ page 
     expect(workerCsp).toContain("connect-src 'self'");
     expect(workerCsp).toContain("worker-src 'self'");
     expect(workerCsp).not.toMatch(/blob:|data:|unsafe-inline|unsafe-eval/u);
-    const motion = page.locator("rendered-motion#motion");
+    const motion = page.locator("aval-player#motion");
     await expect.poll(() => motion.evaluate((element) =>
       (element as unknown as { readiness: string }).readiness
     ), { timeout: 20_000 }).toBe("interactiveReady");

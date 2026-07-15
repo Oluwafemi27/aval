@@ -1,7 +1,7 @@
-import { defineRenderedMotionElement, type RenderedMotionElement } from "@rendered-motion/element";
+import { defineAvalElement, type AvalElement } from "@aval/element";
 
-defineRenderedMotionElement();
-const motion = document.querySelector<RenderedMotionElement>("rendered-motion");
+defineAvalElement();
+const motion = document.querySelector<AvalElement>("aval-player");
 if (motion !== null) {
   motion.state = "success";
   void motion.prepare({ timeoutMs: 5_000 });

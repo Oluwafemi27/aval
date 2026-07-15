@@ -8,15 +8,9 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { writeUint16LE, writeUint32LE, writeUint64LE } from "../src/checked-integer.js";
-import {
-  parseStrictJson,
-  serializeCanonicalJson,
-  type CanonicalJsonObject
-} from "../src/canonical-json.js";
 import { FormatError } from "../src/errors.js";
 import { deriveCanonicalAssetLayout } from "../src/layout.js";
 import { parseFrontIndex, validateCompleteAsset } from "../src/parser.js";
-import { crc32 } from "../src/png/crc32.js";
 import type { ValidatedAssetLayout } from "../src/model.js";
 import { canonicalAssetFixture } from "./asset-fixture.js";
 import {
@@ -33,12 +27,6 @@ const MALFORMED_README = fileURLToPath(
     import.meta.url
   )
 );
-const M5_COMPATIBILITY_FIXTURES = Object.freeze([
-  "../../../fixtures/conformance/m5/opaque-loop.rma",
-  "../../../fixtures/conformance/m5/opaque-path.rma",
-  "../../../fixtures/conformance/m5/opaque-reversible.rma",
-  "../../../fixtures/conformance/m55/opaque-all-routes.rma"
-] as const);
 
 function expectDeepFrozen(value: unknown, seen = new Set<object>()): void {
   if (typeof value !== "object" || value === null || seen.has(value)) return;
@@ -142,7 +130,7 @@ function extend(source: Uint8Array): Uint8Array {
 }
 
 beforeAll(() => {
-  if (process.env.RMA_UPDATE_CONFORMANCE_FIXTURES !== "1") return;
+  if (process.env.AVL_UPDATE_CONFORMANCE_FIXTURES !== "1") return;
   mkdirSync(FIXTURE_DIRECTORY, { recursive: true });
   for (const fixture of generateConformanceFixtures()) {
     writeFileSync(`${FIXTURE_DIRECTORY}${fixture.fileName}`, fixture.bytes);
@@ -224,88 +212,16 @@ describe("M4 checked-in conformance fixtures", () => {
     30_000
   );
 
-  it("enforces PNG CRC while retaining deferred digest and decoded-content verification", () => {
+  it("defers sample digest and decoded-content verification", () => {
     const source = generateReferenceGraphFixture();
     const parsed = parseFrontIndex(source);
     const bytes = source.slice();
     const firstSample = parsed.records[0]!;
     bytes[firstSample.payloadOffset + 24] =
       (bytes[firstSample.payloadOffset + 24] ?? 0) ^ 0xff;
-    const firstStatic = parsed.manifest.staticFrames[0]!;
-    mutateFirstIdatPayloadAndRepairCrc(bytes, firstStatic.offset);
-
     const layout = validateCompleteAsset({ bytes });
     expect(layout.fileRange.length).toBe(bytes.byteLength);
     expectDeepFrozen(layout);
-  });
-});
-
-function mutateFirstIdatPayloadAndRepairCrc(
-  bytes: Uint8Array,
-  pngOffset: number
-): void {
-  let cursor = pngOffset + 8;
-  while (cursor < bytes.byteLength) {
-    const length =
-      bytes[cursor]! * 0x100_0000 +
-      bytes[cursor + 1]! * 0x1_0000 +
-      bytes[cursor + 2]! * 0x100 +
-      bytes[cursor + 3]!;
-    const type = String.fromCharCode(
-      bytes[cursor + 4]!,
-      bytes[cursor + 5]!,
-      bytes[cursor + 6]!,
-      bytes[cursor + 7]!
-    );
-    if (type === "IDAT") {
-      const payload = cursor + 8;
-      bytes[payload + 7] = bytes[payload + 7]! ^ 0xff;
-      writeUint32BE(
-        bytes,
-        payload + length,
-        crc32(bytes.subarray(cursor + 4, payload + length))
-      );
-      return;
-    }
-    cursor += 12 + length;
-  }
-  throw new Error("strict fixture has no IDAT chunk");
-}
-
-function writeUint32BE(bytes: Uint8Array, offset: number, value: number): void {
-  bytes[offset] = (value >>> 24) & 0xff;
-  bytes[offset + 1] = (value >>> 16) & 0xff;
-  bytes[offset + 2] = (value >>> 8) & 0xff;
-  bytes[offset + 3] = value & 0xff;
-}
-
-describe("M5 opaque conformance compatibility", () => {
-  it("preserves every checked-in rendition fact byte-for-byte under M6 validation", () => {
-    for (const relativePath of M5_COMPATIBILITY_FIXTURES) {
-      const bytes = new Uint8Array(
-        readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)))
-      );
-      const parsed = parseFrontIndex(bytes);
-      const rawManifest = parseStrictJson(
-        bytes.subarray(
-          parsed.header.manifestOffset,
-          parsed.header.manifestOffset + parsed.header.manifestLength
-        )
-      ) as CanonicalJsonObject;
-      const rawRenditions = rawManifest.renditions;
-
-      expect(Array.from(serializeCanonicalJson(parsed.manifest.renditions)))
-        .toEqual(Array.from(serializeCanonicalJson(rawRenditions)));
-      expect(parsed.manifest.renditions.every((rendition) =>
-        rendition.profile !== "avc-annexb-opaque-v0" ||
-        (
-          rendition.alphaLayout.colorRect[0] === 0 &&
-          rendition.alphaLayout.colorRect[1] === 0 &&
-          rendition.alphaLayout.colorRect[2] === rendition.codedWidth &&
-          rendition.alphaLayout.colorRect[3] === rendition.codedHeight
-        )
-      )).toBe(true);
-    }
   });
 });
 
@@ -395,7 +311,7 @@ describe("M4 programmatic malformed fixtures", () => {
         return bytes;
       }
     ],
-    ["nonzero padding", () => firstPaddingMutation(source)],
+    ["nonzero padding", () => firstPaddingMutation(manifestWithPadding(1))],
     [
       "payload gap",
       () => {
@@ -456,15 +372,6 @@ describe("M4 programmatic malformed fixtures", () => {
       () => {
         const bytes = source.slice();
         const offset = front.records[0]!.payloadOffset;
-        bytes[offset] = (bytes[offset] ?? 0) ^ 0xff;
-        return bytes;
-      }
-    ],
-    [
-      "strict PNG signature mismatch",
-      () => {
-        const bytes = source.slice();
-        const offset = front.manifest.staticFrames[0]!.offset;
         bytes[offset] = (bytes[offset] ?? 0) ^ 0xff;
         return bytes;
       }

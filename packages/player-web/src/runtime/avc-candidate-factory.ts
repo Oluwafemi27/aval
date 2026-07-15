@@ -11,7 +11,7 @@ import type {
 } from "./avc-candidate-factory-model.js";
 import { validateAvcCandidateFactoryOptions } from "./avc-candidate-factory-support.js";
 import { validateAvcCandidateAttemptContext } from "./avc-candidate-factory-validation.js";
-import { captureRuntimeCanvasResourceHost } from "./static-resource-plan.js";
+import { captureRuntimeCanvasResourceHost } from "./canvas-resource-plan.js";
 import type { BrowserContextRecoveryEventTarget } from "./browser-context-recovery.js";
 import type { RuntimeResourceAllocationSnapshot } from "./resource-plan.js";
 

@@ -1,4 +1,4 @@
-import type { GraphPresentation, MotionGraphResult } from "@rendered-motion/graph";
+import type { GraphPresentation, MotionGraphResult } from "@aval/graph";
 import { describe, expect, it } from "vitest";
 
 import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
@@ -9,7 +9,7 @@ import {
   type IntegratedPlaybackSession,
   type IntegratedPlaybackTickContext,
   type IntegratedPreparedContentTick,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player.js";
 import {
   integratedActivationPresentationOrdinal
@@ -21,7 +21,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
     const factory = new RealtimeCandidateFactory();
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new ImmediateStaticStore(),
+      createFallbackStore: () => new ImmediateStaticStore(),
       candidateFactory: factory,
       realtime: {
         requestFrame: frames.request,
@@ -90,7 +90,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
       };
       player = new IntegratedPlayer({
         bytes: createIntegratedOpaqueTestAsset(),
-        createStaticStore: () => new ImmediateStaticStore(),
+        createFallbackStore: () => new ImmediateStaticStore(),
         candidateFactory: factory,
         diagnosticsSink: (failure) => diagnostics.push(failure.code),
         realtime: {
@@ -125,7 +125,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
     factory.session.available = false;
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new ImmediateStaticStore(),
+      createFallbackStore: () => new ImmediateStaticStore(),
       candidateFactory: factory,
       realtime: {
         requestFrame: frames.request,
@@ -162,7 +162,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
     const factory = new RealtimeCandidateFactory();
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new ImmediateStaticStore(),
+      createFallbackStore: () => new ImmediateStaticStore(),
       candidateFactory: factory,
       realtime: {
         requestFrame: frames.request,
@@ -198,7 +198,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
     const factory = new RealtimeCandidateFactory();
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new ImmediateStaticStore(),
+      createFallbackStore: () => new ImmediateStaticStore(),
       candidateFactory: factory,
       realtime: {
         requestFrame: frames.request,
@@ -224,7 +224,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
   it("rejects realtime start when no presentation source was configured", async () => {
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new ImmediateStaticStore(),
+      createFallbackStore: () => new ImmediateStaticStore(),
       candidateFactory: new RealtimeCandidateFactory(),
       timers: new IdleTimers()
     });
@@ -240,7 +240,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
     const factory = new RealtimeCandidateFactory();
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new ImmediateStaticStore(),
+      createFallbackStore: () => new ImmediateStaticStore(),
       candidateFactory: factory,
       realtime: {
         requestFrame: frames.request,
@@ -287,7 +287,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
     const diagnostics: string[] = [];
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => store,
+      createFallbackStore: () => store,
       candidateFactory: factory,
       diagnosticsSink: (failure) => diagnostics.push(failure.code),
       realtime: {
@@ -331,7 +331,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
     const diagnostics: string[] = [];
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new ImmediateStaticStore(),
+      createFallbackStore: () => new ImmediateStaticStore(),
       candidateFactory: factory,
       diagnosticsSink: (failure) => diagnostics.push(failure.code),
       realtime: {
@@ -389,7 +389,7 @@ describe("IntegratedPlayer realtime clock ownership", () => {
     let rejectRequest = false;
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new ImmediateStaticStore(),
+      createFallbackStore: () => new ImmediateStaticStore(),
       candidateFactory: factory,
       diagnosticsSink: (failure) => diagnostics.push({
         code: failure.code,
@@ -662,7 +662,7 @@ function scheduler(cursor: Readonly<{
   });
 }
 
-class ImmediateStaticStore implements IntegratedStaticSurfaceStore {
+class ImmediateStaticStore implements IntegratedFallbackStore {
   #state = "idle";
   public async installInitial(options: {
     readonly state: string;

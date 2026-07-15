@@ -3,7 +3,7 @@ import type {
   GraphPresentation,
   MotionGraphResult,
   MotionGraphSnapshot
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type {
   IntegratedPlaybackSession,
@@ -682,12 +682,26 @@ export class BrowserAvcPlaybackSession
       rebuild,
       signal
     });
-    const ready = await this.#normal.reconcilePreparedSourceRoute(
-      preparedReady,
-      this.#pendingEdge,
-      signal
-    );
-    this.#publishReady(ready, epoch, signal);
+    try {
+      const ready = await this.#normal.reconcilePreparedSourceRoute(
+        preparedReady,
+        this.#desiredBodyEdge(),
+        signal
+      );
+      this.#publishReady(ready, epoch, signal);
+    } catch (error) {
+      const canRetainExactSource =
+        isBrowserMediaSuperseded(error) &&
+        preparedReady.purpose === "source" &&
+        preparedReady.schedulerReservation &&
+        preparedReady.scheduler === this.#normal.scheduler &&
+        epoch === this.#mediaEpoch &&
+        !this.#disposed &&
+        this.#ready === null;
+      if (canRetainExactSource) this.#ready = preparedReady;
+      else this.#normal.discardPrepared(preparedReady);
+      throw error;
+    }
   }
 
   #publishReady(
@@ -699,13 +713,7 @@ export class BrowserAvcPlaybackSession
       this.#normal.discardPrepared(ready);
       return;
     }
-    const presentation = this.#graphSnapshot.presentation;
-    const desiredEdge = this.#pendingEdge ?? (
-      this.#graphSnapshot.phase === "stable" &&
-      presentation?.kind === "body"
-        ? browserCompletionEdge(this.#candidate, presentation.state)
-        : null
-    );
+    const desiredEdge = this.#desiredBodyEdge();
     if (
       ready.routeReady &&
       ready.media.edge !== desiredEdge?.id
@@ -715,6 +723,16 @@ export class BrowserAvcPlaybackSession
       return;
     }
     this.#ready = ready;
+  }
+
+  #desiredBodyEdge(): Readonly<GraphEdgeDefinition> | null {
+    const presentation = this.#graphSnapshot.presentation;
+    return this.#pendingEdge ?? (
+      this.#graphSnapshot.phase === "stable" &&
+      presentation?.kind === "body"
+        ? browserCompletionEdge(this.#candidate, presentation.state)
+        : null
+    );
   }
 
   #storeToken(

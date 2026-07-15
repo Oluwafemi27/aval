@@ -1,4 +1,8 @@
-import type { RenditionV01, UnitV01 } from "@rendered-motion/format";
+import {
+  isAvcCodec,
+  type RenditionV01,
+  type UnitV01
+} from "@aval/format";
 
 import {
   DECODER_WORKER_HARD_LIMITS,
@@ -77,9 +81,11 @@ export class WorkerSampleFactory {
     if (
       (
         rendition.profile !== "avc-annexb-opaque-v0" &&
-        rendition.profile !== "avc-annexb-packed-alpha-v0"
+        rendition.profile !== "avc-annexb-packed-alpha-v0" &&
+        rendition.profile !== "avc-annexb-opaque-v1" &&
+        rendition.profile !== "avc-annexb-packed-alpha-v1"
       ) ||
-      rendition.codec !== "avc1.42E020"
+      !isAvcCodec(rendition.codec)
     ) {
       throw new RangeError(
         "worker sample factory requires an exact AVC rendition"
@@ -358,7 +364,6 @@ function validateCatalogRecord(
   if (
     !Number.isSafeInteger(accessUnit.range.length) ||
     accessUnit.range.length < 1 ||
-    accessUnit.range.length > DECODER_WORKER_HARD_LIMITS.maxSampleBytes ||
     accessUnit.record.payloadLength !== accessUnit.range.length
   ) {
     throw new RangeError("catalog sample byte length exceeds the worker limit");

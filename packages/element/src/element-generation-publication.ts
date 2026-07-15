@@ -3,7 +3,7 @@ import type {
   RuntimeReadiness,
   RuntimeReadinessResult,
   StaticReason
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import type {
   ElementAssetGeneration,
@@ -13,7 +13,7 @@ import type { BrowserRuntimeMetadata } from "./browser-runtime-factory.js";
 import type { ElementFailures } from "./element-failures.js";
 import type { ElementPublicEvents } from "./element-public-events.js";
 import type { ElementPublicState } from "./element-public-state.js";
-import type { RenderedMotionCleanupReceipt } from "./public-types.js";
+import type { AvalCleanupReceipt } from "./public-types.js";
 
 /** Narrow publication surface implemented by the sole element actor. */
 export interface ElementAssetPublicationAuthority {
@@ -110,7 +110,7 @@ export class ElementGenerationPublication implements ElementAssetGenerationHost 
     if (asset !== null) this.#authority.assetUnderflow(asset, count);
   }
 
-  public cleanup(receipt: Readonly<RenderedMotionCleanupReceipt>): void {
+  public cleanup(receipt: Readonly<AvalCleanupReceipt>): void {
     this.#failures.recordCleanup(receipt);
   }
 

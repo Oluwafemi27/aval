@@ -6,6 +6,5 @@ export const GRAPH_LIMITS = Object.freeze({
   maxPortsPerBody: 16,
   maxInputsPerTick: 32,
   maxRoutingOperationsPerTick: 64,
-  maxTraceRecords: 256,
-  maxReversibleFrames: 24
+  maxTraceRecords: 256
 });

@@ -1,3 +1,4 @@
+import { maximumAvcDecodedRgbaBytes } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,6 +13,7 @@ import {
   type WorkerVideoDecoderFactory
 } from "./core.js";
 import { DecoderWorkerHost } from "./host.js";
+import { validateConfiguration } from "./core-validation.js";
 import {
   createDecoderWorkerClient,
   resolveDecoderWorkerEntryUrl
@@ -19,12 +21,210 @@ import {
 import {
   DECODER_WORKER_PROTOCOL_VERSION,
   type DecoderWorkerClientPort,
+  type DecoderWorkerAvcConfig,
   type DecoderWorkerLimits,
   type DecoderWorkerMessagePort,
   type DecoderWorkerSample
 } from "./protocol.js";
 
 describe("dedicated decoder worker boundary", () => {
+  it("accepts a larger codec level and derived decoded-byte policy", () => {
+    expect(() => validateConfiguration(
+      {
+        codec: "avc1.42E028",
+        codedWidth: 1_024,
+        codedHeight: 576,
+        hardwareAcceleration: "no-preference",
+        optimizeForLatency: true
+      },
+      {
+        codedWidth: 1_024,
+        codedHeight: 576,
+        frameRate: { numerator: 30, denominator: 1 },
+        averageBitrate: 6_000_000,
+        peakBitrate: 10_000_000,
+        cpbBufferBits: 10_000_000,
+        requireBt709LimitedRange: true,
+        quantizationPolicy: "fixed-qp26-v0"
+      },
+      {
+        codedWidth: 1_024,
+        codedHeight: 576,
+        displayWidth: 1_024,
+        displayHeight: 576,
+        visibleRect: { x: 0, y: 0, width: 1_024, height: 576 },
+        colorSpace: null
+      },
+      {
+        maxDecodeQueueSize: 12,
+        maxPendingSamples: 24,
+        maxOutstandingFrames: 12,
+        maxDecodedBytes: maximumAvcDecodedRgbaBytes(1_024, 576) * 12
+      }
+    )).not.toThrow();
+  });
+
+  it("accepts bounded AVC-v1 quantization and rejects unknown policies", () => {
+    const config = {
+      codec: "avc1.42E020" as const,
+      codedWidth: 64,
+      codedHeight: 64,
+      hardwareAcceleration: "no-preference" as const,
+      optimizeForLatency: true as const
+    };
+    const profile = {
+      codedWidth: 64,
+      codedHeight: 64,
+      frameRate: { numerator: 30, denominator: 1 },
+      averageBitrate: 1_000_000,
+      peakBitrate: 2_000_000,
+      cpbBufferBits: 2_000_000,
+      requireBt709LimitedRange: true as const,
+      quantizationPolicy: "bounded-qp-v1" as const
+    };
+    const expected = {
+      codedWidth: 64,
+      codedHeight: 64,
+      displayWidth: 64,
+      displayHeight: 64,
+      visibleRect: { x: 0, y: 0, width: 64, height: 64 },
+      colorSpace: null
+    };
+    const limits = {
+      maxDecodeQueueSize: 12,
+      maxPendingSamples: 24,
+      maxOutstandingFrames: 12,
+      maxDecodedBytes: maximumAvcDecodedRgbaBytes(64, 64) * 12
+    };
+
+    expect(() => validateConfiguration(config, profile, expected, limits))
+      .not.toThrow();
+    expect(() => validateConfiguration(config, {
+      ...profile,
+      quantizationPolicy: "unbounded-v2"
+    } as never, expected, limits)).toThrow("quantization policy is invalid");
+  });
+
+  it("requires the exact derived decoded-surface budget", () => {
+    const exact = maximumAvcDecodedRgbaBytes(1_024, 576) * 12;
+    const validate = (maxDecodedBytes: number) => validateConfiguration(
+      {
+        codec: "avc1.42E028",
+        codedWidth: 1_024,
+        codedHeight: 576,
+        hardwareAcceleration: "no-preference",
+        optimizeForLatency: true
+      },
+      {
+        codedWidth: 1_024,
+        codedHeight: 576,
+        frameRate: { numerator: 30, denominator: 1 },
+        averageBitrate: 6_000_000,
+        peakBitrate: 10_000_000,
+        cpbBufferBits: 10_000_000,
+        requireBt709LimitedRange: true,
+        quantizationPolicy: "fixed-qp26-v0"
+      },
+      {
+        codedWidth: 1_024,
+        codedHeight: 576,
+        displayWidth: 1_024,
+        displayHeight: 576,
+        visibleRect: { x: 0, y: 0, width: 1_024, height: 576 },
+        colorSpace: null
+      },
+      {
+        maxDecodeQueueSize: 12,
+        maxPendingSamples: 24,
+        maxOutstandingFrames: 12,
+        maxDecodedBytes
+      }
+    );
+
+    expect(() => validate(exact)).not.toThrow();
+    expect(() => validate(exact - 1)).toThrow(
+      "maxDecodedBytes must exactly match"
+    );
+    expect(() => validate(exact + 1)).toThrow(
+      "maxDecodedBytes must exactly match"
+    );
+  });
+
+  it("accepts an exact decoded budget above the former 64 MiB policy", () => {
+    const exact = maximumAvcDecodedRgbaBytes(3_840, 2_160) * 12;
+    expect(exact).toBeGreaterThan(64 * 1024 * 1024);
+
+    expect(() => validateConfiguration(
+      {
+        codec: "avc1.42E033",
+        codedWidth: 3_840,
+        codedHeight: 2_160,
+        hardwareAcceleration: "no-preference",
+        optimizeForLatency: true
+      },
+      {
+        codedWidth: 3_840,
+        codedHeight: 2_160,
+        frameRate: { numerator: 30, denominator: 1 },
+        averageBitrate: 10_000_000,
+        peakBitrate: 20_000_000,
+        cpbBufferBits: 20_000_000,
+        requireBt709LimitedRange: true,
+        quantizationPolicy: "fixed-qp26-v0"
+      },
+      {
+        codedWidth: 3_840,
+        codedHeight: 2_160,
+        displayWidth: 3_840,
+        displayHeight: 2_160,
+        visibleRect: { x: 0, y: 0, width: 3_840, height: 2_160 },
+        colorSpace: null
+      },
+      {
+        maxDecodeQueueSize: 12,
+        maxPendingSamples: 24,
+        maxOutstandingFrames: 12,
+        maxDecodedBytes: exact
+      }
+    )).not.toThrow();
+  });
+
+  it("rejects a pathological aspect beyond the AVC level dimension rule", () => {
+    expect(() => validateConfiguration(
+      {
+        codec: "avc1.42E028",
+        codedWidth: 4_112,
+        codedHeight: 16,
+        hardwareAcceleration: "no-preference",
+        optimizeForLatency: true
+      },
+      {
+        codedWidth: 4_112,
+        codedHeight: 16,
+        frameRate: { numerator: 30, denominator: 1 },
+        averageBitrate: 1_000_000,
+        peakBitrate: 2_000_000,
+        cpbBufferBits: 2_000_000,
+        requireBt709LimitedRange: true,
+        quantizationPolicy: "fixed-qp26-v0"
+      },
+      {
+        codedWidth: 4_112,
+        codedHeight: 16,
+        displayWidth: 4_112,
+        displayHeight: 16,
+        visibleRect: { x: 0, y: 0, width: 4_112, height: 16 },
+        colorSpace: null
+      },
+      {
+        maxDecodeQueueSize: 12,
+        maxPendingSamples: 24,
+        maxOutstandingFrames: 12,
+        maxDecodedBytes: maximumAvcDecodedRgbaBytes(4_112, 16) * 12
+      }
+    )).toThrow("declared level macroblock limits");
+  });
+
   it("creates and owns the packaged module-worker entry", async () => {
     const { clientPort, workerPort } = createPortPair();
     const host = new DecoderWorkerHost(workerPort, {
@@ -37,7 +237,7 @@ describe("dedicated decoder worker boundary", () => {
     let observedUrl: URL | undefined;
     let observedOptions: WorkerOptions | undefined;
     const client = createDecoderWorkerClient({
-      workerName: "rma-test-decoder",
+      workerName: "aval-test-decoder",
       disposeTimeoutMs: 100,
       workerFactory: (url, options) => {
         observedUrl = url;
@@ -49,7 +249,7 @@ describe("dedicated decoder worker boundary", () => {
     expect(observedUrl?.pathname).toMatch(/decoder-worker\/entry\.js$/u);
     expect(observedOptions).toEqual({
       type: "module",
-      name: "rma-test-decoder"
+      name: "aval-test-decoder"
     });
     await client.dispose();
     expect(clientPort.terminateCalls).toBe(1);
@@ -209,6 +409,20 @@ describe("dedicated decoder worker boundary", () => {
 
   it("rejects configured limits above the closed worker hard caps", async () => {
     const fixture = createFixture({ maxDecodeQueueSize: 13 });
+    await expect(fixture.configure()).rejects.toMatchObject({
+      code: "PROTOCOL_ERROR",
+      fatal: true
+    });
+    expect(fixture.clientPort.terminateCalls).toBe(1);
+    await fixture.client.dispose();
+    fixture.host.detach();
+  });
+
+  it("normalizes an invalid codec as a fatal worker protocol error", async () => {
+    const fixture = createFixture({}, {
+      codec: "avc1.invalid" as DecoderWorkerAvcConfig["codec"]
+    });
+
     await expect(fixture.configure()).rejects.toMatchObject({
       code: "PROTOCOL_ERROR",
       fatal: true
@@ -448,7 +662,7 @@ describe("dedicated decoder worker boundary", () => {
     await fixture.dispose();
   });
 
-  it("rejects detached and oversized sample buffers before posting submit", async () => {
+  it("rejects empty buffers and accepts samples above the former byte cap", async () => {
     const fixture = createFixture();
     await fixture.configure();
     await fixture.client.activateGeneration(1);
@@ -463,20 +677,20 @@ describe("dedicated decoder worker boundary", () => {
     }
     await expect(
       fixture.client.submit(1, [{ ...first, data: new ArrayBuffer(0) }])
-    ).rejects.toThrow("worker cap");
-    const oversized = createUnitSamples(0, 0, 1);
-    const oversizedFirst = oversized[0];
-    if (oversizedFirst === undefined) {
+    ).rejects.toThrow("must not be empty");
+    const larger = createUnitSamples(0, 0, 1);
+    const largerFirst = larger[0];
+    if (largerFirst === undefined) {
       throw new Error("sample fixture is missing");
     }
     await expect(
       fixture.client.submit(1, [
-        { ...oversizedFirst, data: new ArrayBuffer(2 * 1024 * 1024 + 1) }
+        { ...largerFirst, data: new ArrayBuffer(2 * 1024 * 1024 + 1) }
       ])
-    ).rejects.toThrow("worker cap");
+    ).resolves.toBeUndefined();
     expect(
       fixture.clientPort.postedTypes.filter((type) => type === "submit").length
-    ).toBe(submitsBefore);
+    ).toBe(submitsBefore + 1);
 
     await fixture.dispose();
   });
@@ -505,8 +719,7 @@ describe("dedicated decoder worker boundary", () => {
 
   it("accepts bounded decoder-surface padding and accounts its actual RGBA size", async () => {
     const fixture = createFixture({
-      maxOutstandingFrames: 1,
-      maxDecodedBytes: 24
+      maxOutstandingFrames: 1
     });
     await fixture.configure();
     await fixture.client.activateGeneration(1);
@@ -522,26 +735,19 @@ describe("dedicated decoder worker boundary", () => {
     await fixture.dispose();
   });
 
-  it("closes over-budget decoded output before it crosses the worker boundary", async () => {
+  it("rejects an under-budget configuration before decoder construction", async () => {
     const fixture = createFixture({
       maxOutstandingFrames: 1,
-      maxDecodedBytes: 8
+      maxDecodedBytes: maximumAvcDecodedRgbaBytes(2, 2) - 1
     });
-    await fixture.configure();
-    await fixture.client.activateGeneration(1);
-    await fixture.client.submit(1, createUnitSamples(0, 0, 1));
-    const waiting = fixture.client.waitForFrames(1, { timeoutMs: 100 });
 
-    const frame = fixture.decoder.emitNext();
-    await expect(waiting).rejects.toMatchObject({
-      code: "DECODED_BYTE_BUDGET_EXCEEDED",
+    await expect(fixture.configure()).rejects.toMatchObject({
+      code: "PROTOCOL_ERROR",
       fatal: true
     });
-    expect(frame.closeCalls).toBe(1);
-    expect(fixture.client.openFrames).toBe(0);
-    expect(fixture.decoder.closeCalls).toBe(1);
-
-    await fixture.dispose();
+    expect(fixture.clientPort.terminateCalls).toBe(1);
+    await fixture.client.dispose();
+    fixture.host.detach();
   });
 
   it("rejects reordered output for the no-B-frame AVC profile", async () => {
@@ -797,6 +1003,7 @@ function createFixture(
     readonly supportConfig?: (
       config: VideoDecoderConfig
     ) => VideoDecoderConfig;
+    readonly codec?: DecoderWorkerAvcConfig["codec"];
   } = {}
 ): Fixture {
   const { clientPort, workerPort } = createPortPair();
@@ -820,11 +1027,13 @@ function createFixture(
     inspectorFactory: () => new FakeAvcInspector(options.inspectorRejectTag)
   });
   const client = new DecoderWorkerClient(clientPort, { disposeTimeoutMs: 100 });
+  const maxOutstandingFrames = overrides.maxOutstandingFrames ?? 4;
   const limits: DecoderWorkerLimits = {
     maxDecodeQueueSize: 4,
     maxPendingSamples: 16,
-    maxOutstandingFrames: 4,
-    maxDecodedBytes: 1_024,
+    maxOutstandingFrames,
+    maxDecodedBytes:
+      maximumAvcDecodedRgbaBytes(2, 2) * maxOutstandingFrames,
     ...overrides
   };
 
@@ -842,7 +1051,7 @@ function createFixture(
     configure: () =>
       client.configure({
         config: {
-          codec: "avc1.42E020",
+          codec: options.codec ?? "avc1.42E020",
           codedWidth: 2,
           codedHeight: 2,
           hardwareAcceleration: "no-preference",
@@ -855,7 +1064,8 @@ function createFixture(
           averageBitrate: 100_000,
           peakBitrate: 200_000,
           cpbBufferBits: 200_000,
-          requireBt709LimitedRange: true
+          requireBt709LimitedRange: true,
+          quantizationPolicy: "fixed-qp26-v0"
         },
         expectedOutput: {
           codedWidth: 2,

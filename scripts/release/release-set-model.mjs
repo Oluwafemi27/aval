@@ -1,10 +1,10 @@
 export const RELEASE_VERSION = "1.0.0";
 export const RELEASE_PACKAGE_SPECS = Object.freeze([
-  packageSpec("@rendered-motion/graph", []),
-  packageSpec("@rendered-motion/format", ["@rendered-motion/graph"]),
-  packageSpec("@rendered-motion/player-web", ["@rendered-motion/graph", "@rendered-motion/format"]),
-  packageSpec("@rendered-motion/element", ["@rendered-motion/player-web"]),
-  packageSpec("@rendered-motion/compiler", ["@rendered-motion/graph", "@rendered-motion/format", "@rendered-motion/player-web", "@rendered-motion/element"])
+  packageSpec("@aval/graph", []),
+  packageSpec("@aval/format", ["@aval/graph"]),
+  packageSpec("@aval/player-web", ["@aval/graph", "@aval/format"]),
+  packageSpec("@aval/element", ["@aval/player-web"]),
+  packageSpec("@aval/compiler", ["@aval/graph", "@aval/format", "@aval/player-web", "@aval/element"])
 ]);
 export const RELEASE_PACKAGE_NAMES = Object.freeze(topologicalPackageOrder(RELEASE_PACKAGE_SPECS));
 

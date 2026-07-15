@@ -40,7 +40,6 @@ describe("direct frame plan", () => {
           frameCount: 7
         }
       ],
-      staticFrame: 3,
       unusedTrailingFrames: 2,
       warnings: ["2 trailing source frames are unused"]
     });
@@ -76,5 +75,13 @@ describe("direct frame plan", () => {
         denominator: 1_001
       }
     )).toThrowError(expect.objectContaining({ code: "INPUT_INVALID" }));
+  });
+
+  it("accepts a loop beyond the former 900-frame policy ceiling", () => {
+    const result = buildDirectFramePlan(
+      probe({ frameCount: 1_002 }),
+      [0, 1_001]
+    );
+    expect(result.units[0]).toMatchObject({ frameCount: 1_001 });
   });
 });

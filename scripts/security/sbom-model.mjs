@@ -11,7 +11,7 @@ export function validateSpdxDocument(input, { maximumPackages = 4096, maximumFil
   if (input.spdxVersion !== "SPDX-2.3" || input.dataLicense !== "CC0-1.0" || input.SPDXID !== "SPDXRef-DOCUMENT") throw new Error("SPDX 2.3 identity is invalid");
   if (typeof input.name !== "string" || input.name.length < 1 || input.name.length > 256) throw new Error("SPDX document name is invalid");
   exactPublicNamespace(input.documentNamespace);
-  if (input.creationInfo === null || typeof input.creationInfo !== "object" || Array.isArray(input.creationInfo) || Object.keys(input.creationInfo).sort().join(",") !== "created,creators" || typeof input.creationInfo.created !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(input.creationInfo.created) || Number.isNaN(Date.parse(input.creationInfo.created)) || !Array.isArray(input.creationInfo.creators) || input.creationInfo.creators.length !== 1 || !/^Tool: rendered-motion-(?:workspace|package)-sbom-v1$/u.test(input.creationInfo.creators[0])) throw new Error("SPDX creationInfo is invalid");
+  if (input.creationInfo === null || typeof input.creationInfo !== "object" || Array.isArray(input.creationInfo) || Object.keys(input.creationInfo).sort().join(",") !== "created,creators" || typeof input.creationInfo.created !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(input.creationInfo.created) || Number.isNaN(Date.parse(input.creationInfo.created)) || !Array.isArray(input.creationInfo.creators) || input.creationInfo.creators.length !== 1 || !/^Tool: aval-(?:workspace|package)-sbom-v1$/u.test(input.creationInfo.creators[0])) throw new Error("SPDX creationInfo is invalid");
   if (!Array.isArray(input.packages) || input.packages.length < 1 || input.packages.length > maximumPackages) throw new Error("SPDX package count is invalid");
   if (!Array.isArray(input.files) || input.files.length > maximumFiles) throw new Error("SPDX file count is invalid");
   if (!Array.isArray(input.relationships) || input.relationships.length < 1 || input.relationships.length > maximumRelationships) throw new Error("SPDX relationship count is invalid");
@@ -66,9 +66,9 @@ export function reconcilePackageSbom(document, archive) {
 }
 
 export function reconcileReleaseSbomSet({ documentsByPath, releaseSet, workspaceLockBytes }) {
-  const expectedPaths = new Set(["sbom/workspace.spdx.json", ...releaseSet.packages.map(({ name }) => `sbom/${name.slice("@rendered-motion/".length)}.spdx.json`)]);
+  const expectedPaths = new Set(["sbom/workspace.spdx.json", ...releaseSet.packages.map(({ name }) => `sbom/${name.slice("@aval/".length)}.spdx.json`)]);
   if (documentsByPath.size !== expectedPaths.size || [...documentsByPath.keys()].some((path) => !expectedPaths.has(path))) throw new Error("candidate SBOM set is not exactly workspace plus five packages");
-  for (const archive of releaseSet.packages) reconcilePackageSbom(documentsByPath.get(`sbom/${archive.name.slice("@rendered-motion/".length)}.spdx.json`), archive);
+  for (const archive of releaseSet.packages) reconcilePackageSbom(documentsByPath.get(`sbom/${archive.name.slice("@aval/".length)}.spdx.json`), archive);
   reconcileWorkspaceSbom(documentsByPath.get("sbom/workspace.spdx.json"), workspaceLockBytes);
 }
 

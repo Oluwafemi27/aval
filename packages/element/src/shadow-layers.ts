@@ -1,14 +1,12 @@
-import { RENDERED_MOTION_SHADOW_STYLE } from "./shadow-style.js";
+import { AVAL_SHADOW_STYLE } from "./shadow-style.js";
 
-export type RenderedMotionVisibleLayer =
+export type AvalVisibleLayer =
   | "fallback"
-  | "static"
   | "animated";
 
 export class ShadowLayerOwner {
   public readonly root: ShadowRoot;
   public readonly fallback: HTMLSlotElement;
-  public readonly staticCanvas: HTMLCanvasElement;
   public readonly animatedCanvas: HTMLCanvasElement;
 
   #hostRule: CSSStyleRule | null = null;
@@ -18,9 +16,8 @@ export class ShadowLayerOwner {
     width: null as number | null,
     height: null as number | null
   });
-  #visible: RenderedMotionVisibleLayer = "fallback";
+  #visible: AvalVisibleLayer = "fallback";
   #sourceGeneration = 0;
-  #staticDrawn = false;
   #animatedDrawn = false;
   #disposed = false;
   #disposeComplete = false;
@@ -29,14 +26,9 @@ export class ShadowLayerOwner {
     this.root = host.attachShadow({ mode: "open" });
     this.fallback = document.createElement("slot");
     this.fallback.name = "fallback";
-    this.fallback.dataset.rmaLayer = "fallback";
-    this.staticCanvas = this.#createCanvas("static");
-    this.animatedCanvas = this.#createCanvas("animated");
-    this.root.append(
-      this.fallback,
-      this.staticCanvas,
-      this.animatedCanvas
-    );
+    this.fallback.dataset.avalLayer = "fallback";
+    this.animatedCanvas = this.#createCanvas();
+    this.root.append(this.fallback, this.animatedCanvas);
     this.rebindStyles(document);
     this.#applyVisibility("fallback");
   }
@@ -57,7 +49,7 @@ export class ShadowLayerOwner {
     ) return false;
     try {
       const sheet = new Constructor();
-      sheet.replaceSync(RENDERED_MOTION_SHADOW_STYLE);
+      sheet.replaceSync(AVAL_SHADOW_STYLE);
       const rule = sheet.cssRules.item(0);
       if (!(rule instanceof document.defaultView!.CSSStyleRule)) return false;
       this.root.adoptedStyleSheets = [sheet];
@@ -88,14 +80,13 @@ export class ShadowLayerOwner {
     return this.#applyIntrinsicSize();
   }
 
-  public get visibleLayer(): RenderedMotionVisibleLayer {
+  public get visibleLayer(): AvalVisibleLayer {
     return this.#visible;
   }
 
   public resetSource(generation: number): void {
     this.#throwIfDisposed();
     this.#sourceGeneration = requireGeneration(generation);
-    this.#staticDrawn = false;
     this.#animatedDrawn = false;
     this.#applyVisibility("fallback");
   }
@@ -105,17 +96,9 @@ export class ShadowLayerOwner {
     this.#applyVisibility("fallback");
   }
 
-  public markStaticDrawn(generation: number): void {
+  public coverFallback(generation: number): void {
     this.#assertCurrent(generation);
-    this.#staticDrawn = true;
-  }
-
-  public revealStatic(generation: number): void {
-    this.#assertCurrent(generation);
-    if (!this.#staticDrawn) {
-      throw new Error("static presentation cannot be revealed before draw");
-    }
-    this.#applyVisibility("static");
+    this.#applyVisibility("fallback");
   }
 
   public markAnimatedDrawn(generation: number): void {
@@ -131,10 +114,6 @@ export class ShadowLayerOwner {
     this.#applyVisibility("animated");
   }
 
-  public coverStatic(generation: number): void {
-    this.revealStatic(generation);
-  }
-
   public showFallbackAfterFatal(generation: number): void {
     this.#assertCurrent(generation);
     this.#applyVisibility("fallback");
@@ -143,17 +122,13 @@ export class ShadowLayerOwner {
   public dispose(): boolean {
     if (this.#disposeComplete) return true;
     this.#disposed = true;
-    this.#staticDrawn = false;
     this.#animatedDrawn = false;
     let complete = true;
     const attempt = (operation: () => void): void => {
       try { operation(); } catch { complete = false; }
     };
     attempt(() => { this.fallback.hidden = false; });
-    attempt(() => { this.staticCanvas.hidden = true; });
     attempt(() => { this.animatedCanvas.hidden = true; });
-    attempt(() => { this.staticCanvas.width = 0; });
-    attempt(() => { this.staticCanvas.height = 0; });
     attempt(() => { this.animatedCanvas.width = 0; });
     attempt(() => { this.animatedCanvas.height = 0; });
     this.#visible = "fallback";
@@ -161,9 +136,9 @@ export class ShadowLayerOwner {
     return complete;
   }
 
-  #createCanvas(kind: "static" | "animated"): HTMLCanvasElement {
+  #createCanvas(): HTMLCanvasElement {
     const canvas = this.root.ownerDocument.createElement("canvas");
-    canvas.dataset.rmaLayer = kind;
+    canvas.dataset.avalLayer = "animated";
     canvas.setAttribute("aria-hidden", "true");
     canvas.tabIndex = -1;
     return canvas;
@@ -201,15 +176,12 @@ export class ShadowLayerOwner {
     this.#applyVisibility("fallback");
   }
 
-  #applyVisibility(layer: RenderedMotionVisibleLayer): void {
+  #applyVisibility(layer: AvalVisibleLayer): void {
     const showFallback = layer === "fallback";
-    const showStatic = layer === "static";
     const showAnimated = layer === "animated";
     if (showFallback) this.fallback.hidden = false;
-    if (showStatic) this.staticCanvas.hidden = false;
     if (showAnimated) this.animatedCanvas.hidden = false;
     this.animatedCanvas.hidden = !showAnimated;
-    this.staticCanvas.hidden = !showStatic;
     this.fallback.hidden = !showFallback;
     this.#visible = layer;
   }

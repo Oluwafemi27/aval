@@ -7,7 +7,7 @@ import { prepareImmutableReleaseSetOutput } from "../../scripts/release/immutabl
 
 describe("immutable release-set output", () => {
   it("publishes one staged packages/index root and refuses every rerun without changing bytes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-immutable-release-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-immutable-release-"));
     const target = join(root, "artifacts", "1.0.0");
     try {
       const output = join(target, "packages");
@@ -27,7 +27,7 @@ describe("immutable release-set output", () => {
   });
 
   it("rejects split or noncanonical output layouts before creating a staging root", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-immutable-layout-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-immutable-layout-"));
     try {
       await mkdir(join(root, "one"), { recursive: true });
       await expect(prepareImmutableReleaseSetOutput({ output: join(root, "one", "archives"), index: join(root, "two", "index.json") })).rejects.toThrow(/canonical atomic/u);

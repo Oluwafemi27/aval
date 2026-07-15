@@ -1,3 +1,3 @@
-import { defineRenderedMotionElement } from "./definition.js";
+import { defineAvalElement } from "./definition.js";
 
-export const RenderedMotionElement = defineRenderedMotionElement();
+export const AvalElement = defineAvalElement();

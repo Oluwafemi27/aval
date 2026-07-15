@@ -1,7 +1,7 @@
 import {
   FORMAT_DEFAULT_BUDGETS,
   type CanvasV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import type {
   OpaqueRenditionTargetV01,
@@ -45,6 +45,7 @@ const PROJECT_KEYS = [
   "edges",
   "bindings"
 ] as const;
+const PNG_DIMENSION_MAX = 0xffff_ffff;
 
 /** Validate only the exact M5 authoring schema. */
 export function validateSourceProjectV01(
@@ -59,7 +60,7 @@ export function validateSourceProjectV01(
   const sources = cloneSourceDescriptors(input.sources);
   const renditions = cloneOpaqueRenditionsV01(input.renditions, canvas);
   const units = cloneSourceUnits(input.units, sources);
-  const states = cloneSourceStates(input.states, units, sources);
+  const states = cloneSourceStates(input.states, units);
   const edges = cloneSourceEdges(input.edges, FORMAT_DEFAULT_BUDGETS.maxEdges);
   const bindings = cloneSourceBindings(
     input.bindings,
@@ -98,8 +99,8 @@ function cloneCanvasV01(value: unknown): CanvasV01 {
     ["width", "height", "fit", "pixelAspect", "colorSpace"],
     "canvas"
   );
-  const width = integer(input.width, "canvas.width", 16, 512);
-  const height = integer(input.height, "canvas.height", 16, 512);
+  const width = integer(input.width, "canvas.width", 16, PNG_DIMENSION_MAX);
+  const height = integer(input.height, "canvas.height", 16, PNG_DIMENSION_MAX);
   if (width % 16 !== 0 || height % 16 !== 0) {
     invalid("canvas", "dimensions must be multiples of 16 for M5 AVC");
   }
@@ -133,18 +134,19 @@ function cloneOpaqueRenditionsV01(
     const path = `renditions[${String(index)}]`;
     const input = record(entry, path);
     exactKeys(input, ["id", "codedWidth", "codedHeight", "bitrate"], path);
-    const codedWidth = integer(input.codedWidth, `${path}.codedWidth`, 16, 512);
-    const codedHeight = integer(input.codedHeight, `${path}.codedHeight`, 16, 512);
+    const codedWidth = integer(input.codedWidth, `${path}.codedWidth`, 16);
+    const codedHeight = integer(input.codedHeight, `${path}.codedHeight`, 16);
     if (
       codedWidth % 16 !== 0 ||
       codedHeight % 16 !== 0 ||
       codedWidth > canvas.width ||
       codedHeight > canvas.height ||
-      codedWidth * canvas.height !== codedHeight * canvas.width
+      BigInt(codedWidth) * BigInt(canvas.height) !==
+        BigInt(codedHeight) * BigInt(canvas.width)
     ) {
       invalid(
         path,
-        "dimensions must be 16-aligned, bounded, and preserve canvas aspect"
+        "dimensions must be 16-aligned, canvas-bounded, and preserve canvas aspect"
       );
     }
     const bitrateInput = record(input.bitrate, `${path}.bitrate`);
@@ -152,14 +154,12 @@ function cloneOpaqueRenditionsV01(
     const average = integer(
       bitrateInput.average,
       `${path}.bitrate.average`,
-      1,
-      8_000_000
+      1
     );
     const peak = integer(
       bitrateInput.peak,
       `${path}.bitrate.peak`,
-      average,
-      8_000_000
+      average
     );
     return Object.freeze({
       id: identifier(input.id, `${path}.id`),

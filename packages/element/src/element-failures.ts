@@ -1,4 +1,4 @@
-import type { RenderedMotionCleanupReceipt } from "./public-types.js";
+import type { AvalCleanupReceipt } from "./public-types.js";
 import { normalizePublicFailure } from "./public-failure.js";
 import type { ElementPublicEvents } from "./element-public-events.js";
 import type { ElementPublicState } from "./element-public-state.js";
@@ -15,7 +15,7 @@ export class ElementFailures {
     activeSource: boolean;
     sourceGeneration: number;
   }>;
-  #cleanup: Readonly<RenderedMotionCleanupReceipt> | null = null;
+  #cleanup: Readonly<AvalCleanupReceipt> | null = null;
 
   public constructor(input: Readonly<{
     events: ElementPublicEvents;
@@ -34,11 +34,11 @@ export class ElementFailures {
     this.#context = input.context;
   }
 
-  public get cleanup(): Readonly<RenderedMotionCleanupReceipt> | null {
+  public get cleanup(): Readonly<AvalCleanupReceipt> | null {
     return this.#cleanup;
   }
 
-  public recordCleanup(receipt: Readonly<RenderedMotionCleanupReceipt>): void {
+  public recordCleanup(receipt: Readonly<AvalCleanupReceipt>): void {
     if (
       this.#cleanup === null ||
       receipt.sourceGeneration >= this.#cleanup.sourceGeneration

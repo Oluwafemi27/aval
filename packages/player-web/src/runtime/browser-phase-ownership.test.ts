@@ -2,11 +2,11 @@ import {
   writeCanonicalAsset,
   type CanonicalAssetInputV01,
   type RenditionV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 import {
   MotionGraphEngine,
   type MotionGraphResult
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type {
@@ -19,7 +19,6 @@ import type {
   DecoderWorkerMetrics,
   DecoderWorkerSample
 } from "../decoder-worker/protocol.js";
-import { strictTestPng } from "./asset-test-fixture.js";
 import {
   installRuntimeAssetCatalog,
   type RuntimeAssetCatalog
@@ -79,20 +78,20 @@ afterEach(async () => {
 });
 
 describe("browser playback phase ownership", () => {
-  it("starts adjacent body preparation when static readiness resumes animated", async () => {
+  it("starts unfinished intro preparation when static readiness resumes animated", async () => {
     const harness = await BrowserSessionHarness.create({
       activation: "resume",
       requireScheduledBackground: true
     });
 
     expect(harness.activationBackgroundStarted).toBe(true);
-    expect(harness.tags()).toEqual(["body:idle:idle-body:0"]);
+    expect(harness.tags()).toEqual(["intro:idle:intro:0"]);
     expect(harness.schedulerSnapshot()).toMatchObject({
-      ringSize: 5,
+      ringSize: 0,
       smoothSession: true
     });
     await expect(harness.tick()).resolves.toMatchObject({
-      presentation: { kind: "body", state: "idle", frameIndex: 1 }
+      presentation: { kind: "intro", state: "idle", frameIndex: 1 }
     });
   });
 
@@ -168,6 +167,62 @@ describe("browser playback phase ownership", () => {
     });
     await harness.advanceUntil("reversible:idle-hover:hover-shift:0", 4);
     expect(harness.tags().some((tag) => tag.startsWith("locked:"))).toBe(false);
+  });
+
+  it("retains a reserved source when cut supersession aborts reconciliation", async () => {
+    const harness = await BrowserSessionHarness.createAtLoadingZero();
+    await harness.request("hover");
+    const upload = harness.renderer.gateNextUpload();
+
+    const sourceOne = await harness.tick({ settleAfter: false });
+    expect(sourceOne.presentation).toMatchObject({
+      kind: "body",
+      state: "loading",
+      frameIndex: 1
+    });
+    await upload.entered;
+    await harness.request("idle", { settle: false });
+    await harness.request("loading", { settle: false });
+    upload.release();
+    await harness.settle();
+
+    const adjacent = await harness.tick();
+    expect(adjacent.presentation).toMatchObject({
+      kind: "body",
+      state: "loading",
+      frameIndex: 2
+    });
+    expect(harness.playbackSnapshot().cut).toBeNull();
+  });
+
+  it("keeps source adjacency when cut supersession interrupts route restart", async () => {
+    const harness = await BrowserSessionHarness.createAtLoadingZero();
+    await harness.request("hover");
+    const upload = harness.renderer.gateNextUpload();
+    const activation = harness.worker.gateNextActivation();
+
+    const sourceOne = await harness.tick({ settleAfter: false });
+    expect(sourceOne.presentation).toMatchObject({
+      kind: "body",
+      state: "loading",
+      frameIndex: 1
+    });
+    await upload.entered;
+    await harness.request("loading", { settle: false });
+    upload.release();
+    await activation.entered;
+    await harness.request("idle", { settle: false });
+    await harness.request("loading", { settle: false });
+    activation.release();
+    await harness.settle();
+
+    const adjacent = await harness.tick();
+    expect(adjacent.presentation).toMatchObject({
+      kind: "body",
+      state: "loading",
+      frameIndex: 2
+    });
+    expect(harness.playbackSnapshot().cut).toBeNull();
   });
 
   it("cancels a fully staged cut before frame zero without mutating the source path", async () => {
@@ -525,6 +580,28 @@ describe("browser playback phase ownership", () => {
       pendingEdge: null,
       smoothSession: true
     });
+  });
+
+  it("keeps an implicit non-cut completion route prepared across finite frames", async () => {
+    const harness = await BrowserSessionHarness.createAtLoadingZero({
+      completionStart: "finish"
+    });
+    const prepared = harness.schedulerSnapshot();
+
+    expect(prepared.pendingEdge).toBe("loading-done");
+    for (const frameIndex of [1, 2]) {
+      const result = await harness.tick();
+      expect(result.presentation).toMatchObject({
+        kind: "body",
+        state: "loading",
+        frameIndex
+      });
+      expect(harness.schedulerSnapshot()).toMatchObject({
+        generation: prepared.generation,
+        pendingEdge: "loading-done",
+        smoothSession: true
+      });
+    }
   });
 
   it("lets an explicit non-cut request supersede a staged completion cut at the final frame", async () => {
@@ -1292,18 +1369,11 @@ function createBrowserPhaseAsset(options: {
       frameRate: { numerator: 30, denominator: 1 },
       renditions: [rendition],
       units,
-      staticFrames: stateIds.map((id) => ({
-        id: `${id}-static`,
-        width: 64,
-        height: 64,
-        sha256: digest
-      })),
       initialState: "idle",
       states: stateIds.map((id) => ({
         id,
         bodyUnit: `${id}-body`,
-        ...(id === "idle" ? { initialUnit: "intro" } : {}),
-        staticFrame: `${id}-static`
+        ...(id === "idle" ? { initialUnit: "intro" } : {})
       })),
       edges: [
         {
@@ -1360,10 +1430,6 @@ function createBrowserPhaseAsset(options: {
           "idle-third"
         ]
       },
-      fallback: {
-        unsupported: "per-state-static",
-        reducedMotion: "per-state-static"
-      },
       limits: {
         maxCompiledBytes: 512 * 1024,
         maxRuntimeBytes: 32 * 1024 * 1024,
@@ -1372,11 +1438,7 @@ function createBrowserPhaseAsset(options: {
         runtimeWorkingSetBytes: 8 * 1024 * 1024
       }
     },
-    accessUnits,
-    staticPayloads: stateIds.map((id) => ({
-      staticFrame: `${id}-static`,
-      bytes: strictTestPng(64, 64)
-    }))
+    accessUnits
   });
 }
 

@@ -19,7 +19,8 @@ import {
 } from "./cli-output.js";
 import {
   runCompileCommand,
-  type CompileCommandDependencies
+  type CompileCommandDependencies,
+  type CompileCommandResult
 } from "./commands/compile.js";
 import {
   createCompileAdoptionSummary,
@@ -77,11 +78,14 @@ export async function runCli(
             ? {}
             : { dependencies: runtime.compileDependencies })
         });
+        const warnings = result.warnings.length === 0
+          ? ""
+          : `\n${result.warnings.map((warning) => `WARNING ${safe(warning)}`).join("\n")}`;
         outputResult(
           io,
           arguments_.json,
           result,
-          `Compiled ${safe(result.outputPath)} (${String(result.bytes)} bytes, ${result.sha256})\nReport ${safe(result.reportPath)}\n${formatCompileAdoptionSummary(result.adoption)}`
+          `Compiled ${safe(result.outputPath)} (${String(result.bytes)} bytes, ${result.sha256})\nReport ${safe(result.reportPath)}\n${formatCompileAdoptionSummary(result.adoption)}${encodingOutput(result)}${warnings}`
         );
         return 0;
       }
@@ -96,7 +100,7 @@ export async function runCli(
           io,
           arguments_.json,
           result,
-          `Valid ${safe(result.file)} (${String(result.bytes)} bytes, ${String(result.accessUnits)} access units)\nAVC: ${result.avcClaim}; static PNG: ${result.staticPngClaim}; digests: ${result.digestClaim}`
+          `Valid ${safe(result.file)} (${String(result.bytes)} bytes, ${String(result.accessUnits)} access units)\nAVC: ${result.avcClaim}; digests: ${result.digestClaim}`
         );
         return 0;
       }
@@ -156,7 +160,6 @@ export async function runCli(
                   alpha: adoption.alpha,
                   continuityPassed: adoption.reports.continuityPassed,
                   continuityCuts: adoption.reports.continuityCuts,
-                  strictStatics: adoption.reports.strictStatics,
                   alphaAuditedFrames: adoption.reports.alphaAuditedFrames
                 }
               });
@@ -172,7 +175,7 @@ export async function runCli(
                   sha256: result.sha256,
                   warnings: result.warnings
                 },
-                `Build ${String(sequence)}: ${safe(result.outputPath)} (${String(result.bytes)} bytes)`
+                `Build ${String(sequence)}: ${safe(result.outputPath)} (${String(result.bytes)} bytes)${encodingOutput(result)}`
               );
             },
             onFailure: ({ error }) => {
@@ -225,7 +228,7 @@ function outputDiagnostic(
 
 function inspectText(result: Awaited<ReturnType<typeof runInspectCommand>>): string {
   const lines = [
-    `${safe(result.file)}: RMA ${result.formatVersion}, ${String(result.bytes)} bytes`,
+    `${safe(result.file)}: AVAL ${result.formatVersion}, ${String(result.bytes)} bytes`,
     `Canvas ${String(result.canvas.width)}x${String(result.canvas.height)} at ${result.frameRate} fps`,
     `Initial state ${safe(result.initialState)}; states ${result.states.map(safe).join(", ")}`,
     `SHA-256 ${result.sha256}`,
@@ -241,7 +244,7 @@ function inspectText(result: Awaited<ReturnType<typeof runInspectCommand>>): str
     ...result.samples.map((sample) =>
       `Sample ${safe(sample.rendition)}/${safe(sample.unit)}/${String(sample.frameIndex)}: offset=${String(sample.offset)}, length=${String(sample.length)}, sha256=${sample.sha256}`
     ),
-    `AVC: ${result.avcClaim}; static PNG: ${result.staticPngClaim}; digests: ${result.digestClaim}`
+    `AVC: ${result.avcClaim}; digests: ${result.digestClaim}`
   ];
   return lines.join("\n");
 }
@@ -251,16 +254,42 @@ function safe(value: string): string {
 }
 
 export const HELP_TEXT = `Usage:
-  rma compile <project.json> --out <asset.rma> [--report <report.json>]
-  rma compile <input.mov|input.mp4|input.m4v> --loop <start:end> [--alpha auto|opaque|packed] --out <asset.rma>
-  rma compile <prefix%0Nd.png> --frames <first:count> --fps <n/d> --loop <start:end> --canvas <wxh> [--alpha auto|opaque|packed] --out <asset.rma>
-  rma inspect <asset.rma> [--json]
-  rma validate <asset.rma> [--json]
-  rma unpack <asset.rma> --out <empty-directory> [--json]
-  rma init <directory> [--json]
-  rma dev <project.json> --out <asset.rma> [--port <0-65535>] [--open] [--force] [--json]
+  avl compile <project.json> --out <asset.avl> [--report <report.json>]
+  avl compile <input.mov|input.mp4|input.m4v> --loop <start:end> [--crf <1..51> --max-bitrate <bits/second> | --bitrate <average:peak>] [--preset <name>] [--alpha auto|opaque|packed] --out <asset.avl>
+  avl compile <prefix%0Nd.png> --frames <first:count> --fps <n/d> --loop <start:end> [--crf <1..51> --max-bitrate <bits/second> | --bitrate <average:peak>] [--preset <name>] [--canvas <wxh>] [--alpha auto|opaque|packed] --out <asset.avl>
+  avl inspect <asset.avl> [--json]
+  avl validate <asset.avl> [--json]
+  avl unpack <asset.avl> --out <empty-directory> [--json]
+  avl init <directory> [--json]
+  avl dev <project.json> --out <asset.avl> [--media-timeout-ms <integer>] [--port <0-65535>] [--open] [--force] [--json]
+
+Direct AVC encoding options:
+  --bitrate <average:peak>       ABR average and peak in bits/second
+  --crf <1..51>                  constrained CRF for direct media
+  --max-bitrate <bits/second>    required ceiling with --crf
+  --preset <name>                allowlisted x264 preset through veryslow
+
+Operational options:
+  --media-timeout-ms <integer>   per FFmpeg operation for slow/large encodes
+
+Project files own their rendition encoding policy. HEVC/WebM output, faststart,
+muxer tags, and arbitrary FFmpeg arguments are unavailable.
 
 Common compile options: --ffmpeg <absolute-path> --ffprobe <absolute-path> --force --json`;
+
+function encodingOutput(
+  result: Pick<CompileCommandResult, "buildDetails">
+): string {
+  const renditions = result.buildDetails.renditions;
+  if (!Array.isArray(renditions) || renditions.length === 0) return "";
+  return `\n${renditions.map((rendition) => {
+    const rateControl = rendition.encoding.rateControl;
+    const configured = rateControl.mode === "crf"
+      ? `CRF ${String(rateControl.crf)}`
+      : `ABR ${String(rateControl.averageBitrate)} bit/s`;
+    return `Encoding ${safe(rendition.id)}: ${configured}, preset ${safe(rendition.encoding.preset)}; measured average ${String(rendition.encoding.measuredAverageBitrate)} bit/s, configured peak ${String(rendition.bitrate.peak)} bit/s`;
+  }).join("\n")}`;
+}
 
 async function main(): Promise<void> {
   const controller = new AbortController();

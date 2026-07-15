@@ -43,7 +43,7 @@ function fail(message: string, offset: number): never {
 function assertMagic(bytes: Uint8Array): void {
   for (let index = 0; index < FORMAT_MAGIC.length; index += 1) {
     if (bytes[index] !== FORMAT_MAGIC[index]) {
-      fail("format magic does not match RMAF 0.1", index);
+      fail("format magic does not match AVLF 0.1", index);
     }
   }
 }

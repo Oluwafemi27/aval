@@ -2,7 +2,7 @@ import type {
   CompiledManifestV01,
   ResidencyEndpointV01,
   UnitV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { endpointEvidenceKey } from "./readiness-evidence-index.js";
 import type {

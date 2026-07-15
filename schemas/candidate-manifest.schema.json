@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rendered-motion.dev/schemas/candidate-manifest.schema.json",
-  "title": "Rendered Motion immutable candidate manifest",
+  "$id": "https://aval.dev/schemas/candidate-manifest.schema.json",
+  "title": "AVAL immutable candidate manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "manifestKind", "releaseVersion", "releaseSetDigest", "commit", "tree", "cleanTree", "createdAt", "tools", "browserPin", "artifacts"],

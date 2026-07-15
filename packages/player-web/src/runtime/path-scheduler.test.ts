@@ -2,7 +2,7 @@ import type {
   GraphBodyDefinition,
   GraphEdgeDefinition,
   GraphStartPolicy
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 import type {
   DecoderWorkerMetrics,
   DecoderWorkerSample
@@ -415,6 +415,49 @@ describe("PathScheduler generation replacement and recovery", () => {
       generation: 3,
       activePath: "cut:after-in-flight"
     });
+  });
+
+  it("keeps a preserved source coherent when replacement acknowledgement aborts", async () => {
+    const fixture = createFixture();
+    await startAtSourceZero(fixture);
+    await fixture.scheduler.prepareRoute({
+      edge: lockedEdge("obsolete", 2),
+      targetState: "obsolete",
+      targetBody: body("body", "loop", 2, [1])
+    });
+    await fixture.scheduler.pump({ targetRingFrames: 6 });
+    const reserved = requireStreaming(fixture.scheduler.reserveNext());
+    expect(reserved.media.frame.localFrame).toBe(1);
+    const gate = fixture.worker.gateNextActivation();
+    const controller = new AbortController();
+    const cancellation = fixture.scheduler.cancelPreparedRoute(
+      "cancel:obsolete",
+      controller.signal,
+      true
+    );
+    await gate.entered;
+
+    expect(fixture.scheduler.snapshot()).toMatchObject({
+      generation: 2,
+      activePath: "cancel:obsolete",
+      pendingEdge: null,
+      displayedSource: { occurrence: 0n, frame: 0 }
+    });
+    controller.abort(new DOMException("replacement superseded", "AbortError"));
+    await expect(cancellation).rejects.toMatchObject({ name: "AbortError" });
+    gate.release();
+    await Promise.resolve();
+
+    fixture.scheduler.commitPreparedPresentation(reserved.media);
+    reserved.frame.close();
+    await fixture.scheduler.pump({ targetRingFrames: 1 });
+    const adjacent = requireStreaming(fixture.scheduler.takeNext());
+    expect(adjacent.media).toMatchObject({
+      frame: { localFrame: 0 },
+      intendedPresentationOrdinal:
+        reserved.media.intendedPresentationOrdinal + 1n
+    });
+    adjacent.frame.close();
   });
 
   it("does not let a stale token rollback a newer staged runway", async () => {

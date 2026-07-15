@@ -1,4 +1,4 @@
-import { FORMAT_DEFAULT_BUDGETS } from "@rendered-motion/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,7 +11,7 @@ describe("runtime asset fetch contracts", () => {
   it("normalizes one closed request and finite loader policy", () => {
     const controller = new AbortController();
     const normalized = normalizeRuntimeAssetRequest({
-      url: new URL("https://cdn.example.test/motion.rma"),
+      url: new URL("https://cdn.example.test/motion.avl"),
       integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       signal: controller.signal,
       timeoutMs: 7_500,
@@ -19,7 +19,7 @@ describe("runtime asset fetch contracts", () => {
     });
 
     expect(normalized).toMatchObject({
-      url: "https://cdn.example.test/motion.rma",
+      url: "https://cdn.example.test/motion.avl",
       signal: controller.signal,
       credentials: "omit",
       integrity: {
@@ -43,7 +43,7 @@ describe("runtime asset fetch contracts", () => {
 
   it("defaults credentials, signal, integrity, and timeout deterministically", () => {
     const normalized = normalizeRuntimeAssetRequest({
-      url: "http://127.0.0.1:4173/asset.rma"
+      url: "http://127.0.0.1:4173/asset.avl"
     });
     expect(normalized.credentials).toBe("same-origin");
     expect(normalized.signal).toBeNull();
@@ -54,30 +54,34 @@ describe("runtime asset fetch contracts", () => {
 
   it("preserves credentialed CORS fetch mode", () => {
     expect(normalizeRuntimeAssetRequest({
-      url: "https://cdn.example.test/credentialed.rma",
+      url: "https://cdn.example.test/credentialed.avl",
       credentials: "include"
     }).credentials).toBe("include");
   });
 
-  it("allows a lower file cap but never a larger format cap", () => {
+  it("allows explicit file policies above the former 32 MiB default", () => {
     expect(normalizeRuntimeAssetRequest(
-      { url: "https://example.test/a.rma" },
+      { url: "https://example.test/a.avl" },
       { maximumFileBytes: 1024 }
     ).policy.maximumFileBytes).toBe(1024);
+    expect(normalizeRuntimeAssetRequest(
+      { url: "https://example.test/a.avl" },
+      { maximumFileBytes: 33 * 1024 * 1024 }
+    ).policy.maximumFileBytes).toBe(33 * 1024 * 1024);
     expect(() => normalizeRuntimeAssetRequest(
-      { url: "https://example.test/a.rma" },
+      { url: "https://example.test/a.avl" },
       { maximumFileBytes: FORMAT_DEFAULT_BUDGETS.maxFileBytes + 1 }
     )).toThrow();
   });
 
   it.each([
-    { url: "relative.rma" },
+    { url: "relative.avl" },
     { url: "data:text/plain,no" },
-    { url: "https://example.test/a.rma", timeoutMs: 0 },
-    { url: "https://example.test/a.rma", timeoutMs: 1.5 },
-    { url: "https://example.test/a.rma", credentials: "invalid" },
-    { url: "https://example.test/a.rma", integrity: "sha256-nope" },
-    { url: "https://example.test/a.rma", surprise: true }
+    { url: "https://example.test/a.avl", timeoutMs: 0 },
+    { url: "https://example.test/a.avl", timeoutMs: 1.5 },
+    { url: "https://example.test/a.avl", credentials: "invalid" },
+    { url: "https://example.test/a.avl", integrity: "sha256-nope" },
+    { url: "https://example.test/a.avl", surprise: true }
   ])("rejects hostile request %#", (request) => {
     expect(() => normalizeRuntimeAssetRequest(request as never)).toThrow();
   });
@@ -93,7 +97,7 @@ describe("runtime asset fetch contracts", () => {
     const captured = await snapshotRuntimeFetchResponse({
       status: 206,
       type: "cors",
-      url: "https://cdn.example.test/final.rma",
+      url: "https://cdn.example.test/final.avl",
       headers: {
         get(name) {
           requestedHeaders.push(name);
@@ -116,7 +120,7 @@ describe("runtime asset fetch contracts", () => {
     expect(captured).toMatchObject({
       status: 206,
       type: "cors",
-      finalUrl: "https://cdn.example.test/final.rma",
+      finalUrl: "https://cdn.example.test/final.avl",
       bodyReader: reader
     });
     expect(captured.headers).toEqual({
@@ -164,7 +168,7 @@ describe("runtime asset fetch contracts", () => {
     await expect(snapshotRuntimeFetchResponse({
       status: 200,
       type: "basic",
-      url: "https://example.test/a.rma",
+      url: "https://example.test/a.avl",
       headers: { get: () => null },
       body: null
     })).rejects.toThrow("fetch response body is unavailable");
@@ -178,7 +182,7 @@ describe("runtime asset fetch contracts", () => {
     await expect(snapshotRuntimeFetchResponse({
       status: 206,
       type: "cors",
-      url: "https://example.test/a.rma",
+      url: "https://example.test/a.avl",
       headers: {
         get(): never {
           throw new Error("secret header");
@@ -209,7 +213,7 @@ describe("runtime asset fetch contracts", () => {
     await expect(snapshotRuntimeFetchResponse({
       status: 206,
       type: "cors",
-      url: "https://example.test/a.rma",
+      url: "https://example.test/a.avl",
       headers: {
         get(): never {
           throw new Error("secret header");

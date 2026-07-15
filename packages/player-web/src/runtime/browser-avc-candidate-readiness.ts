@@ -1,8 +1,8 @@
-import type { UnitV01 } from "@rendered-motion/format";
+import type { UnitV01 } from "@aval/format";
 import type {
   GraphEdgeDefinition,
   GraphStateDefinition
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { DecoderWorkerSample } from "../decoder-worker/protocol.js";
 import type {
@@ -179,6 +179,11 @@ export class BrowserAvcReadinessSession
     const loop = requireBodyUnit(
       this.#input.context.catalog.manifest.units,
       (unit) => unit.playback === "loop"
+    );
+    // Prime cold decoder and upload setup before the 24 warm-cache samples.
+    await this.#probe.measure(
+      `prime:${loop.id}`,
+      repeatBody(loop, 1)
     );
     const frames = repeatBody(loop, MIN_READINESS_MEASURED_OUTPUTS);
     const measurements = await this.#probe.measure(

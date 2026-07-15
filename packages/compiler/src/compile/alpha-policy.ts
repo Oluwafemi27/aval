@@ -1,4 +1,4 @@
-import { FORMAT_DEFAULT_BUDGETS, IDENTIFIER_PATTERN } from "@rendered-motion/format";
+import { IDENTIFIER_PATTERN } from "@aval/format";
 
 import { throwIfAborted } from "../cancellation.js";
 import { CompilerError } from "../diagnostics.js";
@@ -9,14 +9,11 @@ import type {
   SourceAlphaPolicy
 } from "../model.js";
 
-const MAX_CANONICAL_ALPHA_FRAMES =
-  FORMAT_DEFAULT_BUDGETS.maxTotalUnitFrames + FORMAT_DEFAULT_BUDGETS.maxStates;
 const CANCELLATION_PIXEL_INTERVAL = 4_096;
 
 export interface CanonicalAlphaFrame {
   readonly source: string;
   readonly frame: number;
-  readonly role: "unit" | "poster";
   readonly width: number;
   readonly height: number;
   readonly rgba: Uint8Array;
@@ -39,12 +36,11 @@ export function auditCanonicalAlphaFrames(
   throwIfAborted(signal);
   if (
     !Array.isArray(frames) ||
-    frames.length < 1 ||
-    frames.length > MAX_CANONICAL_ALPHA_FRAMES
+    frames.length < 1
   ) {
     throw new CompilerError(
-      "SOURCE_LIMIT",
-      `Canonical alpha audit requires 1 to ${String(MAX_CANONICAL_ALPHA_FRAMES)} references`
+      "INPUT_INVALID",
+      "Canonical alpha audit requires at least one reference"
     );
   }
 
@@ -71,12 +67,6 @@ export function createCanonicalAlphaAuditor(
     validateFrame(candidate);
     const key = `${candidate.source}\u0000${String(candidate.frame)}`;
     if (unique.has(key)) return;
-    if (unique.size >= MAX_CANONICAL_ALPHA_FRAMES) {
-      throw new CompilerError(
-        "SOURCE_LIMIT",
-        "Canonical alpha audit reference count exceeds the format budget"
-      );
-    }
     unique.add(key);
     for (let offset = 3; offset < candidate.rgba.byteLength; offset += 4) {
       if (((offset - 3) / 4) % CANCELLATION_PIXEL_INTERVAL === 0) {
@@ -179,16 +169,16 @@ export function mergeCanonicalAlphaAudits(
   let firstNonopaque: Readonly<AlphaPixelLocation> | null = null;
   for (const audit of audits) {
     validateAudit(audit);
-    uniqueReferencedFrames += audit.uniqueReferencedFrames;
     if (
-      !Number.isSafeInteger(uniqueReferencedFrames) ||
-      uniqueReferencedFrames > MAX_CANONICAL_ALPHA_FRAMES
+      uniqueReferencedFrames >
+      Number.MAX_SAFE_INTEGER - audit.uniqueReferencedFrames
     ) {
       throw new CompilerError(
         "SOURCE_LIMIT",
-        "Canonical alpha audit reference count exceeds the format budget"
+        "Canonical alpha audit reference count exceeds safe representation"
       );
     }
+    uniqueReferencedFrames += audit.uniqueReferencedFrames;
     minimumAlpha = Math.min(minimumAlpha, audit.minimumAlpha);
     if (
       audit.firstNonopaque !== null &&
@@ -214,23 +204,17 @@ function validateFrame(frame: Readonly<CanonicalAlphaFrame>): void {
     !IDENTIFIER_PATTERN.test(frame.source) ||
     !Number.isSafeInteger(frame.frame) ||
     frame.frame < 0 ||
-    frame.frame >= 1_800 ||
-    (frame.role !== "unit" && frame.role !== "poster") ||
     !Number.isSafeInteger(frame.width) ||
     !Number.isSafeInteger(frame.height) ||
     frame.width < 1 ||
     frame.height < 1 ||
-    frame.width > 512 ||
-    frame.height > 512 ||
     !(frame.rgba instanceof Uint8Array)
   ) {
     throw new CompilerError("INPUT_INVALID", "Canonical alpha frame is invalid");
   }
-  const pixels = frame.width * frame.height;
-  const expectedBytes = pixels * 4;
+  const pixels = checkedProduct(frame.width, frame.height);
+  const expectedBytes = checkedProduct(pixels, 4);
   if (
-    !Number.isSafeInteger(pixels) ||
-    !Number.isSafeInteger(expectedBytes) ||
     frame.rgba.byteLength !== expectedBytes
   ) {
     throw new CompilerError(
@@ -255,7 +239,6 @@ function validateAudit(audit: Readonly<AlphaAuditSummary>): void {
   if (
     !Number.isSafeInteger(audit.uniqueReferencedFrames) ||
     audit.uniqueReferencedFrames < 1 ||
-    audit.uniqueReferencedFrames > MAX_CANONICAL_ALPHA_FRAMES ||
     !Number.isSafeInteger(audit.minimumAlpha) ||
     audit.minimumAlpha < 0 ||
     audit.minimumAlpha > 255 ||
@@ -266,13 +249,10 @@ function validateAudit(audit: Readonly<AlphaAuditSummary>): void {
       !IDENTIFIER_PATTERN.test(first.source) ||
       !Number.isSafeInteger(first.frame) ||
       first.frame < 0 ||
-      first.frame >= 1_800 ||
       !Number.isSafeInteger(first.x) ||
       first.x < 0 ||
-      first.x >= 512 ||
       !Number.isSafeInteger(first.y) ||
       first.y < 0 ||
-      first.y >= 512 ||
       !Number.isSafeInteger(first.alpha) ||
       first.alpha < 0 ||
       first.alpha >= 255 ||
@@ -281,4 +261,14 @@ function validateAudit(audit: Readonly<AlphaAuditSummary>): void {
   ) {
     throw new CompilerError("INPUT_INVALID", "Canonical alpha audit is invalid");
   }
+}
+
+function checkedProduct(left: number, right: number): number {
+  if (left > Math.floor(Number.MAX_SAFE_INTEGER / right)) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      "Canonical alpha frame geometry exceeds safe byte representation"
+    );
+  }
+  return left * right;
 }

@@ -15,7 +15,6 @@ import type {
   FormatHeader
 } from "../src/model.js";
 import { validManifest } from "./manifest-fixture.js";
-import { makeSizedTestPng } from "./png-test-fixture.js";
 
 export interface AssetFixture {
   readonly bytes: Uint8Array;
@@ -28,21 +27,12 @@ export interface AssetFixture {
 export interface AssetFixtureOptions {
   readonly profile?: "reference" | "avc";
   readonly sampleLength?: (ordinal: number) => number;
-  readonly staticLength?: number;
   readonly generatorSuffix?: string;
 }
 
 type MutableManifest = CompiledManifestV01 & {
   generator: string;
   renditions: Array<CompiledManifestV01["renditions"][number]>;
-  staticFrames: Array<{
-    id: string;
-    offset: number;
-    length: number;
-    width: number;
-    height: number;
-    sha256: string;
-  }>;
 };
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
@@ -75,13 +65,6 @@ export function canonicalAssetFixture(
     };
     limits.decodedPixelBytes = 1_024;
     limits.runtimeWorkingSetBytes = 1_024;
-  }
-
-  const staticLength = options.staticLength ?? 68;
-  const staticPayload = makeSizedTestPng(2, 2, staticLength);
-  for (const frame of manifest.staticFrames) {
-    frame.length = staticPayload.byteLength;
-    frame.offset = 0;
   }
 
   const payloads: Uint8Array[] = [];
@@ -145,11 +128,6 @@ export function canonicalAssetFixture(
         }
       }
     }
-    for (const frame of manifest.staticFrames) {
-      cursor = align8(cursor);
-      frame.offset = cursor;
-      cursor += staticPayload.byteLength;
-    }
     declaredFileLength = cursor;
     const next = serializeCanonicalJson(manifest);
     if (equalBytes(next, manifestBytes)) {
@@ -186,12 +164,6 @@ export function canonicalAssetFixture(
     }
     bytes.set(payload, record.payloadOffset);
   }
-  for (let index = 0; index < validatedManifest.staticFrames.length; index += 1) {
-    const frame = validatedManifest.staticFrames[index];
-    if (frame === undefined) throw new Error("test static frame missing");
-    bytes.set(staticPayload, frame.offset);
-  }
-
   return {
     bytes,
     manifest: validatedManifest,

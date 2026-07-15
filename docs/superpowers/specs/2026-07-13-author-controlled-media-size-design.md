@@ -3,7 +3,7 @@
 ## Goal
 
 Remove the pre-production product-policy ceilings that prevent authors from
-compiling and playing large Rendered Motion assets. The compiler must preserve
+compiling and playing large AVAL assets. The compiler must preserve
 the exact canvas and rendition dimensions requested by the author. It must
 never silently resize, shorten, sample, or otherwise reduce authored media.
 

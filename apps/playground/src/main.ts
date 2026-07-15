@@ -3,7 +3,7 @@ import {
   runContinuousLoopStress,
   type ContinuousLoopStressReport,
   type LoopCanvasPlayerSnapshot
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import "./style.css";
 import {
@@ -36,7 +36,7 @@ interface BrowserPlayerSnapshot {
   readonly error: string | null;
 }
 
-interface RenderedMotionSpikeApi {
+interface AvalSpikeApi {
   readonly ready: Promise<SyntheticCodecEvidence>;
   runStress(): Promise<BrowserStressResult>;
   snapshot(): BrowserPlayerSnapshot | null;
@@ -47,7 +47,7 @@ interface RenderedMotionSpikeApi {
 
 declare global {
   interface Window {
-    __renderedMotionSpike: RenderedMotionSpikeApi;
+    __avalSpike: AvalSpikeApi;
   }
 }
 
@@ -57,7 +57,7 @@ app.innerHTML = `
   <div class="page-shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">Open web rendered motion lab · M1 + M2</p>
+        <p class="eyebrow">Open AVAL lab · M1 + M2</p>
         <h1>Motion that keeps its momentum</h1>
         <p class="lede">
           Continuous loops and interaction clips are scheduled as frames—not
@@ -190,7 +190,7 @@ const ready = new Promise<SyntheticCodecEvidence>((resolve, reject) => {
 void ready.catch(() => undefined);
 mountM2Playground(m2Root, ready);
 
-window.__renderedMotionSpike = {
+window.__avalSpike = {
   ready,
   runStress,
   snapshot: () =>
@@ -406,7 +406,7 @@ function showRuntimeError(error: unknown): void {
   const normalized = normalizeError(error);
   status.textContent = normalized.message;
   status.parentElement?.setAttribute("data-state", "error");
-  codecPill.textContent = "static fallback";
+  codecPill.textContent = "host fallback";
   pauseButton.disabled = true;
   resumeButton.disabled = true;
 }
@@ -432,5 +432,5 @@ function requireElement<T extends Element>(selector: string): T {
 function normalizeError(error: unknown): Error {
   return error instanceof Error
     ? error
-    : new Error("Rendered motion spike failed", { cause: error });
+    : new Error("AVAL spike failed", { cause: error });
 }

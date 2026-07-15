@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-test("fit and resize use one exact static/animated geometry", async ({ page }) => {
+test("fit and resize use one exact animated geometry", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?presentation");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -23,10 +23,7 @@ test("fit and resize use one exact static/animated geometry", async ({ page }) =
         getDiagnostics(): { presentation: Record<string, unknown> };
       }).getDiagnostics().presentation
     );
-    expect(presentation).toMatchObject({
-      fit,
-      staticAnimatedMappingEqual: true
-    });
+    expect(presentation).toMatchObject({ fit });
     expect(presentation.backingWidth as number).toBeGreaterThan(0);
     expect(presentation.backingHeight as number).toBeGreaterThan(0);
   }
@@ -38,7 +35,7 @@ test("a real browser DPR change rebuilds the resolution query and backing", asyn
     "CDP live DPR proof is Chromium-specific; broker unit coverage is engine-neutral"
   );
   await page.goto("/m8-dev-entry.html?dpr-change");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");

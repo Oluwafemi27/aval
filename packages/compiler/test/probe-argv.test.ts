@@ -4,7 +4,8 @@ import {
   createProbeMediaInvocation,
   createProbePngSequenceInvocation,
   probeMedia,
-  probePngSequence
+  probePngSequence,
+  probeTimeout
 } from "../src/ffmpeg/probe.js";
 
 const SHOW_ENTRIES =
@@ -17,12 +18,12 @@ describe("frozen FFprobe invocations", () => {
     )).toEqual({
       cwd: "/input",
       arguments: [
-        "-v", "error", "-max_alloc", "67108864",
+        "-v", "error",
         "-protocol_whitelist", "file,pipe",
-        "-analyzeduration", "10000000", "-probesize", "33554432",
         "-threads", "1", "-f", "mov", "-select_streams", "v",
-        "-read_intervals", "%+31", "-show_entries", SHOW_ENTRIES,
-        "-of", "json", "/input/-show_entries;touch-pwn.mov"
+        "-show_entries", SHOW_ENTRIES,
+        "-of", "compact=p=1:nk=0:escape=none",
+        "/input/-show_entries;touch-pwn.mov"
       ]
     });
   });
@@ -36,24 +37,19 @@ describe("frozen FFprobe invocations", () => {
     )).toEqual({
       cwd: "/input/frames",
       arguments: [
-        "-v", "error", "-max_alloc", "67108864",
+        "-v", "error",
         "-protocol_whitelist", "file,pipe",
-        "-analyzeduration", "10000000", "-probesize", "33554432",
         "-threads", "1", "-f", "image2", "-framerate", "30000/1001",
         "-start_number", "42", "-select_streams", "v",
         "-read_intervals", "%+#90", "-show_entries", SHOW_ENTRIES,
-        "-of", "json", "/input/frames/frame-%08d.png"
+        "-of", "compact=p=1:nk=0:escape=none",
+        "/input/frames/frame-%08d.png"
       ]
     });
   });
 
-  it("only permits callers to lower operation-specific timeout ceilings", async () => {
-    await expect(probeMedia(
-      "/input/clip.mov",
-      "not-used",
-      undefined,
-      15_001
-    )).rejects.toMatchObject({ code: "INPUT_INVALID" });
+  it("accepts caller-raised timeouts and rejects nonpositive values", async () => {
+    expect(probeTimeout(15_001)).toBe(15_001);
     await expect(probePngSequence(
       "/input/frame-%04d.png",
       0,
@@ -61,6 +57,12 @@ describe("frozen FFprobe invocations", () => {
       "not-used",
       undefined,
       1,
+      0
+    )).rejects.toMatchObject({ code: "INPUT_INVALID" });
+    await expect(probeMedia(
+      "/input/clip.mov",
+      "not-used",
+      undefined,
       0
     )).rejects.toMatchObject({ code: "INPUT_INVALID" });
   });

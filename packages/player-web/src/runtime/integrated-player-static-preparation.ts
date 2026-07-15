@@ -1,14 +1,14 @@
 import {
   MotionGraphEngine,
   type MotionGraphResult
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import type { EffectHost } from "./effect-host.js";
 import {
   IntegratedPlaybackInvariantError,
   PlaybackFallbackError,
-  type IntegratedStaticSurfaceStore,
+  type IntegratedFallbackStore,
   type IntegratedTimerHost
 } from "./integrated-player-contracts.js";
 import {
@@ -38,21 +38,14 @@ interface IntegratedStaticPreparationOptions {
   readonly catalog: RuntimeAssetCatalog;
   readonly graph: MotionGraphEngine;
   readonly effects: EffectHost;
-  readonly staticStore: IntegratedStaticSurfaceStore;
+  readonly fallbackStore: IntegratedFallbackStore;
   readonly installResult: Readonly<MotionGraphResult>;
   readonly lifecycleSignal: AbortSignal;
   readonly now: () => number;
   readonly timers: IntegratedTimerHost;
-  readonly residency: Readonly<IntegratedStaticResidency>;
   readonly stageReadyResult: (
     result: Readonly<RuntimeReadinessResult>
   ) => void;
-}
-
-export interface IntegratedStaticResidency {
-  readonly requiresEnsure: boolean;
-  ensureStaticState(state: string, signal: AbortSignal): Promise<void>;
-  ensureAllStatics(signal: AbortSignal): Promise<void>;
 }
 
 /** Initial static guarantee and bounded preparation fallback owner. */
@@ -60,12 +53,11 @@ export class IntegratedStaticPreparation {
   readonly #catalog: RuntimeAssetCatalog;
   readonly #graph: MotionGraphEngine;
   readonly #effects: EffectHost;
-  readonly #staticStore: IntegratedStaticSurfaceStore;
+  readonly #fallbackStore: IntegratedFallbackStore;
   readonly #installResult: Readonly<MotionGraphResult>;
   readonly #lifecycleSignal: AbortSignal;
   readonly #now: () => number;
   readonly #timers: IntegratedTimerHost;
-  readonly #residency: Readonly<IntegratedStaticResidency>;
   readonly #stageReadyResult: (
     result: Readonly<RuntimeReadinessResult>
   ) => void;
@@ -82,12 +74,11 @@ export class IntegratedStaticPreparation {
     this.#catalog = options.catalog;
     this.#graph = options.graph;
     this.#effects = options.effects;
-    this.#staticStore = options.staticStore;
+    this.#fallbackStore = options.fallbackStore;
     this.#installResult = options.installResult;
     this.#lifecycleSignal = options.lifecycleSignal;
     this.#now = options.now;
     this.#timers = options.timers;
-    this.#residency = options.residency;
     this.#stageReadyResult = options.stageReadyResult;
   }
 
@@ -98,19 +89,13 @@ export class IntegratedStaticPreparation {
   public async ensure(signal: AbortSignal): Promise<void> {
     if (!this.#visualReady) {
       const initial = this.#catalog.manifest.initialState;
-      if (this.#residency.requiresEnsure) {
-        await raceIntegratedAbort(
-          this.#residency.ensureStaticState(initial, signal),
-          signal
-        );
-      }
       await raceIntegratedAbort(
-        this.#staticStore.installInitial({ state: initial, signal }),
+        this.#fallbackStore.installInitial({ state: initial, signal }),
         signal
       );
-      if (this.#staticStore.currentState() !== initial) {
+      if (this.#fallbackStore.currentState() !== initial) {
         throw new IntegratedPlaybackInvariantError(
-          "initial static store committed the wrong state"
+          "initial fallback store committed the wrong state"
         );
       }
       if (!this.#installApplied) {
@@ -129,14 +114,8 @@ export class IntegratedStaticPreparation {
       this.#visualReady = true;
     }
     if (!this.#staticReady) {
-      if (this.#residency.requiresEnsure) {
-        await raceIntegratedAbort(
-          this.#residency.ensureAllStatics(signal),
-          signal
-        );
-      }
       await raceIntegratedAbort(
-        this.#staticStore.validateAll({ signal }),
+        this.#fallbackStore.validateAll({ signal }),
         signal
       );
       this.#staticReady = true;
@@ -146,9 +125,18 @@ export class IntegratedStaticPreparation {
   public async finish(
     reason: StaticReason,
     reports: readonly Readonly<RuntimeCandidateReport>[],
-    signal: AbortSignal
+    signal: AbortSignal,
+    commitBeforeReady?: () => void
   ): Promise<Readonly<RuntimeReadinessResult>> {
-    const requested = await this.#presentLatest(signal, true);
+    let requested: string;
+    let result: Readonly<MotionGraphResult>;
+    for (;;) {
+      requested = await this.#presentLatest(signal, true);
+      if (this.#graph.snapshot().requestedState !== requested) continue;
+      commitBeforeReady?.();
+      result = this.#graph.beginStatic(reason);
+      break;
+    }
     const ready = Object.freeze({
       mode: "static" as const,
       reason,
@@ -159,16 +147,15 @@ export class IntegratedStaticPreparation {
       })
     });
     this.#stageReadyResult(ready);
-    const result = this.#graph.beginStatic(reason);
     this.#effects.apply(result, (presentation) => {
       assertIntegratedStaticPresentation(presentation, requested);
-      // #presentLatest(..., true) already atomically drew and covered these
-      // pixels. The effect-host callback is the ordering barrier only.
+      // #presentLatest(..., true) already atomically covered the animated
+      // plane with host fallback. This callback is the ordering barrier only.
     });
     return ready;
   }
 
-  /** Stage the newest accepted state's pixels without covering animation. */
+  /** Stage the newest logical fallback state without covering animation. */
   public stageLatest(signal: AbortSignal): Promise<string> {
     return this.#presentLatest(signal, false);
   }
@@ -191,13 +178,13 @@ export class IntegratedStaticPreparation {
       this.#presentation = presentation;
       try {
         await raceIntegratedAbort(
-          this.#staticStore.presentState(requested, {
+          this.#fallbackStore.presentState(requested, {
             signal: controller.signal,
             cover
           }),
           controller.signal
         );
-        if (this.#staticStore.currentState() !== requested) {
+        if (this.#fallbackStore.currentState() !== requested) {
           throw new IntegratedPlaybackInvariantError(
             "static preparation store committed the wrong state"
           );
@@ -216,7 +203,7 @@ export class IntegratedStaticPreparation {
     return requested;
   }
 
-  /** Prevent an obsolete fallback surface from committing after newer intent. */
+  /** Prevent obsolete fallback state from committing after newer intent. */
   public supersedePresentation(requestedState: string | null): void {
     const presentation = this.#presentation;
     if (
@@ -235,11 +222,17 @@ export class IntegratedStaticPreparation {
   public async finishBounded(
     reason: StaticReason,
     reports: readonly Readonly<RuntimeCandidateReport>[],
-    timeoutMs: number
+    timeoutMs: number,
+    commitBeforeReady?: () => void
   ): Promise<Readonly<RuntimeReadinessResult>> {
     const fallback = this.createControl(this.#lifecycleSignal, timeoutMs);
     try {
-      return await this.finish(reason, reports, fallback.controller.signal);
+      return await this.finish(
+        reason,
+        reports,
+        fallback.controller.signal,
+        commitBeforeReady
+      );
     } finally {
       this.releaseControl(fallback);
     }

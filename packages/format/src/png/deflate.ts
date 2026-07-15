@@ -1,3 +1,4 @@
+import { checkedAdd, checkedMultiply } from "../checked-integer.js";
 import { FormatError, isFormatError } from "../errors.js";
 import {
   DeflateBitReader,
@@ -5,8 +6,6 @@ import {
 } from "./deflate-bit-reader.js";
 import { DeflateHuffmanTable } from "./deflate-huffman.js";
 
-const MAX_DEFLATE_BYTES = 2 * 1024 * 1024;
-const MAX_OUTPUT_BYTES = 512 * (1 + 512 * 4);
 const MAX_DISTANCE = 32 * 1024;
 
 const CODE_LENGTH_ORDER = Object.freeze([
@@ -53,14 +52,28 @@ export function calculateDeflateWorkLimit(
   if (
     !Number.isSafeInteger(compressedBytes) ||
     compressedBytes < 0 ||
-    compressedBytes > MAX_DEFLATE_BYTES + 6 ||
     !Number.isSafeInteger(expectedInflatedBytes) ||
-    expectedInflatedBytes < 0 ||
-    expectedInflatedBytes > MAX_OUTPUT_BYTES
+    expectedInflatedBytes < 0
   ) {
     deflateInvalid("DEFLATE work-limit inputs are outside the PNG profile");
   }
-  return 32 * (compressedBytes + expectedInflatedBytes) + 4_096;
+  try {
+    const bytes = checkedAdd(
+      compressedBytes,
+      expectedInflatedBytes,
+      Number.MAX_SAFE_INTEGER,
+      "DEFLATE work bytes"
+    );
+    return checkedAdd(
+      checkedMultiply(bytes, 32, Number.MAX_SAFE_INTEGER, "DEFLATE work"),
+      4_096,
+      Number.MAX_SAFE_INTEGER,
+      "DEFLATE work limit"
+    );
+  } catch (error) {
+    if (isFormatError(error)) deflateInvalid(error.message);
+    deflateInvalid("DEFLATE work limit could not be calculated");
+  }
 }
 
 export function inflateDeflate(input: DeflateInflateInput): Uint8Array {
@@ -75,7 +88,7 @@ export function inflateDeflate(input: DeflateInflateInput): Uint8Array {
   return inflateDeflateWithLimit(
     input,
     calculateDeflateWorkLimit(
-      input.deflate.byteLength + 6,
+      input.deflate.byteLength,
       input.expectedOutputLength
     )
   );
@@ -93,18 +106,25 @@ export function inflateDeflateWithLimit(
     if (!(input.deflate instanceof Uint8Array)) {
       deflateInvalid("DEFLATE input must be a Uint8Array");
     }
-    if (input.deflate.byteLength < 1 || input.deflate.byteLength > MAX_DEFLATE_BYTES) {
+    if (input.deflate.byteLength < 1) {
       deflateInvalid("DEFLATE byte length is outside the PNG profile");
     }
     if (
       !Number.isSafeInteger(input.expectedOutputLength) ||
-      input.expectedOutputLength < 0 ||
-      input.expectedOutputLength > MAX_OUTPUT_BYTES
+      input.expectedOutputLength < 0
     ) {
       deflateInvalid("DEFLATE output length is outside the PNG profile");
     }
     const reader = new DeflateBitReader(input.deflate, workLimit);
-    const output = new Uint8Array(input.expectedOutputLength);
+    let output: Uint8Array;
+    try {
+      output = new Uint8Array(input.expectedOutputLength);
+    } catch {
+      throw new FormatError(
+        "PNG_DEFLATE_INVALID",
+        `DEFLATE output allocation failed for ${String(input.expectedOutputLength)} bytes`
+      );
+    }
     let outputOffset = 0;
     let finalBlock = false;
     while (!finalBlock) {

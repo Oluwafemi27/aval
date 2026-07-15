@@ -1,4 +1,4 @@
-import { AvcIncrementalInspector } from "@rendered-motion/format";
+import { AvcIncrementalInspector } from "@aval/format";
 
 import {
   type DecoderWorkerAvcProfile,

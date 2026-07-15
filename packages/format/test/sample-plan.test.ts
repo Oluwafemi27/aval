@@ -21,7 +21,7 @@ describe("canonical sample plan", () => {
       3
     );
 
-    expect(plan.slots.map((slot) => [
+    expect([...plan.records()].map((slot) => [
       slot.ordinal,
       slot.renditionId,
       slot.unitId,
@@ -46,8 +46,17 @@ describe("canonical sample plan", () => {
     expect(plan.unitSpans[0]?.map(({ sampleStart }) => sampleStart)).toEqual([0, 3]);
     expect(plan.unitSpans[1]?.map(({ sampleStart }) => sampleStart)).toEqual([2, 5]);
     expect(Object.isFrozen(plan)).toBe(true);
-    expect(Object.isFrozen(plan.slots)).toBe(true);
     expect(Object.isFrozen(plan.unitSpans[0])).toBe(true);
+    expect(plan.recordCount).toBe(6);
+    expect(plan.recordAt(4)).toEqual({
+      ordinal: 4,
+      renditionIndex: 1,
+      renditionId: "video",
+      unitIndex: 0,
+      unitId: "body",
+      frameIndex: 1,
+      keyRequired: false
+    });
   });
 
   it("validates wire spans against the same canonical plan", () => {
@@ -93,5 +102,34 @@ describe("canonical sample plan", () => {
       expect.objectContaining<Partial<FormatError>>({ code: "BUDGET_EXCEEDED" })
     );
     expect(probes).toBe(0);
+  });
+
+  it("keeps plans above the former 3,600-record ceiling compact", () => {
+    const plan = createCanonicalSamplePlan(
+      [{ id: "video", profile: "avc-annexb-opaque-v0" }],
+      [{ id: "body", frameCount: 4_001 }],
+      0xffff_ffff,
+      0xffff_ffff
+    );
+
+    expect(plan.recordCount).toBe(4_001);
+    expect(plan.spans).toHaveLength(1);
+    expect("slots" in plan).toBe(false);
+    expect(plan.recordAt(4_000)).toMatchObject({
+      ordinal: 4_000,
+      frameIndex: 4_000,
+      keyRequired: false
+    });
+  });
+
+  it("rejects record counts outside the uint32 wire field", () => {
+    expect(() => createCanonicalSamplePlan(
+      [{ id: "video", profile: "avc-annexb-opaque-v0" }],
+      [{ id: "body", frameCount: 0x1_0000_0000 }],
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER
+    )).toThrowError(
+      expect.objectContaining<Partial<FormatError>>({ code: "INTEGER_UNSAFE" })
+    );
   });
 });

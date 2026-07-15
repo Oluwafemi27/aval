@@ -1,7 +1,7 @@
 import type {
   GraphEdgeDefinition,
   GraphStateDefinition
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { BrowserAvcCandidateHub } from "./browser-avc-candidate-hub.js";
 import {
@@ -26,7 +26,6 @@ import {
   type BrowserProductionScenarioEvidence
 } from "./browser-production-readiness-evidence.js";
 import {
-  collectProductionStrictStaticEvidence,
   createProductionProfileEvidence,
   rehearseProductionMotionPolicy
 } from "./browser-production-readiness-m6-evidence.js";
@@ -44,8 +43,7 @@ export type {
 export type {
   BrowserProductionMotionPhaseEvidence,
   BrowserProductionMotionPolicyEvidence,
-  BrowserProductionProfileEvidence,
-  BrowserProductionStrictStaticEvidence
+  BrowserProductionProfileEvidence
 } from "./browser-production-readiness-m6-evidence.js";
 
 /**
@@ -72,9 +70,6 @@ export class BrowserProductionReadinessRehearsal {
 
   public async run(): Promise<Readonly<BrowserProductionReadinessReport>> {
     assertRehearsalActive(this.#input);
-    const strictStatic = await collectProductionStrictStaticEvidence(
-      this.#input
-    );
     const motionPolicy = rehearseProductionMotionPolicy();
     const primary = await this.#withDriver("primary", async (driver) => {
       const initialRingReady = await this.#measureInitialRing(driver);
@@ -130,7 +125,6 @@ export class BrowserProductionReadinessRehearsal {
     const cleanupReady = this.#cleanups.every(({ passed }) => passed);
     const passed =
       profile.passed &&
-      strictStatic.passed &&
       motionPolicy.passed &&
       primary.initialRingReady &&
       cleanupReady &&
@@ -149,7 +143,6 @@ export class BrowserProductionReadinessRehearsal {
       passed,
       ringCapacity: this.#ringCapacity,
       profile,
-      strictStatic,
       motionPolicy,
       initialRingReady: primary.initialRingReady,
       loops: primary.loops,

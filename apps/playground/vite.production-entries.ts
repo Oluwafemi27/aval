@@ -11,11 +11,11 @@ const RESOLUTION_IMPORTER = fileURLToPath(new URL("./src/certification/app.ts", 
 const PACKAGES_ROOT = fileURLToPath(new URL("../../packages", import.meta.url));
 
 const PUBLIC_ENTRIES = Object.freeze([
-  entry("@rendered-motion/graph", ".", "graph", "dist/index.js", true),
-  entry("@rendered-motion/format", ".", "format", "dist/index.js", true),
-  entry("@rendered-motion/player-web", ".", "player-web", "dist/index.js", true),
-  entry("@rendered-motion/element", ".", "element", "dist/index.js", true),
-  entry("@rendered-motion/element/auto", "./auto", "element", "dist/auto.js", true)
+  entry("@aval/graph", ".", "graph", "dist/index.js", true),
+  entry("@aval/format", ".", "format", "dist/index.js", true),
+  entry("@aval/player-web", ".", "player-web", "dist/index.js", true),
+  entry("@aval/element", ".", "element", "dist/index.js", true),
+  entry("@aval/element/auto", "./auto", "element", "dist/auto.js", true)
 ]);
 
 export interface ProductionPublicEntryRecord {
@@ -41,7 +41,7 @@ export function productionPublicEntriesPlugin(): Plugin {
   let expectedPaths = new Set<string>();
   let canonicalPackagesRoot = PACKAGES_ROOT;
   return {
-    name: "rendered-motion-production-public-entries",
+    name: "aval-production-public-entries",
     enforce: "post",
     apply: "build",
     async buildStart() {
@@ -111,8 +111,8 @@ function entry(
   absolutePath: string;
   requiredInGraph: boolean;
 }> {
-  const packageName = specifier === "@rendered-motion/element/auto"
-    ? "@rendered-motion/element"
+  const packageName = specifier === "@aval/element/auto"
+    ? "@aval/element"
     : specifier;
   return Object.freeze({
     specifier,

@@ -7,7 +7,7 @@ import { prepareImmutableCandidateOutput } from "../../scripts/release/immutable
 
 describe("immutable candidate output", () => {
   it("publishes only the closed candidate root and preserves it on rerun", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-candidate-output-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-candidate-output-"));
     const candidate = join(root, "1.0.0", "candidate");
     const legacyIndex = join(root, "1.0.0", "artifact-index.json");
     try {
@@ -27,7 +27,7 @@ describe("immutable candidate output", () => {
   });
 
   it("refuses a preexisting loose index without changing it", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-candidate-index-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-candidate-index-"));
     const candidate = join(root, "1.0.0", "candidate");
     const legacyIndex = join(root, "1.0.0", "artifact-index.json");
     try {

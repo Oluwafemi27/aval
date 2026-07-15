@@ -83,12 +83,20 @@ describe("exhaustive AVC syntax truncation boundaries", () => {
         truncateRbspAt(original.rbsp, bitOffset)
       );
       expectStableProfileInvalid(
-        () => parsePps(candidate, `pps[${String(bitOffset)}]`),
+        () => parsePps(
+          candidate,
+          `pps[${String(bitOffset)}]`,
+          "fixed-qp26-v0"
+        ),
         `PPS bit ${String(bitOffset)}`
       );
     }
 
-    expect(() => parsePps(original, "original.pps")).not.toThrow();
+    expect(() => parsePps(
+      original,
+      "original.pps",
+      "fixed-qp26-v0"
+    )).not.toThrow();
   });
 
   it.each([
@@ -116,7 +124,8 @@ describe("exhaustive AVC syntax truncation boundaries", () => {
       );
       const pps = parsePps(
         onlyNal(makePps(), "parameterSets.pps"),
-        "parameterSets.pps"
+        "parameterSets.pps",
+        "fixed-qp26-v0"
       );
       const original = onlyNal(bytes, `original.${label}`);
 

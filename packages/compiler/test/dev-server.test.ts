@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { FORMAT_DEFAULT_BUDGETS } from "@rendered-motion/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
 
 import {
   createBoundedReadAdmission,
@@ -39,11 +39,11 @@ afterEach(async () => {
 
 describe("loopback dev server", () => {
   it("rejects its closed signal when a bound server fails at runtime", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-runtime-error-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-runtime-error-"));
     roots.push(root);
     let physical: ReturnType<typeof createServer> | null = null;
     const server = await startDevServer({
-      assetPath: join(root, "motion.rma"),
+      assetPath: join(root, "motion.avl"),
       port: 0,
       createHttpServer: ((handler: Parameters<typeof createServer>[0]) => {
         physical = createServer(handler);
@@ -62,9 +62,9 @@ describe("loopback dev server", () => {
   });
 
   it("serves the latest valid asset with exact range/entity headers", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-"));
     roots.push(root);
-    const path = join(root, "motion.rma");
+    const path = join(root, "motion.avl");
     const bytes = Uint8Array.from({ length: 64 }, (_, index) => index);
     const digest = createHash("sha256").update(bytes).digest("hex");
     await writeFile(path, bytes);
@@ -92,19 +92,18 @@ describe("loopback dev server", () => {
           alpha: "packed",
           continuityPassed: 4,
           continuityCuts: 0,
-          strictStatics: 1,
           alphaAuditedFrames: 16
         }
       });
-      const response = await fetch(new URL("asset.rma#v=1", server.url), {
+      const response = await fetch(new URL("asset.avl#v=1", server.url), {
         headers: { Range: "bytes=8-15" }
       });
       expect(response.status).toBe(206);
       expect(response.headers.get("content-range")).toBe("bytes 8-15/64");
       expect(response.headers.get("content-encoding")).toBe("identity");
-      expect(response.headers.get("etag")).toBe(`"rma-${digest}"`);
+      expect(response.headers.get("etag")).toBe(`"aval-${digest}"`);
       expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes.subarray(8, 16));
-      const full = await fetch(new URL("asset.rma", server.url), {
+      const full = await fetch(new URL("asset.avl", server.url), {
         headers: {
           Range: "bytes=8-15",
           "If-Range": '"different-entity"'
@@ -112,7 +111,7 @@ describe("loopback dev server", () => {
       });
       expect(full.status).toBe(200);
       expect(new Uint8Array(await full.arrayBuffer())).toEqual(bytes);
-      const head = await fetch(new URL("asset.rma", server.url), { method: "HEAD" });
+      const head = await fetch(new URL("asset.avl", server.url), { method: "HEAD" });
       expect(head.headers.get("content-length")).toBe("64");
       expect(await head.text()).toBe("");
       const report = await (await fetch(new URL("report.json", server.url))).json() as {
@@ -123,16 +122,16 @@ describe("loopback dev server", () => {
         alpha: "packed",
         continuityPassed: 4
       });
-      expect((await fetch(new URL("asset.rma", server.url), { method: "POST" })).status).toBe(405);
-      const invalidRange = await fetch(new URL("asset.rma", server.url), {
+      expect((await fetch(new URL("asset.avl", server.url), { method: "POST" })).status).toBe(405);
+      const invalidRange = await fetch(new URL("asset.avl", server.url), {
         headers: { Range: "bytes=100-200" }
       });
       expect(invalidRange.status).toBe(416);
       expect(invalidRange.headers.get("accept-ranges")).toBe("bytes");
       expect(invalidRange.headers.get("content-range")).toBe("bytes */64");
-      expect(invalidRange.headers.get("etag")).toBe(`"rma-${digest}"`);
+      expect(invalidRange.headers.get("etag")).toBe(`"aval-${digest}"`);
       expect(await invalidRange.json()).toEqual({ error: "invalid-range" });
-      const invalidRangeHead = await fetch(new URL("asset.rma", server.url), {
+      const invalidRangeHead = await fetch(new URL("asset.avl", server.url), {
         method: "HEAD",
         headers: { Range: "bytes=0-" }
       });
@@ -143,22 +142,22 @@ describe("loopback dev server", () => {
       ));
       expect(await invalidRangeHead.text()).toBe("");
       await writeFile(path, Uint8Array.from({ length: 64 }, () => 255));
-      expect((await fetch(new URL("asset.rma", server.url))).status).toBe(503);
+      expect((await fetch(new URL("asset.avl", server.url))).status).toBe(503);
     } finally {
       await server.close();
     }
   });
 
   it("rejects port collisions and closes event-stream clients", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-port-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-port-"));
     roots.push(root);
     const first = await startDevServer({
-      assetPath: join(root, "first.rma"),
+      assetPath: join(root, "first.avl"),
       port: 0
     });
     const port = Number(new URL(first.url).port);
     await expect(startDevServer({
-      assetPath: join(root, "second.rma"),
+      assetPath: join(root, "second.avl"),
       port
     })).rejects.toMatchObject({ code: "IO_FAILED" });
     const stream = await fetch(new URL("events", first.url));
@@ -170,14 +169,14 @@ describe("loopback dev server", () => {
   });
 
   it("reports no asset before the first successful publication", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-empty-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-empty-"));
     roots.push(root);
     const server = await startDevServer({
-      assetPath: join(root, "missing.rma"),
+      assetPath: join(root, "missing.avl"),
       port: 0
     });
     try {
-      expect((await fetch(new URL("asset.rma", server.url))).status).toBe(404);
+      expect((await fetch(new URL("asset.avl", server.url))).status).toBe(404);
       const page = await fetch(server.url);
       expect(page.status).toBe(200);
       const csp = page.headers.get("content-security-policy") ?? "";
@@ -201,17 +200,17 @@ describe("loopback dev server", () => {
   });
 
   it("serves compiler-context package modules only below the opaque session URL", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-modules-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-modules-"));
     roots.push(root);
-    const server = await startDevServer({ assetPath: join(root, "motion.rma"), port: 0 });
+    const server = await startDevServer({ assetPath: join(root, "motion.avl"), port: 0 });
     try {
       const module = await fetch(new URL("modules/element/index.js", server.url));
       expect(module.status).toBe(200);
       expect(module.headers.get("content-type")).toContain("text/javascript");
-      expect(await module.text()).toContain("RenderedMotionElement");
+      expect(await module.text()).toContain("AvalElement");
       const workerDependency = await (await fetch(new URL("modules/player-web/decoder-worker/core-validation.js", server.url))).text();
       expect(workerDependency).toContain(`${new URL(server.url).pathname}modules/format/index.js`);
-      expect(workerDependency).not.toContain('"@rendered-motion/format"');
+      expect(workerDependency).not.toContain('"@aval/format"');
       const workerEntry = await fetch(new URL("modules/player-web/decoder-worker/entry.js", server.url));
       const workerCsp = workerEntry.headers.get("content-security-policy") ?? "";
       expect(workerCsp).toContain("default-src 'none'");
@@ -227,9 +226,9 @@ describe("loopback dev server", () => {
   });
 
   it("requires the exact dynamic Host, opaque session path, Origin, and Fetch Metadata", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-authority-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-authority-"));
     roots.push(root);
-    const server = await startDevServer({ assetPath: join(root, "motion.rma"), port: 0 });
+    const server = await startDevServer({ assetPath: join(root, "motion.avl"), port: 0 });
     try {
       const url = new URL(server.url);
       expect(url.pathname).toMatch(/^\/[A-Za-z0-9_-]{43}\/$/u);
@@ -303,10 +302,10 @@ describe("loopback dev server", () => {
     }
   });
 
-  it("bounds publications and rejects an oversized file before reading it", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-bounds-"));
+  it("bounds publication metadata and detects a changed asset before serving", async () => {
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-bounds-"));
     roots.push(root);
-    const path = join(root, "motion.rma");
+    const path = join(root, "motion.avl");
     const bytes = Uint8Array.from([1, 2, 3, 4]);
     const digest = createHash("sha256").update(bytes).digest("hex");
     await writeFile(path, bytes);
@@ -360,8 +359,8 @@ describe("loopback dev server", () => {
         sha256: digest,
         warnings: ["bounded warning"]
       });
-      await truncate(path, FORMAT_DEFAULT_BUDGETS.maxFileBytes + 1);
-      expect((await fetch(new URL("asset.rma", server.url))).status).toBe(503);
+      await truncate(path, bytes.byteLength + 1);
+      expect((await fetch(new URL("asset.avl", server.url))).status).toBe(503);
     } finally {
       await server.close();
     }
@@ -375,7 +374,7 @@ describe("loopback dev server", () => {
 
   it("rejects non-loopback runtime hosts and malformed asset paths", async () => {
     await expect(startDevServer({
-      assetPath: "motion.rma",
+      assetPath: "motion.avl",
       port: 0,
       host: "0.0.0.0" as "127.0.0.1"
     })).rejects.toMatchObject({ code: "CLI_USAGE" });
@@ -385,9 +384,9 @@ describe("loopback dev server", () => {
   });
 
   it("publishes one bounded SSE build event and ends it on close", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-events-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-events-"));
     roots.push(root);
-    const path = join(root, "motion.rma");
+    const path = join(root, "motion.avl");
     const bytes = Uint8Array.from([1, 2, 3, 4]);
     const digest = createHash("sha256").update(bytes).digest("hex");
     await writeFile(path, bytes);
@@ -404,7 +403,7 @@ describe("loopback dev server", () => {
       const first = await reader.read();
       expect(first.done).toBe(false);
       expect(new TextDecoder().decode(first.value)).toContain(
-        `event: build\ndata: {"generation":1,"src":"asset.rma#v=1"`
+        `event: build\ndata: {"generation":1,"src":"asset.avl#v=1"`
       );
     } finally {
       await server.close();
@@ -413,10 +412,10 @@ describe("loopback dev server", () => {
   });
 
   it("caps event streams and releases a disconnected client slot", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-dev-server-client-cap-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-dev-server-client-cap-"));
     roots.push(root);
     const server = await startDevServer({
-      assetPath: join(root, "motion.rma"),
+      assetPath: join(root, "motion.avl"),
       port: 0
     });
     const streams: Response[] = [];
@@ -450,7 +449,7 @@ describe("loopback dev server", () => {
   });
 
   it("rejects symlinks escaping a canonical module root", async () => {
-    const temporary = await mkdtemp(join(tmpdir(), "rma-dev-realpath-"));
+    const temporary = await mkdtemp(join(tmpdir(), "aval-dev-realpath-"));
     roots.push(temporary);
     const root = join(temporary, "root");
     const outside = join(temporary, "outside");
@@ -476,13 +475,13 @@ describe("loopback dev server", () => {
   });
 
   it("serves compiler-owned packages from isolated nested layouts without hoisting", async () => {
-    const temporary = await mkdtemp(join(tmpdir(), "rma-dev-modules-"));
+    const temporary = await mkdtemp(join(tmpdir(), "aval-dev-modules-"));
     roots.push(temporary);
     const packageNames = {
-      element: "@rendered-motion/element",
-      "player-web": "@rendered-motion/player-web",
-      format: "@rendered-motion/format",
-      graph: "@rendered-motion/graph"
+      element: "@aval/element",
+      "player-web": "@aval/player-web",
+      format: "@aval/format",
+      graph: "@aval/graph"
     } as const;
     const resolutions = new Map<string, { entryPath: string; packageRoot: string }>();
     for (const [key, packageName] of Object.entries(packageNames)) {
@@ -499,7 +498,7 @@ describe("loopback dev server", () => {
     const admission = createBoundedReadAdmission(2);
     const read = await store.read("player-web", "index.js", admission);
     expect(read.status).toBe("ok");
-    if (read.status === "ok") expect(read.bytes.toString("utf8")).toContain("@rendered-motion/player-web");
+    if (read.status === "ok") expect(read.bytes.toString("utf8")).toContain("@aval/player-web");
 
     const outside = join(temporary, "outside.js");
     await writeFile(outside, "throw new Error('escaped');\n");
@@ -508,7 +507,7 @@ describe("loopback dev server", () => {
     await expect(store.read("element", "../outside.js", admission)).resolves.toEqual({ status: "missing" });
 
     const compilerManifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { version?: string; dependencies?: Record<string, string> };
-    expect(compilerManifest.dependencies?.["@rendered-motion/player-web"]).toBe(compilerManifest.version);
+    expect(compilerManifest.dependencies?.["@aval/player-web"]).toBe(compilerManifest.version);
   });
 
   it("admits no queued reads beyond its exact concurrency bound", () => {
@@ -529,7 +528,7 @@ describe("loopback dev server", () => {
   });
 
   it("rejects a file that grows after its bounded open-time stat", async () => {
-    const temporary = await mkdtemp(join(tmpdir(), "rma-dev-read-race-"));
+    const temporary = await mkdtemp(join(tmpdir(), "aval-dev-read-race-"));
     roots.push(temporary);
     const path = join(temporary, "changing.js");
     await writeFile(path, "export {};\n");
@@ -575,20 +574,20 @@ describe("loopback dev server", () => {
   });
 
   it("uses path semantics that contain Windows module paths", () => {
-    const root = "C:\\rma\\packages\\element\\dist";
+    const root = "C:\\avl\\packages\\element\\dist";
     expect(isResolvedPathWithinRoot(
       root,
-      "C:\\rma\\packages\\element\\dist\\runtime\\index.js",
+      "C:\\avl\\packages\\element\\dist\\runtime\\index.js",
       win32
     )).toBe(true);
     expect(isResolvedPathWithinRoot(
       root,
-      "C:\\rma\\packages\\element\\outside.js",
+      "C:\\avl\\packages\\element\\outside.js",
       win32
     )).toBe(false);
     expect(isResolvedPathWithinRoot(
       root,
-      "D:\\rma\\packages\\element\\dist\\index.js",
+      "D:\\avl\\packages\\element\\dist\\index.js",
       win32
     )).toBe(false);
   });

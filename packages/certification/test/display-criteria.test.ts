@@ -7,7 +7,7 @@ const digest = (character: string) => character.repeat(64);
 const pattern = validateDisplayPattern({
   bitWidth: 16,
   calibrationPatchIds: ["black", "white", "red", "green", "blue"],
-  markerKind: "rendered-motion-display",
+  markerKind: "aval-display",
   markerVersion: "1.0",
   modulus: 65_535,
   parity: "xor-fold-v1"
@@ -32,7 +32,7 @@ const expectation = Object.freeze({
   minimumConfidenceMillionths: 990_000,
   captureProvenance: Object.freeze({
     rawCaptureDigest: digest("e"),
-    extractor: Object.freeze({ tool: "rma-display-extractor", version: "1.0.0" }),
+    extractor: Object.freeze({ tool: "aval-display-extractor", version: "1.0.0" }),
     operatorRole: "qualified-display-capture-operator",
     reviewerIds: Object.freeze(["display-reviewer-1"])
   }),

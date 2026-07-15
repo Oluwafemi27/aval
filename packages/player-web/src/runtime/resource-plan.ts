@@ -2,7 +2,7 @@ import {
   maximumAvcDecodedRgbaBytes,
   type CompiledManifestV01,
   type RenditionV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import type {
   RuntimeAssetCatalog,
@@ -18,32 +18,31 @@ import {
 } from "./checked-runtime-bytes.js";
 import type { InteractionCachePlan } from "./interaction-cache-plan.js";
 import {
-  createStaticRuntimeResourcePlan,
+  createCanvasRuntimeResourcePlan,
   type RuntimeCanvasBackingSize,
-  type RuntimeStaticResourceCatalogView,
-  type StaticRuntimeResourcePlan
-} from "./static-resource-plan.js";
+  type RuntimeCanvasResourceCatalogView,
+  type RuntimeCanvasResourcePlan as BaseRuntimeCanvasResourcePlan
+} from "./canvas-resource-plan.js";
 
 export {
-  createStaticRuntimeResourcePlan
-} from "./static-resource-plan.js";
+  createCanvasRuntimeResourcePlan
+} from "./canvas-resource-plan.js";
 export type {
   RuntimeCanvasBackingSize,
+  RuntimeCanvasResourceAllocationSnapshot,
+  RuntimeCanvasResourceCatalogView,
   RuntimeCanvasResourceHost,
   RuntimeCanvasResourceLease,
   RuntimeCanvasResourcePlan,
-  RuntimeStaticResourceCatalogView,
-  StaticRuntimeResourceAllocationSnapshot,
-  StaticRuntimeResourcePlan,
-  StaticRuntimeResourcePlanInput
-} from "./static-resource-plan.js";
+  RuntimeCanvasResourcePlanInput
+} from "./canvas-resource-plan.js";
 
 export const RESOURCE_DECODE_SURFACE_COUNT = 12;
 export const MIN_RESOURCE_RING_CAPACITY = 6;
 export const MAX_RESOURCE_RING_CAPACITY = 12;
 
 export interface RuntimeResourceCatalogView
-extends RuntimeStaticResourceCatalogView {
+extends RuntimeCanvasResourceCatalogView {
   readonly records: Pick<RuntimeAssetCatalog["records"], "require">;
 }
 
@@ -53,7 +52,7 @@ export interface RuntimeResourcePlanInput {
   readonly interactionCache: Readonly<InteractionCachePlan>;
   readonly ringCapacity: number;
   readonly hostMaxRuntimeBytes?: number;
-  /** Current shared animated/static plane backing; defaults to logical size. */
+  /** Current animated-canvas backing; defaults to logical size. */
   readonly canvasBacking?: Readonly<RuntimeCanvasBackingSize>;
 }
 
@@ -66,18 +65,12 @@ export interface RuntimeResourceAllocationSnapshot {
   readonly persistentAllocationBytes: number;
   readonly streamingAllocationBytes: number;
   readonly frameStagingBytes: number;
-  readonly staticDecodePngCopyBytes: number;
-  readonly staticDecodeOwnedZlibBytes: number;
-  readonly staticDecodeWorkingPeakBytes: number;
-  readonly currentStaticSurfaceAllocationBytes: number;
-  readonly incomingStaticSurfaceAllocationBytes: number;
   readonly animatedCanvasBackingAllocationBytes: number;
-  readonly staticCanvasBackingAllocationBytes: number;
   readonly totalBytes: number;
 }
 
 export interface RuntimeResourcePlan
-extends Omit<StaticRuntimeResourcePlan, "allocationSnapshot"> {
+extends Omit<BaseRuntimeCanvasResourcePlan, "allocationSnapshot"> {
   readonly rendition: string;
   readonly ringCapacity: number;
   readonly outstandingFrameLimit: typeof RESOURCE_DECODE_SURFACE_COUNT;
@@ -139,7 +132,7 @@ export function createRuntimeResourcePlan(
     throw new RangeError("interaction cache byte accounting is inconsistent");
   }
 
-  const staticPlan = createStaticRuntimeResourcePlan({
+  const canvasPlan = createCanvasRuntimeResourcePlan({
     catalog: input.catalog,
     ...(input.hostMaxRuntimeBytes === undefined
       ? {}
@@ -169,45 +162,26 @@ export function createRuntimeResourcePlan(
   );
   const streaming = codedRgba * BigInt(STREAMING_TEXTURE_LAYER_COUNT);
   const streamingAllocation = roundedGpuAllocationBytes(streaming);
-  // Static recovery can run while FrameRenderer still owns this coded staging.
   const frameStaging = codedRgba;
   const snapshotTerms = Object.freeze({
-    ownedAssetBytes: BigInt(staticPlan.allocationSnapshot.ownedAssetBytes),
+    ownedAssetBytes: BigInt(canvasPlan.allocationSnapshot.ownedAssetBytes),
     maximumEncodedWindowBytes: maximumEncodedWindow,
     decoderEncodedWindowBytes: maximumEncodedWindow,
     decodedSurfaceBytes: decodedSurfaces,
     persistentAllocationBytes: persistentAllocation,
     streamingAllocationBytes: streamingAllocation,
     frameStagingBytes: frameStaging,
-    staticDecodePngCopyBytes: BigInt(
-      staticPlan.allocationSnapshot.staticDecodePngCopyBytes
-    ),
-    staticDecodeOwnedZlibBytes: BigInt(
-      staticPlan.allocationSnapshot.staticDecodeOwnedZlibBytes
-    ),
-    staticDecodeWorkingPeakBytes: BigInt(
-      staticPlan.allocationSnapshot.staticDecodeWorkingPeakBytes
-    ),
-    currentStaticSurfaceAllocationBytes: BigInt(
-      staticPlan.currentStaticSurfaceAllocationBytes
-    ),
-    incomingStaticSurfaceAllocationBytes: BigInt(
-      staticPlan.incomingStaticSurfaceAllocationBytes
-    ),
     animatedCanvasBackingAllocationBytes: BigInt(
-      staticPlan.animatedCanvasBackingAllocationBytes
-    ),
-    staticCanvasBackingAllocationBytes: BigInt(
-      staticPlan.staticCanvasBackingAllocationBytes
+      canvasPlan.animatedCanvasBackingAllocationBytes
     )
   });
   const total = checkedByteSum(
     Object.values(snapshotTerms),
     "runtime resource total"
   );
-  if (total > BigInt(staticPlan.effectiveCapBytes)) {
+  if (total > BigInt(canvasPlan.effectiveCapBytes)) {
     throw new RangeError(
-      `runtime resource total ${total.toString()} exceeds effective cap ${String(staticPlan.effectiveCapBytes)}`
+      `runtime resource total ${total.toString()} exceeds effective cap ${String(canvasPlan.effectiveCapBytes)}`
     );
   }
 
@@ -216,7 +190,7 @@ export function createRuntimeResourcePlan(
     rendition: rendition.id,
     ringCapacity: input.ringCapacity,
     outstandingFrameLimit: RESOURCE_DECODE_SURFACE_COUNT,
-    ...staticPlan,
+    ...canvasPlan,
     maximumEncodedWindowBytes: checkedByteNumber(
       maximumEncodedWindow,
       "maximum encoded window bytes"
@@ -344,7 +318,9 @@ type ProductionAvcRendition = Extract<
   {
     readonly profile:
       | "avc-annexb-opaque-v0"
-      | "avc-annexb-packed-alpha-v0";
+      | "avc-annexb-packed-alpha-v0"
+      | "avc-annexb-opaque-v1"
+      | "avc-annexb-packed-alpha-v1";
   }
 >;
 
@@ -355,7 +331,9 @@ function requireProductionAvcRendition(
   const selected = manifest.renditions.find(({ id }) => id === rendition);
   if (
     selected?.profile !== "avc-annexb-opaque-v0" &&
-    selected?.profile !== "avc-annexb-packed-alpha-v0"
+    selected?.profile !== "avc-annexb-packed-alpha-v0" &&
+    selected?.profile !== "avc-annexb-opaque-v1" &&
+    selected?.profile !== "avc-annexb-packed-alpha-v1"
   ) {
     throw new RangeError("selected resource rendition must be production AVC");
   }
@@ -370,13 +348,7 @@ interface BigIntAllocationSnapshotTerms {
   readonly persistentAllocationBytes: bigint;
   readonly streamingAllocationBytes: bigint;
   readonly frameStagingBytes: bigint;
-  readonly staticDecodePngCopyBytes: bigint;
-  readonly staticDecodeOwnedZlibBytes: bigint;
-  readonly staticDecodeWorkingPeakBytes: bigint;
-  readonly currentStaticSurfaceAllocationBytes: bigint;
-  readonly incomingStaticSurfaceAllocationBytes: bigint;
   readonly animatedCanvasBackingAllocationBytes: bigint;
-  readonly staticCanvasBackingAllocationBytes: bigint;
 }
 
 function freezeAllocationSnapshot(
@@ -412,33 +384,9 @@ function freezeAllocationSnapshot(
       terms.frameStagingBytes,
       "snapshot frame staging bytes"
     ),
-    staticDecodePngCopyBytes: checkedByteNumber(
-      terms.staticDecodePngCopyBytes,
-      "snapshot static PNG copy bytes"
-    ),
-    staticDecodeOwnedZlibBytes: checkedByteNumber(
-      terms.staticDecodeOwnedZlibBytes,
-      "snapshot static zlib bytes"
-    ),
-    staticDecodeWorkingPeakBytes: checkedByteNumber(
-      terms.staticDecodeWorkingPeakBytes,
-      "snapshot static decode working bytes"
-    ),
-    currentStaticSurfaceAllocationBytes: checkedByteNumber(
-      terms.currentStaticSurfaceAllocationBytes,
-      "snapshot current static allocation bytes"
-    ),
-    incomingStaticSurfaceAllocationBytes: checkedByteNumber(
-      terms.incomingStaticSurfaceAllocationBytes,
-      "snapshot incoming static allocation bytes"
-    ),
     animatedCanvasBackingAllocationBytes: checkedByteNumber(
       terms.animatedCanvasBackingAllocationBytes,
       "snapshot animated canvas allocation bytes"
-    ),
-    staticCanvasBackingAllocationBytes: checkedByteNumber(
-      terms.staticCanvasBackingAllocationBytes,
-      "snapshot static canvas allocation bytes"
     ),
     totalBytes: checkedByteNumber(total, "snapshot total bytes")
   });
@@ -450,13 +398,7 @@ function freezeAllocationSnapshot(
     snapshot.persistentAllocationBytes,
     snapshot.streamingAllocationBytes,
     snapshot.frameStagingBytes,
-    snapshot.staticDecodePngCopyBytes,
-    snapshot.staticDecodeOwnedZlibBytes,
-    snapshot.staticDecodeWorkingPeakBytes,
-    snapshot.currentStaticSurfaceAllocationBytes,
-    snapshot.incomingStaticSurfaceAllocationBytes,
-    snapshot.animatedCanvasBackingAllocationBytes,
-    snapshot.staticCanvasBackingAllocationBytes
+    snapshot.animatedCanvasBackingAllocationBytes
   ], "runtime resource snapshot total");
   if (reconciled !== total) {
     throw new RangeError("runtime resource snapshot does not reconcile");

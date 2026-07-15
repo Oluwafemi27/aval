@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("all fixed browser sources route into arbitrary authored events", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?all-bindings");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   const control = page.locator("#m8-interaction");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness

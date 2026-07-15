@@ -9,7 +9,7 @@ const packageDirectory = resolve(directoryIndex < 0 ? "artifacts/1.0.0/packages"
 const archives = (await readdir(packageDirectory)).filter((name) => name.endsWith(".tgz")).map((name) => join(packageDirectory, name));
 if (archives.length !== 5) throw new Error("example test requires the exact five-package candidate set");
 const examples = ["zero-config-loop", "idle-hover-states", "network-integrity", "plain-html"];
-const temporary = await mkdtemp(join(tmpdir(), "rma-examples-"));
+const temporary = await mkdtemp(join(tmpdir(), "aval-examples-"));
 try {
   for (const name of examples) {
     const target = join(temporary, name);

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("manual pause, hidden resume, and autoplay resets remain separate intents", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?play-intent");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -68,7 +68,7 @@ test("manual pause, hidden resume, and autoplay resets remain separate intents",
 test("manual autoplay prepares an animation candidate without advancing it", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?manual-autoplay");
   const result = await page.evaluate(async () => {
-    const element = document.querySelector("rendered-motion") as HTMLElement & {
+    const element = document.querySelector("aval-player") as HTMLElement & {
       autoplay: string;
       src: string;
       readiness: string;

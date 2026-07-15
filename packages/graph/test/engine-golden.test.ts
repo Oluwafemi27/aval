@@ -498,7 +498,7 @@ describe("MotionGraphEngine golden lifecycle traces", () => {
     });
   });
 
-  it("skips an intro for a different request accepted during preparation", () => {
+  it("plays the intro before a request accepted during preparation", () => {
     const engine = new MotionGraphEngine();
     engine.install(graph({ introFrames: 2 }));
     const request = engine.request("hover");
@@ -508,18 +508,26 @@ describe("MotionGraphEngine golden lifecycle traces", () => {
     expect(request.snapshot.phase).toBe("preparing");
 
     const begin = engine.beginAnimated();
-    expect(begin.presentation).toEqual(bodyFrame("idle", 0));
+    expect(begin.presentation).toEqual(introFrame(0));
     expect(begin.effects).toEqual([
       readiness("preparing", "animated")
     ]);
     expect(begin.snapshot).toMatchObject({
-      phase: "waiting",
+      phase: "intro",
       requestedState: "hover",
       visualState: "idle",
       isTransitioning: true
     });
 
-    const commit = engine.tick({ contentOrdinal: 0n });
+    expect(engine.tick({ contentOrdinal: 0n }).presentation).toEqual(
+      introFrame(1)
+    );
+    const join = engine.tick({ contentOrdinal: 1n });
+    expect(join.presentation).toEqual(bodyFrame("idle", 0));
+    expect(join.effects).toEqual([]);
+    expect(join.snapshot.phase).toBe("waiting");
+
+    const commit = engine.tick({ contentOrdinal: 2n });
     expect(commit.presentation).toEqual(bodyFrame("hover", 0));
     expect(commit.effects).toEqual([
       transitionStart("idle-to-hover", "idle", "hover", 1),
@@ -767,7 +775,6 @@ function graph(options: FixtureOptions = {}): MotionGraphDefinition {
         };
   const idle: GraphStateDefinition = {
     id: "idle",
-    staticFrameId: "idle-static",
     body: {
       unitId: "idle-body",
       kind: sourceKind,
@@ -780,7 +787,6 @@ function graph(options: FixtureOptions = {}): MotionGraphDefinition {
   };
   const hover: GraphStateDefinition = {
     id: "hover",
-    staticFrameId: "hover-static",
     body: {
       unitId: "hover-body",
       kind: "loop",
@@ -840,7 +846,7 @@ function animatedEngine(definition: MotionGraphDefinition): MotionGraphEngine {
 }
 
 function staticFrame(state: "idle" | "hover") {
-  return { kind: "static", state, staticFrameId: `${state}-static` } as const;
+  return { kind: "static", state } as const;
 }
 
 function bodyFrame(state: "idle" | "hover", frameIndex: number) {

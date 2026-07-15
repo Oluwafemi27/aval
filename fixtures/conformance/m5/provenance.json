@@ -1,54 +1,54 @@
 {
   "provenanceVersion": "0.2",
-  "generatedAt": "2026-07-12",
-  "generator": "rendered-motion-compiler/0.1",
+  "generatedAt": "2026-07-14",
+  "generator": "aval-compiler/0.1",
   "pipelineLineage": {
-    "migration": "rgba-filter-chain-to-direct-bt709-limited-yuv420p-v0",
+    "migration": "embedded-posters-to-motion-only-v0",
     "previousAssets": [
       {
-        "name": "opaque-loop.rma",
-        "sha256": "dcda9b3afbd9e56c5aec4c71b24208bec94bef98d6046656ba837a4bc322ca49"
+        "name": "opaque-loop.avl",
+        "sha256": "56b1616ef53a4d3974337e9fa3b910657700f8b5897266e15f6b0dff22671204"
       },
       {
-        "name": "opaque-path.rma",
-        "sha256": "edec42aad4ed140404caf895093fc3a986fbfdfaaf28f720cb47e918bf1308e0"
+        "name": "opaque-path.avl",
+        "sha256": "f3777ad640387940858e9ef52924dd7c1fec2c02d9f732b93c866fc0b39efa20"
       },
       {
-        "name": "opaque-reversible.rma",
-        "sha256": "642e5d60a461f3f0d0e53be9c1a238a3f5dfdad23f4db19eb2c12a94a6f13e8a"
+        "name": "opaque-reversible.avl",
+        "sha256": "d7cfff018d1b42b9cde438f65ea7a56d267618cb3f2ec0a91b1819caf7d6bcc9"
       }
     ],
-    "review": "Intentional encoded-byte migration; source projects and PNG frames remain unchanged."
+    "review": "Intentional wire migration: embedded static PNGs were removed; source projects, motion units, and PNG source frames remain unchanged."
   },
   "compiler": {
     "architecture": "arm64",
-    "nodeMajor": 25,
-    "package": "@rendered-motion/compiler",
+    "nodeMajor": 22,
+    "package": "@aval/compiler",
     "packageVersion": "0.0.0",
     "platform": "darwin",
-    "projectVersion": "0.2"
+    "projectVersion": "0.3"
   },
   "toolchain": {
     "aggregateMemoryLimit": "derived",
     "ffmpeg": {
-      "executableSha256": "329fa7360b28a067a0cd7281474bb18cd868932d5173646a674466bcb56d6e93",
-      "version": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
-      "versionOutputSha256": "98f2da65e4b3e39aa6ac74848582be422751d8f52176cf810eceb94bbcaa78d1",
-      "configuration": "configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/8.1.2_1 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags= --enable-ffplay --enable-gpl --enable-libsvtav1 --enable-libopus --enable-libx264 --enable-libmp3lame --enable-libdav1d --enable-libvmaf --enable-libvpx --enable-libx265 --enable-openssl --enable-videotoolbox --enable-audiotoolbox --enable-neon",
-      "configurationSha256": "8470f6e5d1c91c01f1228e91aa8827bea05a7e8a39c8dedefdb778716bdc1aec",
-      "encodersOutputSha256": "38b11441f5ffe17fd32539030ba9290b81e730878bb0cffe1af5084e2b7b8879",
-      "calibrationSha256": "88777af5e4d125466407cc218f088cf52a670ca3c3590365d2865f1a00d339c9"
+      "executableSha256": "48cc76fa936aec61e6459da4366ad8d99da34e4a7f98be66ff5a9130d8ab366f",
+      "version": "ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers",
+      "versionOutputSha256": "b08f6794c8a16655b3c6f9d1bd3cdc8cfab7a9cf6db15276b35b2f8344d1674c",
+      "configuration": "configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/7.1.1_2 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags='-Wl,-ld_classic' --enable-ffplay --enable-gnutls --enable-gpl --enable-libaom --enable-libaribb24 --enable-libbluray --enable-libdav1d --enable-libharfbuzz --enable-libjxl --enable-libmp3lame --enable-libopus --enable-librav1e --enable-librist --enable-librubberband --enable-libsnappy --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libtesseract --enable-libtheora --enable-libvidstab --enable-libvmaf --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxml2 --enable-libxvid --enable-lzma --enable-libfontconfig --enable-libfreetype --enable-frei0r --enable-libass --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopenjpeg --enable-libspeex --enable-libsoxr --enable-libzmq --enable-libzimg --disable-libjack --disable-indev=jack --enable-videotoolbox --enable-audiotoolbox --enable-neon",
+      "configurationSha256": "b809566072f4ad92e517aaebc0a2701151e03e74a619be39a7196a37f7dc34d4",
+      "encodersOutputSha256": "e76ee773e9049d67796e3b5992b5374e9969ab3b80f14af260b295adc41bbdc2",
+      "calibrationSha256": "f577b998c399559aadef24d2d4d4a1934b1713d54b1d1a187eafb17715f17f47"
     },
     "ffprobe": {
-      "executableSha256": "841ab2259a55e5c5e44c5851890867d48750ff1e7cfa92b5fbed91445a493128",
-      "version": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers",
-      "versionOutputSha256": "8316221740e891c1f9d08d30a9a45059af9f1ec96741423eee3ae0c7721d9cec"
+      "executableSha256": "28c9fe73413260e2ea4eba2e7ab58f80dcc2e81c5f6f85477bc74c17904b9865",
+      "version": "ffprobe version 7.1.1 Copyright (c) 2007-2025 the FFmpeg developers",
+      "versionOutputSha256": "cdc08e833a8f4c33af29aaa8a0a880915edc8d5d72c291c52838573e2125c249"
     }
   },
   "fixtures": [
     {
-      "name": "opaque-loop.rma",
-      "coverage": "Two-frame opaque body loop with one generated static fallback.",
+      "name": "opaque-loop.avl",
+      "coverage": "Two-frame opaque body loop.",
       "sourceProject": {
         "path": "fixtures/compiler/m5/source/loop.json",
         "bytes": 1020,
@@ -68,7 +68,7 @@
       ],
       "frontIndex": {
         "offset": 0,
-        "length": 1512
+        "length": 1248
       },
       "units": [
         {
@@ -76,23 +76,9 @@
           "unit": "body.default",
           "sampleStart": 0,
           "sampleCount": 2,
-          "sha256": "0ef19b31deb6d0414f51a0889ad1f4682aaa13a82123f26f9b3b4766fd9d6401",
-          "offset": 1512,
+          "sha256": "c395ed0b3b94c21f40c07eb7223dac310c732b62b6d369e92344d3d613a4a605",
+          "offset": 1248,
           "length": 114
-        }
-      ],
-      "staticFrames": [
-        {
-          "staticFrame": "static.00",
-          "sha256": "75c75688e4ed6bd78f4fd593de44e1dc6789b79a1169c34c72b2fafd7af7e71e",
-          "offset": 1632,
-          "length": 4209
-        }
-      ],
-      "stateStatics": [
-        {
-          "state": "default",
-          "staticFrame": "static.00"
         }
       ],
       "normalization": [
@@ -177,16 +163,14 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
             "rawvideo",
             "-pixel_format",
-            "rgba",
+            "yuv420p",
             "-video_size",
-            "16x16",
+            "16x48",
             "-framerate",
             "30/1",
             "-i",
@@ -200,8 +184,6 @@
             "-1",
             "-map_chapters",
             "-1",
-            "-vf",
-            "scale=16:16:flags=lanczos+accurate_rnd+full_chroma_int:in_range=full:out_range=tv:in_color_matrix=bt709:out_color_matrix=bt709,setsar=1,format=yuv420p",
             "-frames:v",
             "2",
             "-fps_mode",
@@ -214,8 +196,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -231,9 +211,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -247,7 +227,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:crop-rect=0,0,0,4:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -259,14 +239,8 @@
           "arguments": [
             "-v",
             "error",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
-            "-analyzeduration",
-            "10000000",
-            "-probesize",
-            "33554432",
             "-threads",
             "1",
             "-f",
@@ -282,7 +256,7 @@
             "-show_entries",
             "stream=index,width,height,pix_fmt,avg_frame_rate,r_frame_rate,time_base,nb_frames,duration,field_order,sample_aspect_ratio:stream_side_data=rotation:format=format_name,duration:frame=stream_index,best_effort_timestamp,duration",
             "-of",
-            "json",
+            "compact=p=1:nk=0:escape=none",
             "$SOURCE/frames"
           ],
           "operation": "frames:probe",
@@ -295,8 +269,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -342,8 +314,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -391,8 +361,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -426,8 +394,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -443,9 +409,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -459,7 +425,7 @@
             "-bufsize",
             "3000000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -496,16 +462,14 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
             "rawvideo",
             "-pixel_format",
-            "rgba",
+            "yuv420p",
             "-video_size",
-            "16x16",
+            "16x48",
             "-framerate",
             "30/1",
             "-i",
@@ -519,8 +483,6 @@
             "-1",
             "-map_chapters",
             "-1",
-            "-vf",
-            "scale=16:16:flags=lanczos+accurate_rnd+full_chroma_int:in_range=full:out_range=tv:in_color_matrix=bt709:out_color_matrix=bt709,setsar=1,format=yuv420p",
             "-frames:v",
             "2",
             "-fps_mode",
@@ -533,8 +495,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -550,9 +510,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -566,7 +526,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:crop-rect=0,0,0,4:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -593,6 +553,18 @@
           "codedWidth": 32,
           "compositeQuality": null,
           "encodedBytes": 114,
+          "encoding": {
+            "canonicalBytes": 114,
+            "codec": "libx264",
+            "legacyZeroLatency": true,
+            "measuredAverageBitrate": 13680,
+            "preset": "medium",
+            "rateControl": {
+              "averageBitrate": 2000000,
+              "maxBitrate": 3000000,
+              "mode": "abr"
+            }
+          },
           "geometry": {
             "codedHeight": 32,
             "codedRgbaBytes": 4096,
@@ -636,7 +608,7 @@
               },
               "fixedFrameRate": true,
               "hrdPresent": false,
-              "levelIdc": 32,
+              "levelIdc": 21,
               "maxDecFrameBuffering": 1,
               "maxNumRefFrames": 1,
               "maxNumReorderFrames": 0,
@@ -708,13 +680,13 @@
         }
       ],
       "asset": {
-        "bytes": 5841,
-        "sha256": "56b1616ef53a4d3974337e9fa3b910657700f8b5897266e15f6b0dff22671204"
+        "bytes": 1362,
+        "sha256": "d9dde56419bec1595f49eb0480843e667097ae4992a8182bbe3905e07dccc6dc"
       }
     },
     {
-      "name": "opaque-path.rma",
-      "coverage": "Initial one-shot, two body loops, locked bridge, pointer binding, and two generated static fallbacks.",
+      "name": "opaque-path.avl",
+      "coverage": "Initial one-shot, two body loops, locked bridge, and pointer binding.",
       "sourceProject": {
         "path": "fixtures/compiler/m5/source/path.json",
         "bytes": 1964,
@@ -764,7 +736,7 @@
       ],
       "frontIndex": {
         "offset": 0,
-        "length": 2928
+        "length": 2488
       },
       "units": [
         {
@@ -772,8 +744,8 @@
           "unit": "active-body",
           "sampleStart": 0,
           "sampleCount": 2,
-          "sha256": "b5d0e3b4b7e58bee05219132c10f2b6f943077756b9dd3957df56a6bac715d00",
-          "offset": 2928,
+          "sha256": "b8ebad17cd557e7d236e0b10665120cf73cd6fb2ce9eeacfecef56690d61cf51",
+          "offset": 2488,
           "length": 114
         },
         {
@@ -781,8 +753,8 @@
           "unit": "bridge",
           "sampleStart": 2,
           "sampleCount": 2,
-          "sha256": "6c3818115385f4f3564e86f1ecce673ab70caab83271a3c3ae8b17003378b698",
-          "offset": 3048,
+          "sha256": "963c7e48e359b8e742544dcdb3d4ff5d7aeca632fa9424cf89612511666c365d",
+          "offset": 2608,
           "length": 78
         },
         {
@@ -790,8 +762,8 @@
           "unit": "idle-body",
           "sampleStart": 4,
           "sampleCount": 2,
-          "sha256": "0ef19b31deb6d0414f51a0889ad1f4682aaa13a82123f26f9b3b4766fd9d6401",
-          "offset": 3128,
+          "sha256": "c395ed0b3b94c21f40c07eb7223dac310c732b62b6d369e92344d3d613a4a605",
+          "offset": 2688,
           "length": 114
         },
         {
@@ -799,33 +771,9 @@
           "unit": "intro",
           "sampleStart": 6,
           "sampleCount": 2,
-          "sha256": "939dccd46c88c96b1c5aa094d53e6f8b30fa3837ddd2b380a08c387d2e26e775",
-          "offset": 3248,
+          "sha256": "4cafa156a27d83f8fc9f3d2aff7cfef0cad123617b6809491060c6b5878da8f7",
+          "offset": 2808,
           "length": 114
-        }
-      ],
-      "staticFrames": [
-        {
-          "staticFrame": "static.00",
-          "sha256": "8162c8df6950f1f7855d02a06938e17c4936f6d9f01f034b99f61f919eb2d0c1",
-          "offset": 3368,
-          "length": 4209
-        },
-        {
-          "staticFrame": "static.01",
-          "sha256": "75c75688e4ed6bd78f4fd593de44e1dc6789b79a1169c34c72b2fafd7af7e71e",
-          "offset": 7584,
-          "length": 4209
-        }
-      ],
-      "stateStatics": [
-        {
-          "state": "active",
-          "staticFrame": "static.00"
-        },
-        {
-          "state": "idle",
-          "staticFrame": "static.01"
         }
       ],
       "normalization": [
@@ -952,16 +900,14 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
             "rawvideo",
             "-pixel_format",
-            "rgba",
+            "yuv420p",
             "-video_size",
-            "16x16",
+            "16x48",
             "-framerate",
             "30/1",
             "-i",
@@ -975,8 +921,6 @@
             "-1",
             "-map_chapters",
             "-1",
-            "-vf",
-            "scale=16:16:flags=lanczos+accurate_rnd+full_chroma_int:in_range=full:out_range=tv:in_color_matrix=bt709:out_color_matrix=bt709,setsar=1,format=yuv420p",
             "-frames:v",
             "2",
             "-fps_mode",
@@ -989,8 +933,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -1006,9 +948,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -1022,7 +964,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:crop-rect=0,0,0,4:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -1034,14 +976,8 @@
           "arguments": [
             "-v",
             "error",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
-            "-analyzeduration",
-            "10000000",
-            "-probesize",
-            "33554432",
             "-threads",
             "1",
             "-f",
@@ -1057,7 +993,7 @@
             "-show_entries",
             "stream=index,width,height,pix_fmt,avg_frame_rate,r_frame_rate,time_base,nb_frames,duration,field_order,sample_aspect_ratio:stream_side_data=rotation:format=format_name,duration:frame=stream_index,best_effort_timestamp,duration",
             "-of",
-            "json",
+            "compact=p=1:nk=0:escape=none",
             "$SOURCE/frames"
           ],
           "operation": "frames:probe",
@@ -1070,8 +1006,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -1117,8 +1051,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -1166,8 +1098,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -1201,8 +1131,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -1218,9 +1146,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -1234,7 +1162,7 @@
             "-bufsize",
             "3000000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -1249,8 +1177,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -1298,8 +1224,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -1333,8 +1257,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -1350,9 +1272,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -1366,7 +1288,7 @@
             "-bufsize",
             "3000000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -1381,8 +1303,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -1430,8 +1350,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -1465,8 +1383,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -1482,9 +1398,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -1498,7 +1414,7 @@
             "-bufsize",
             "3000000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -1513,8 +1429,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -1562,8 +1476,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -1597,8 +1509,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -1614,9 +1524,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -1630,7 +1540,7 @@
             "-bufsize",
             "3000000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -1667,16 +1577,14 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
             "rawvideo",
             "-pixel_format",
-            "rgba",
+            "yuv420p",
             "-video_size",
-            "16x16",
+            "16x48",
             "-framerate",
             "30/1",
             "-i",
@@ -1690,8 +1598,6 @@
             "-1",
             "-map_chapters",
             "-1",
-            "-vf",
-            "scale=16:16:flags=lanczos+accurate_rnd+full_chroma_int:in_range=full:out_range=tv:in_color_matrix=bt709:out_color_matrix=bt709,setsar=1,format=yuv420p",
             "-frames:v",
             "2",
             "-fps_mode",
@@ -1704,8 +1610,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -1721,9 +1625,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -1737,7 +1641,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:crop-rect=0,0,0,4:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -1776,6 +1680,18 @@
           "codedWidth": 32,
           "compositeQuality": null,
           "encodedBytes": 420,
+          "encoding": {
+            "canonicalBytes": 420,
+            "codec": "libx264",
+            "legacyZeroLatency": true,
+            "measuredAverageBitrate": 12600,
+            "preset": "medium",
+            "rateControl": {
+              "averageBitrate": 2000000,
+              "maxBitrate": 3000000,
+              "mode": "abr"
+            }
+          },
           "geometry": {
             "codedHeight": 32,
             "codedRgbaBytes": 4096,
@@ -1819,7 +1735,7 @@
               },
               "fixedFrameRate": true,
               "hrdPresent": false,
-              "levelIdc": 32,
+              "levelIdc": 21,
               "maxDecFrameBuffering": 1,
               "maxNumRefFrames": 1,
               "maxNumReorderFrames": 0,
@@ -2070,13 +1986,13 @@
         }
       ],
       "asset": {
-        "bytes": 11793,
-        "sha256": "f3777ad640387940858e9ef52924dd7c1fec2c02d9f732b93c866fc0b39efa20"
+        "bytes": 2922,
+        "sha256": "21f9d8665eccd2f5a84a99ae2d4c61138d32a8700d1ab2b3f3f95c53d1c95a08"
       }
     },
     {
-      "name": "opaque-reversible.rma",
-      "coverage": "Forward-authored reversible transition, exact inverse edge, finish route, deliberate cut, and three static fallbacks.",
+      "name": "opaque-reversible.avl",
+      "coverage": "Forward-authored reversible transition, exact inverse edge, finish route, and deliberate cut.",
       "sourceProject": {
         "path": "fixtures/compiler/m5/source/reversible.json",
         "bytes": 3551,
@@ -2156,7 +2072,7 @@
       ],
       "frontIndex": {
         "offset": 0,
-        "length": 4352
+        "length": 3744
       },
       "units": [
         {
@@ -2164,8 +2080,8 @@
           "unit": "done-body",
           "sampleStart": 0,
           "sampleCount": 6,
-          "sha256": "f8493091b27cd487c0a8d5f528f06fd78227ce157f83f2f2f7439b92f5c065f6",
-          "offset": 4352,
+          "sha256": "4b5ac5f51dd06136d58e59627ec8ad2248f82b098bbd2ac9140b3188b93f49da",
+          "offset": 3744,
           "length": 212
         },
         {
@@ -2173,8 +2089,8 @@
           "unit": "hover-body",
           "sampleStart": 6,
           "sampleCount": 1,
-          "sha256": "a5ff0def65906fe5c6d0d5a658b264e35e0e31d54d83cc337fdcb4ed487c9c5e",
-          "offset": 4568,
+          "sha256": "44a7bca71d9a9374af488c254d0bece3fc6fd365856424aee9e2c52dcf121b53",
+          "offset": 3960,
           "length": 62
         },
         {
@@ -2182,8 +2098,8 @@
           "unit": "idle-body",
           "sampleStart": 7,
           "sampleCount": 1,
-          "sha256": "8810048a73a949c91864b52c805a46a0e6cbf5663516a3c9cadcdc28939891ad",
-          "offset": 4632,
+          "sha256": "b5c026d58a6cafefdd7c9b11c91301cbc1bdc9b0422918c808d8c4c9bf748cb8",
+          "offset": 4024,
           "length": 62
         },
         {
@@ -2191,43 +2107,9 @@
           "unit": "state-change",
           "sampleStart": 8,
           "sampleCount": 6,
-          "sha256": "d5f6eba5bd6ec23380bfffe215a972ead074693a74194a5217312abf061d9000",
-          "offset": 4696,
-          "length": 209
-        }
-      ],
-      "staticFrames": [
-        {
-          "staticFrame": "static.00",
-          "sha256": "c9416b4e0baaed865cf5cbb9b4b24a4bf24fc2c213089e1eccefa38be59f86be",
-          "offset": 4912,
-          "length": 4209
-        },
-        {
-          "staticFrame": "static.01",
-          "sha256": "08087ddbf89ca7eccb46216baa90553af34585663a24b6b4d08fae8233b20a23",
-          "offset": 9128,
-          "length": 4209
-        },
-        {
-          "staticFrame": "static.02",
-          "sha256": "02c6e580e1bb2934dae5b6df2fdb29e462c184cd02c59e8636778ed13e872047",
-          "offset": 13344,
-          "length": 4209
-        }
-      ],
-      "stateStatics": [
-        {
-          "state": "done",
-          "staticFrame": "static.00"
-        },
-        {
-          "state": "hover",
-          "staticFrame": "static.01"
-        },
-        {
-          "state": "idle",
-          "staticFrame": "static.02"
+          "sha256": "07e1481f8c86455f7c5b973794bf2d7b026ea04f1a2297f1c1a665b16bf00a52",
+          "offset": 4088,
+          "length": 212
         }
       ],
       "normalization": [
@@ -2396,16 +2278,14 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
             "rawvideo",
             "-pixel_format",
-            "rgba",
+            "yuv420p",
             "-video_size",
-            "16x16",
+            "16x48",
             "-framerate",
             "30/1",
             "-i",
@@ -2419,8 +2299,6 @@
             "-1",
             "-map_chapters",
             "-1",
-            "-vf",
-            "scale=16:16:flags=lanczos+accurate_rnd+full_chroma_int:in_range=full:out_range=tv:in_color_matrix=bt709:out_color_matrix=bt709,setsar=1,format=yuv420p",
             "-frames:v",
             "2",
             "-fps_mode",
@@ -2433,8 +2311,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -2450,9 +2326,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -2466,7 +2342,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:crop-rect=0,0,0,4:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -2478,14 +2354,8 @@
           "arguments": [
             "-v",
             "error",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
-            "-analyzeduration",
-            "10000000",
-            "-probesize",
-            "33554432",
             "-threads",
             "1",
             "-f",
@@ -2501,7 +2371,7 @@
             "-show_entries",
             "stream=index,width,height,pix_fmt,avg_frame_rate,r_frame_rate,time_base,nb_frames,duration,field_order,sample_aspect_ratio:stream_side_data=rotation:format=format_name,duration:frame=stream_index,best_effort_timestamp,duration",
             "-of",
-            "json",
+            "compact=p=1:nk=0:escape=none",
             "$SOURCE/frames"
           ],
           "operation": "frames:probe",
@@ -2514,8 +2384,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -2561,8 +2429,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -2610,8 +2476,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -2645,8 +2509,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -2662,9 +2524,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "6",
             "-keyint_min",
-            "901",
+            "6",
             "-sc_threshold",
             "0",
             "-bf",
@@ -2678,7 +2540,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=6:min-keyint=6:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -2693,8 +2555,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -2742,8 +2602,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -2777,8 +2635,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -2794,9 +2650,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -2810,7 +2666,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -2825,8 +2681,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -2874,8 +2728,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -2909,8 +2761,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -2926,9 +2776,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -2942,7 +2792,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -2957,8 +2807,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "file,pipe",
             "-f",
@@ -3006,8 +2854,6 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
@@ -3041,8 +2887,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -3058,9 +2902,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "6",
             "-keyint_min",
-            "901",
+            "6",
             "-sc_threshold",
             "0",
             "-bf",
@@ -3074,7 +2918,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=6:min-keyint=6:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -3111,16 +2955,14 @@
             "-loglevel",
             "error",
             "-xerror",
-            "-max_alloc",
-            "67108864",
             "-protocol_whitelist",
             "pipe",
             "-f",
             "rawvideo",
             "-pixel_format",
-            "rgba",
+            "yuv420p",
             "-video_size",
-            "16x16",
+            "16x48",
             "-framerate",
             "30/1",
             "-i",
@@ -3134,8 +2976,6 @@
             "-1",
             "-map_chapters",
             "-1",
-            "-vf",
-            "scale=16:16:flags=lanczos+accurate_rnd+full_chroma_int:in_range=full:out_range=tv:in_color_matrix=bt709:out_color_matrix=bt709,setsar=1,format=yuv420p",
             "-frames:v",
             "2",
             "-fps_mode",
@@ -3148,8 +2988,6 @@
             "zerolatency",
             "-profile:v",
             "baseline",
-            "-level:v",
-            "3.2",
             "-pix_fmt",
             "yuv420p",
             "-color_range",
@@ -3165,9 +3003,9 @@
             "-filter_threads",
             "1",
             "-g",
-            "901",
+            "2",
             "-keyint_min",
-            "901",
+            "2",
             "-sc_threshold",
             "0",
             "-bf",
@@ -3181,7 +3019,7 @@
             "-bufsize",
             "600000",
             "-x264-params",
-            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+            "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:crop-rect=0,0,0,4:force-cfr=1:keyint=2:min-keyint=2:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
             "-f",
             "h264",
             "pipe:1"
@@ -3219,7 +3057,19 @@
           "codedHeight": 32,
           "codedWidth": 32,
           "compositeQuality": null,
-          "encodedBytes": 545,
+          "encodedBytes": 548,
+          "encoding": {
+            "canonicalBytes": 548,
+            "codec": "libx264",
+            "legacyZeroLatency": true,
+            "measuredAverageBitrate": 9395,
+            "preset": "medium",
+            "rateControl": {
+              "averageBitrate": 300000,
+              "maxBitrate": 600000,
+              "mode": "abr"
+            }
+          },
           "geometry": {
             "codedHeight": 32,
             "codedRgbaBytes": 4096,
@@ -3263,7 +3113,7 @@
               },
               "fixedFrameRate": true,
               "hrdPresent": false,
-              "levelIdc": 32,
+              "levelIdc": 13,
               "maxDecFrameBuffering": 1,
               "maxNumRefFrames": 1,
               "maxNumReorderFrames": 0,
@@ -3596,8 +3446,8 @@
         }
       ],
       "asset": {
-        "bytes": 17553,
-        "sha256": "d7cfff018d1b42b9cde438f65ea7a56d267618cb3f2ec0a91b1819caf7d6bcc9"
+        "bytes": 4300,
+        "sha256": "ae5f059de4a16e76bf19787ba8348a378526edaf7619b0c4957dcfc08db4301d"
       }
     }
   ]

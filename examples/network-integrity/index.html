@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Rendered Motion integrity</title></head>
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AVAL integrity</title></head>
   <body>
-    <rendered-motion id="motion" src="https://assets.example.test/status.012345.rma" integrity="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" crossorigin="anonymous" width="160" height="160">
+    <aval-player id="motion" src="https://assets.example.test/status.012345.avl" integrity="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" crossorigin="anonymous" width="160" height="160">
       <img slot="fallback" src="/status-fallback.png" alt="Current status">
-    </rendered-motion>
+    </aval-player>
     <output id="status">Preparing static fallback…</output>
     <script type="module" src="/src/main.ts"></script>
   </body>

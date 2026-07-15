@@ -105,7 +105,7 @@ export function createDevEventStreamHub(): DevEventStreamHub {
 export function writeBuildEvent(response: ServerResponse, build: Readonly<DevServerBuild>): boolean {
   const event = `event: build\ndata: ${JSON.stringify({
     generation: build.generation,
-    src: `asset.rma#v=${String(build.generation)}`,
+    src: `asset.avl#v=${String(build.generation)}`,
     bytes: build.bytes,
     sha256: build.sha256,
     warnings: build.warnings,

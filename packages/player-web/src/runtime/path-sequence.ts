@@ -1,7 +1,7 @@
 import type {
   GraphBodyDefinition,
   GraphEdgeDefinition
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { PathSchedulerFramePurpose } from "./path-scheduler-model.js";
 import type {

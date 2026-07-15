@@ -32,7 +32,7 @@ const archives = (await readdir(packageDirectory))
   .map((name) => join(packageDirectory, name));
 assert(archives.length === expectedPackages.length, `expected five package archives, found ${archives.length}`);
 
-const temporary = await realpath(await mkdtemp(join(tmpdir(), "rma-packed-dev-")));
+const temporary = await realpath(await mkdtemp(join(tmpdir(), "aval-packed-dev-")));
 const project = join(temporary, "project");
 const npmCache = join(temporary, "npm-cache");
 let child;
@@ -64,7 +64,7 @@ try {
   const cli = join(
     project,
     "node_modules",
-    "@rendered-motion",
+    "@aval",
     "compiler",
     "dist",
     "cli.js"
@@ -74,7 +74,7 @@ try {
     "dev",
     "motion.json",
     "--out",
-    "starter.rma",
+    "starter.avl",
     "--port",
     "0",
     "--force",
@@ -84,12 +84,12 @@ try {
     env: { ...process.env, NO_COLOR: "1" },
     stdio: ["ignore", "pipe", "pipe"]
   });
-  const output = createJsonLineCollector(child.stdout, "packed rma dev stdout");
+  const output = createJsonLineCollector(child.stdout, "packed avl dev stdout");
   let stderr = "";
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => {
     try {
-      stderr = boundedAppend(stderr, chunk, 4 * 1024 * 1024, "packed rma dev stderr");
+      stderr = boundedAppend(stderr, chunk, 4 * 1024 * 1024, "packed avl dev stderr");
     } catch (error) {
       output.fail(error);
       child.kill("SIGTERM");
@@ -104,7 +104,7 @@ try {
   }).then((result) => {
     childExitState = result;
     output.fail(new Error(
-      `packed rma dev exited (${String(result.code ?? result.signal)}):\n${stderr}`
+      `packed avl dev exited (${String(result.code ?? result.signal)}):\n${stderr}`
     ));
     return result;
   });
@@ -129,9 +129,9 @@ try {
       sourcemap: false
     }
   });
-  await cp(join(project, "starter.rma"), join(project, "dist", "starter.rma"));
+  await cp(join(project, "starter.avl"), join(project, "dist", "starter.avl"));
   const builtStarter = await readTextTree(join(project, "dist"));
-  assert(builtStarter.includes("rendered-motion"), "generated starter web build omitted the element");
+  assert(builtStarter.includes("aval-player"), "generated starter web build omitted the element");
   assertNoFilesystemLeak(builtStarter, [root, project]);
   viteServer = await vitePreview({
     root: project,
@@ -156,11 +156,11 @@ try {
   assert(starterSnapshot.videoCount === 0, "generated starter created a video element");
   await starterPage.locator("#favorite").hover();
   await starterPage.waitForFunction(() =>
-    document.querySelector("rendered-motion")?.requestedState === "engaged",
+    document.querySelector("aval-player")?.requestedState === "engaged",
   { timeout: 10_000 });
   await starterPage.mouse.move(0, 0);
   await starterPage.waitForFunction(() =>
-    document.querySelector("rendered-motion")?.requestedState === "idle",
+    document.querySelector("aval-player")?.requestedState === "idle",
   { timeout: 10_000 });
   await starterFailures.assertWorkerExecuted();
   starterFailures.assertClean();
@@ -179,8 +179,8 @@ try {
     fallbackSnapshot.staticReason === "worker-unavailable" || fallbackSnapshot.staticReason === "visibility-suspended",
     `forced-static starter used an unexpected reason: ${String(fallbackSnapshot.staticReason)}`
   );
-  assert(fallbackSnapshot.staticCanvasVisible && fallbackSnapshot.staticCanvasDrawn, "forced-static starter did not reveal its verified internal static canvas");
-  assert(fallbackSnapshot.animatedCanvasHidden && fallbackSnapshot.fallbackSlotHidden, "forced-static starter exposed more than the static presentation layer");
+  assert(fallbackSnapshot.fallbackVisible && !fallbackSnapshot.fallbackSlotHidden, "forced-static starter did not reveal its author-owned fallback");
+  assert(fallbackSnapshot.animatedCanvasHidden && fallbackSnapshot.canvasCount === 1, "forced-static starter exposed an unexpected presentation canvas");
   assert(fallbackSnapshot.fallbackAuthorOwned && fallbackSnapshot.fallbackImageLoaded, "starter did not retain and load its author-owned fallback");
   assert(fallbackSnapshot.videoCount === 0, "forced-static starter created a video element");
   fallbackFailures.assertClean();
@@ -201,11 +201,11 @@ try {
 
   await page.locator("#interaction").hover();
   await page.waitForFunction(() =>
-    document.querySelector("rendered-motion")?.requestedState === "engaged",
+    document.querySelector("aval-player")?.requestedState === "engaged",
   { timeout: 10_000 });
   await page.mouse.move(0, 0);
   await page.waitForFunction(() =>
-    document.querySelector("rendered-motion")?.requestedState === "idle",
+    document.querySelector("aval-player")?.requestedState === "idle",
   { timeout: 10_000 });
 
   const projectPath = join(project, "motion.json");
@@ -242,8 +242,8 @@ try {
   assertNoFilesystemLeak(JSON.stringify({ servedSources, report }), [root, project]);
 
   child.kill("SIGINT");
-  const exit = await withTimeout(childExit, 30_000, "packed rma dev did not stop after SIGINT");
-  assert(exit.code === 130 && exit.signal === null, `packed rma dev did not exit cleanly: ${JSON.stringify(exit)}`);
+  const exit = await withTimeout(childExit, 30_000, "packed avl dev did not stop after SIGINT");
+  assert(exit.code === 130 && exit.signal === null, `packed avl dev did not exit cleanly: ${JSON.stringify(exit)}`);
   child = undefined;
 
   process.stdout.write(`${JSON.stringify({
@@ -277,7 +277,7 @@ function option(name) {
 }
 
 async function verifyInstalledGraph(projectRoot, version) {
-  const scope = join(projectRoot, "node_modules", "@rendered-motion");
+  const scope = join(projectRoot, "node_modules", "@aval");
   const canonicalScope = await realpath(scope);
   const manifests = new Map();
   for (const name of expectedPackages) {
@@ -301,7 +301,7 @@ async function verifyInstalledGraph(projectRoot, version) {
   };
   for (const [name, expected] of Object.entries(expectedDependencies)) {
     const dependencies = manifests.get(name)?.dependencies ?? {};
-    assert(JSON.stringify(Object.keys(dependencies).sort()) === JSON.stringify(expected.map((short) => `@rendered-motion/${short}`).sort()), `packed ${name} dependency graph is not exact`);
+    assert(JSON.stringify(Object.keys(dependencies).sort()) === JSON.stringify(expected.map((short) => `@aval/${short}`).sort()), `packed ${name} dependency graph is not exact`);
     for (const value of Object.values(dependencies)) assert(value === version, `packed ${name} dependency version is not exact`);
   }
 }
@@ -330,14 +330,14 @@ async function verifyHttpSurface(url, build, forbiddenPaths) {
 }
 
 async function verifyAsset(url, build) {
-  const assetUrl = new URL("asset.rma", url);
+  const assetUrl = new URL("asset.avl", url);
   const range = await checkedFetch(assetUrl, {
     headers: { Range: "bytes=0-31" }
   });
   assert(range.status === 206, `asset range returned ${range.status}`);
   assert(range.headers.get("content-range") === `bytes 0-31/${String(build.bytes)}`, "asset range boundary was not exact");
   assert(range.headers.get("content-encoding") === "identity", "asset range was not identity encoded");
-  assert(range.headers.get("etag") === `"rma-${build.sha256}"`, "asset ETag did not match its publication");
+  assert(range.headers.get("etag") === `"aval-${build.sha256}"`, "asset ETag did not match its publication");
   assert((await range.arrayBuffer()).byteLength === 32, "asset range body length was not exact");
 
   const full = await checkedFetch(assetUrl, {
@@ -381,10 +381,10 @@ function monitorBrowser(page, baseUrl, forbiddenPaths = []) {
   return Object.freeze({
     async assertWorkerExecuted() {
       await page.waitForFunction(() => {
-        const evidence = globalThis.__renderedMotionWorkerEvidence;
+        const evidence = globalThis.__avalWorkerEvidence;
         return evidence?.created.length > 0 && evidence.messages > 0;
       }, undefined, { timeout: 30_000 });
-      const evidence = await page.evaluate(() => globalThis.__renderedMotionWorkerEvidence);
+      const evidence = await page.evaluate(() => globalThis.__avalWorkerEvidence);
       assert(evidence.created.every((url) => url.startsWith(`${allowedOrigin}/`)), `decoder worker escaped the browser origin: ${evidence.created.join(", ")}`);
       assert(evidence.errors === 0 && evidence.messageErrors === 0, "decoder worker emitted a transport error");
       assert(workerResponses.every(({ status }) => status === 200), "observed decoder worker response was not successful");
@@ -402,7 +402,7 @@ async function installWorkerEvidence(context) {
   await context.addInitScript(() => {
     const NativeWorker = globalThis.Worker;
     const evidence = { created: [], messages: 0, errors: 0, messageErrors: 0 };
-    Object.defineProperty(globalThis, "__renderedMotionWorkerEvidence", { configurable: false, value: evidence });
+    Object.defineProperty(globalThis, "__avalWorkerEvidence", { configurable: false, value: evidence });
     Object.defineProperty(globalThis, "Worker", {
       configurable: true,
       value: new Proxy(NativeWorker, {
@@ -437,7 +437,7 @@ async function assertPinnedChromiumCapabilities(page) {
 
 async function waitForReady(page, sequence) {
   await page.waitForFunction((expected) => {
-    const motion = document.querySelector("rendered-motion");
+    const motion = document.querySelector("aval-player");
     const status = document.querySelector("#status")?.textContent ?? "";
     return motion !== null &&
       motion.readiness === "interactiveReady" &&
@@ -449,12 +449,12 @@ async function waitForReady(page, sequence) {
 async function waitForElementReady(page, expectedReadiness) {
   try {
     await page.waitForFunction((expected) => {
-      const motion = document.querySelector("rendered-motion");
+      const motion = document.querySelector("aval-player");
       return motion !== null && motion.readiness === expected;
     }, expectedReadiness, { timeout: 30_000 });
   } catch (error) {
     const evidence = await page.evaluate(() => {
-      const motion = document.querySelector("rendered-motion");
+      const motion = document.querySelector("aval-player");
       return motion === null
         ? { elementPresent: false }
         : {
@@ -465,7 +465,7 @@ async function waitForElementReady(page, expectedReadiness) {
           };
     }).catch((evaluationError) => ({ evaluationError: String(evaluationError) }));
     const network = await page.evaluate(async () => {
-      const motion = document.querySelector("rendered-motion");
+      const motion = document.querySelector("aval-player");
       if (motion === null) return [];
       const probe = async (headers) => {
         const response = await fetch(motion.src, { cache: "no-store", headers });
@@ -492,14 +492,12 @@ async function waitForElementReady(page, expectedReadiness) {
 }
 
 async function publicSnapshot(page) {
-  return page.locator("rendered-motion").first().evaluate((motion) => {
+  return page.locator("aval-player").first().evaluate((motion) => {
     const fallback = motion.querySelector("[slot=fallback]");
     const fallbackStyle = fallback === null ? null : getComputedStyle(fallback);
     const fallbackImage = fallback instanceof HTMLImageElement ? fallback : null;
-    const staticCanvas = motion.shadowRoot?.querySelector('canvas[data-rma-layer="static"]');
-    const animatedCanvas = motion.shadowRoot?.querySelector('canvas[data-rma-layer="animated"]');
-    const fallbackSlot = motion.shadowRoot?.querySelector('slot[data-rma-layer="fallback"]');
-    const staticStyle = staticCanvas === null || staticCanvas === undefined ? null : getComputedStyle(staticCanvas);
+    const animatedCanvas = motion.shadowRoot?.querySelector('canvas[data-aval-layer="animated"]');
+    const fallbackSlot = motion.shadowRoot?.querySelector('slot[data-aval-layer="fallback"]');
     return ({
     readiness: motion.readiness,
     staticReason: motion.staticReason,
@@ -512,8 +510,7 @@ async function publicSnapshot(page) {
     fallbackVisible: fallback !== null && fallbackStyle?.display !== "none" && fallbackStyle?.visibility !== "hidden" && fallback.getBoundingClientRect().width > 0 && fallback.getBoundingClientRect().height > 0,
     fallbackImageLoaded: fallbackImage === null || (fallbackImage.complete && fallbackImage.naturalWidth > 0),
     fallbackAuthorOwned: fallback !== null && fallback.parentElement === motion,
-    staticCanvasVisible: staticCanvas instanceof HTMLCanvasElement && !staticCanvas.hidden && staticStyle?.display !== "none" && staticStyle?.visibility !== "hidden" && staticCanvas.getBoundingClientRect().width > 0 && staticCanvas.getBoundingClientRect().height > 0,
-    staticCanvasDrawn: staticCanvas instanceof HTMLCanvasElement && staticCanvas.width > 0 && staticCanvas.height > 0,
+    canvasCount: motion.shadowRoot?.querySelectorAll("canvas").length ?? 0,
     animatedCanvasHidden: animatedCanvas instanceof HTMLCanvasElement && animatedCanvas.hidden,
     fallbackSlotHidden: fallbackSlot instanceof HTMLSlotElement && fallbackSlot.hidden
     });

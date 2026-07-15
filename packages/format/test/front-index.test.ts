@@ -73,7 +73,6 @@ describe("parseFrontIndex", () => {
     });
     expect(fromPrefix.records).toHaveLength(18);
     expect(fromPrefix.unitBlobs).toHaveLength(6);
-    expect(fromPrefix.staticBlobs).toHaveLength(3);
   });
 
   it("returns recursively frozen numeric metadata detached from caller bytes", () => {
@@ -140,26 +139,8 @@ describe("parseFrontIndex", () => {
     expectFormatError(() => parseFrontIndex(bytes), "LAYOUT_INVALID");
   });
 
-  it("rejects false static ranges and a declared trailing gap before reading payloads", () => {
+  it("rejects a declared trailing gap before reading payloads", () => {
     const fixture = canonicalAssetFixture();
-    const falseStatic = fixture.bytes.slice();
-    const header = parseHeader(falseStatic);
-    const manifestText = new TextDecoder().decode(
-      falseStatic.subarray(
-        header.manifestOffset,
-        header.manifestOffset + header.manifestLength
-      )
-    );
-    const offsetToken = `\"offset\":${String(fixture.manifest.staticFrames[0]!.offset)}`;
-    const tokenIndex = manifestText.indexOf(offsetToken);
-    expect(tokenIndex).toBeGreaterThanOrEqual(0);
-    const finalDigitOffset =
-      header.manifestOffset + tokenIndex + offsetToken.length - 1;
-    const originalDigit = falseStatic[finalDigitOffset]! - 0x30;
-    falseStatic[finalDigitOffset] = 0x30 + ((originalDigit + 1) % 10);
-
-    expectFormatError(() => parseFrontIndex(falseStatic), "LAYOUT_INVALID");
-
     const trailingGap = fixture.bytes.slice();
     writeUint64LE(
       trailingGap,
@@ -189,7 +170,6 @@ describe("parseFrontIndex", () => {
 
     expect(Object.isFrozen(parsed.records)).toBe(true);
     expect(Object.isFrozen(parsed.unitBlobs)).toBe(true);
-    expect(Object.isFrozen(parsed.staticBlobs)).toBe(true);
     expect(Object.isFrozen(parsed.graph)).toBe(true);
   });
 });

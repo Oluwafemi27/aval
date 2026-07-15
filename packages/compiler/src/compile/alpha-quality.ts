@@ -1,4 +1,4 @@
-import { IDENTIFIER_PATTERN, type AvcRenditionGeometry } from "@rendered-motion/format";
+import { IDENTIFIER_PATTERN, type AvcRenditionGeometry } from "@aval/format";
 
 import { throwIfAborted } from "../cancellation.js";
 import { CompilerError } from "../diagnostics.js";
@@ -166,7 +166,6 @@ function validateFrame(
     !IDENTIFIER_PATTERN.test(frame.unit) ||
     !Number.isSafeInteger(frame.frameIndex) ||
     frame.frameIndex < 0 ||
-    frame.frameIndex >= 900 ||
     !(frame.expectedAlpha instanceof Uint8Array) ||
     frame.expectedAlpha.byteLength !== facts.sampleCount ||
     !(frame.decodedRgba instanceof Uint8Array) ||
@@ -207,7 +206,7 @@ function rejectStatistics(measurement: Measurement, rendition: string): void {
       {
         statistic: "mae",
         value: normalizedMean(measurement.sum, measurement.count),
-        limit: 2 / 255,
+        limit: Number(MEAN_LIMIT_BYTES) / 255,
         phase: "quality",
         ...context
       }

@@ -10,6 +10,7 @@ import {
   type AnnexBNalUnit
 } from "./annex-b.js";
 import { RbspBitReader } from "./bit-reader.js";
+import { avcCodecForLevel, avcLevelLimits } from "./codec.js";
 import { avcInvalid, requireAvc } from "./failure.js";
 import {
   parsePps,
@@ -31,12 +32,6 @@ import type {
   AvcRenditionInspectionInput,
   AvcUnitInspection
 } from "./types.js";
-
-const LEVEL_3_2_MAX_MACROBLOCKS_PER_FRAME = 5_120;
-const LEVEL_3_2_MAX_MACROBLOCKS_PER_SECOND = 216_000;
-const LEVEL_3_2_MAX_DPB_MACROBLOCKS = 20_480;
-const PROFILE_MAX_BITRATE = 8_000_000;
-const PROFILE_MAX_CPB_BITS = 8_000_000;
 
 export interface AvcParameterSetState {
   readonly sps: ParsedSps;
@@ -62,7 +57,7 @@ export type AvcCompatibilityPolicy = "strict" | "encoder-candidate";
  * Inspects every access unit in an independently decodable rendition.
  *
  * This is intentionally a syntax/dependency verifier, not a decoder. It
- * accepts only the narrow AVC v0 Constrained Baseline subset and returns a
+ * accepts only the versioned production Constrained Baseline subset and returns a
  * deeply immutable scalar summary; no caller-owned byte views escape.
  */
 export function inspectAvcAnnexBRendition(
@@ -72,7 +67,7 @@ export function inspectAvcAnnexBRendition(
 }
 
 /**
- * Proves the complete v0 subset while tolerating libx264's C0 compatibility
+ * Proves the complete production subset while tolerating libx264's C0 compatibility
  * byte solely as an encoder-normalization candidate.
  */
 export function inspectAvcAnnexBEncoderCandidateRendition(
@@ -188,8 +183,8 @@ export function cloneAvcProfile(
   profile: AvcConstrainedBaselineProfile | undefined
 ): AvcConstrainedBaselineProfile {
   requireAvc(profile !== undefined, "profile", "AVC profile is required");
-  positiveInteger(profile.codedWidth, "profile.codedWidth", 2_048);
-  positiveInteger(profile.codedHeight, "profile.codedHeight", 2_048);
+  positiveInteger(profile.codedWidth, "profile.codedWidth");
+  positiveInteger(profile.codedHeight, "profile.codedHeight");
   const expectedDecodedStorageRect = cloneExpectedDecodedStorageRect(
     profile.expectedDecodedStorageRect,
     profile.codedWidth,
@@ -197,9 +192,9 @@ export function cloneAvcProfile(
   );
   positiveInteger(profile.frameRate?.numerator, "profile.frameRate.numerator");
   positiveInteger(profile.frameRate?.denominator, "profile.frameRate.denominator");
-  positiveInteger(profile.averageBitrate, "profile.averageBitrate", PROFILE_MAX_BITRATE);
-  positiveInteger(profile.peakBitrate, "profile.peakBitrate", PROFILE_MAX_BITRATE);
-  positiveInteger(profile.cpbBufferBits, "profile.cpbBufferBits", PROFILE_MAX_CPB_BITS);
+  positiveInteger(profile.averageBitrate, "profile.averageBitrate");
+  positiveInteger(profile.peakBitrate, "profile.peakBitrate");
+  positiveInteger(profile.cpbBufferBits, "profile.cpbBufferBits");
   requireAvc(
     profile.averageBitrate <= profile.peakBitrate,
     "profile.averageBitrate",
@@ -213,7 +208,13 @@ export function cloneAvcProfile(
   requireAvc(
     profile.requireBt709LimitedRange === true,
     "profile.requireBt709LimitedRange",
-    "the AVC v0 profile requires BT.709 limited range"
+    "the production AVC profile requires BT.709 limited range"
+  );
+  requireAvc(
+    profile.quantizationPolicy === "fixed-qp26-v0" ||
+      profile.quantizationPolicy === "bounded-qp-v1",
+    "profile.quantizationPolicy",
+    "must identify a supported AVC quantization policy"
   );
   return Object.freeze({
     codedWidth: profile.codedWidth,
@@ -226,7 +227,8 @@ export function cloneAvcProfile(
     averageBitrate: profile.averageBitrate,
     peakBitrate: profile.peakBitrate,
     cpbBufferBits: profile.cpbBufferBits,
-    requireBt709LimitedRange: true
+    requireBt709LimitedRange: true,
+    quantizationPolicy: profile.quantizationPolicy
   });
 }
 
@@ -348,7 +350,7 @@ export function inspectAvcAccessUnitStatefully(
           "SPS must appear once before PPS and VCL",
           nal.offset
         );
-        parsedSps = parseSps(nal, nalPath);
+        parsedSps = parseSps(nal, nalPath, compatibilityPolicy);
         break;
       case AVC_NAL_TYPE_PPS:
         requireAvc(
@@ -357,7 +359,7 @@ export function inspectAvcAccessUnitStatefully(
           "PPS must appear once after SPS and before VCL",
           nal.offset
         );
-        parsedPps = parsePps(nal, nalPath);
+        parsedPps = parsePps(nal, nalPath, profile.quantizationPolicy);
         requireAvc(
           parsedPps.spsId === parsedSps.id,
           nalPath,
@@ -517,7 +519,7 @@ function validateCanonicalAvcSubset(
   requireAvc(
     summary.sliceCount === 1,
     path,
-    "AVC v0 requires exactly one slice per access unit"
+    "the production AVC profile requires exactly one slice per access unit"
   );
   requireAvc(
     first
@@ -537,17 +539,17 @@ function validateCanonicalAvcSubset(
   requireAvc(
     sps.squareSampleAspect,
     `${path}.sps`,
-    "AVC v0 requires square sample aspect"
+    "the production AVC profile requires square sample aspect"
   );
   requireAvc(
     sps.timing.fixedFrameRate,
     `${path}.sps`,
-    "AVC v0 requires fixed_frame_rate_flag"
+    "the production AVC profile requires fixed_frame_rate_flag"
   );
   requireAvc(
     !sps.hrdPresent,
     `${path}.sps`,
-    "AVC v0 forbids HRD syntax"
+    "the production AVC profile forbids HRD syntax"
   );
 }
 
@@ -592,7 +594,7 @@ export function validateAvcSpsAgainstProfile(
     requireAvc(
       sps.constraintSet2,
       path,
-      "final avc1.42E020 output must assert constraint_set2_flag"
+      `final ${avcCodecForLevel(sps.levelIdc)} output must assert constraint_set2_flag`
     );
   }
   requireAvc(
@@ -616,17 +618,36 @@ export function validateAvcSpsAgainstProfile(
     "SPS crop does not match the expected decoded storage rectangle"
   );
   const macroblocksPerFrame = (sps.codedWidth / 16) * (sps.codedHeight / 16);
+  const level = avcLevelLimits(sps.levelIdc);
+  const widthInMacroblocks = sps.codedWidth / 16;
+  const heightInMacroblocks = sps.codedHeight / 16;
   requireAvc(
-    macroblocksPerFrame <= LEVEL_3_2_MAX_MACROBLOCKS_PER_FRAME,
+    widthInMacroblocks <= level.maximumMacroblockDimension &&
+      heightInMacroblocks <= level.maximumMacroblockDimension,
     path,
-    "SPS exceeds the Level 3.2 macroblocks-per-frame limit"
+    "SPS width or height exceeds its declared AVC level dimension limit"
+  );
+  requireAvc(
+    macroblocksPerFrame <= level.maximumMacroblocksPerFrame,
+    path,
+    "SPS exceeds its declared AVC level macroblocks-per-frame limit"
   );
   requireAvc(
     BigInt(macroblocksPerFrame) * BigInt(profile.frameRate.numerator) <=
-      BigInt(LEVEL_3_2_MAX_MACROBLOCKS_PER_SECOND) *
+      BigInt(level.maximumMacroblocksPerSecond) *
         BigInt(profile.frameRate.denominator),
     path,
-    "rendition exceeds the Level 3.2 macroblocks-per-second limit"
+    "rendition exceeds its declared AVC level macroblocks-per-second limit"
+  );
+  requireAvc(
+    profile.peakBitrate <= level.maximumBitrate,
+    path,
+    "rendition peak bitrate exceeds its declared AVC level"
+  );
+  requireAvc(
+    profile.cpbBufferBits <= level.maximumCpbBits,
+    path,
+    "rendition CPB exceeds its declared AVC level"
   );
   requireAvc(
     BigInt(sps.timing.timeScale) * BigInt(profile.frameRate.denominator) ===
@@ -642,13 +663,13 @@ export function validateAvcSpsAgainstProfile(
     "fixed_frame_rate_flag must be one"
   );
   const maximumDpbFrames = Math.min(
-    4,
-    Math.floor(LEVEL_3_2_MAX_DPB_MACROBLOCKS / macroblocksPerFrame)
+    16,
+    Math.floor(level.maximumDpbMacroblocks / macroblocksPerFrame)
   );
   requireAvc(
     sps.maxDecFrameBuffering <= maximumDpbFrames,
     path,
-    "SPS max_dec_frame_buffering exceeds the Level 3.2 profile cap"
+    "SPS max_dec_frame_buffering exceeds its declared AVC level"
   );
   if (sps.hrdMaximumBitrate !== undefined) {
     requireAvc(
@@ -670,7 +691,7 @@ export function validateAvcSpsAgainstProfile(
       sps.color.transferCharacteristics === 1 &&
       sps.color.matrixCoefficients === 1,
     path,
-    "AVC v0 requires BT.709 limited-range colour signalling"
+    "the production AVC profile requires BT.709 limited-range colour signalling"
   );
   return macroblocksPerFrame;
 }
@@ -779,7 +800,7 @@ export function createAvcParameterSetSummary(
   return Object.freeze({
     profileIdc: 66,
     constraintSet2: sps.constraintSet2,
-    levelIdc: 32,
+    levelIdc: sps.levelIdc,
     codedWidth: sps.codedWidth,
     codedHeight: sps.codedHeight,
     crop: sps.crop,

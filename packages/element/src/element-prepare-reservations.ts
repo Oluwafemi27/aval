@@ -13,7 +13,7 @@ export class ElementPrepareReservations {
 
   public reserve(): () => void {
     if (this.#active >= this.#maximum) {
-      throw new Error("rendered-motion prepare waiter capacity exceeded");
+      throw new Error("aval-player prepare waiter capacity exceeded");
     }
     this.#active += 1;
     let released = false;

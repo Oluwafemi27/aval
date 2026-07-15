@@ -2,7 +2,7 @@ import type {
   EffectHostEvent,
   RuntimeReadiness,
   StaticReason
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import { freezeEventDetail } from "./dom-event-detail.js";
 import { normalizePublicFailure, normalizeStaticReason } from "./public-failure.js";

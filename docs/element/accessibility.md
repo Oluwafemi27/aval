@@ -1,18 +1,18 @@
 # Accessibility
 
-`<rendered-motion>` is a visual primitive. It does not add a role, name,
+`<aval-player>` is a visual primitive. It does not add a role, name,
 `tabindex`, keyboard handler, live region, pressed state, navigation, or
 business action.
 
 ```html
 <button id="favorite" type="button" aria-pressed="false">
-  <rendered-motion
-    src="favorite.rma"
+  <aval-player
+    src="favorite.avl"
     interaction-for="favorite"
     aria-hidden="true"
   >
     <img slot="fallback" src="favorite.png" alt="">
-  </rendered-motion>
+  </aval-player>
   <span>Favorite</span>
 </button>
 ```

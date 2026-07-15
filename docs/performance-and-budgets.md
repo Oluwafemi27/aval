@@ -1,14 +1,24 @@
 # Performance and budgets
 
-The default page policy bounds decoders and tracked bytes across players. A
-player reserves before allocation, publishes exact category ownership, and can
-fall back to a strict static under pressure. Hidden or reduced-motion players
-release optional animation resources first; required statics remain protected.
+The page manager accounts for decoders and tracked bytes across players. A host
+may configure an explicit lower resource policy; there is no implicit
+small-asset byte ceiling. A player reserves before allocation, publishes exact
+category ownership, and can enter fallback state when an actual or configured
+resource boundary is reached. Hidden or reduced-motion players
+release animation resources and leave host-owned fallback markup visible.
 
-Use short independently decodable units, authored restart runways, reasonable
-canvas dimensions, and a compact per-state static set. `getDiagnostics()` is
+Authors own the cost of unit length, canvas/rendition dimensions, and bitrate.
+Use authored restart runways and measure the real target devices.
+The runtime never downscales or shortens a valid asset to fit. `getDiagnostics()` is
 bounded and suitable for support logs, but verbose tracing, screenshots,
 synchronous readback, and devtools perturb timing benchmarks.
+
+Normal playback configures the selected decoder and fills the six-frame live
+presentation ring before revealing frame zero. It does not run the exhaustive
+all-routes decoder rehearsal during page startup. `runAllRoutesReadiness()` and
+the certification application retain that full proof for an explicit,
+dedicated development or CI candidate; it must not run in the background on a
+live candidate because it owns decoder generations and probe presentation.
 
 CI performance comparisons are advisory. A named scheduling certificate
 requires at least 300 post-warm-up outputs at 1.5× authored real time plus exact

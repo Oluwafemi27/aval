@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 
 describe("certification report index generator", () => {
   it("renders absence explicitly as not-run and not measured", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "rma-index-"));
+    const directory = await mkdtemp(join(tmpdir(), "aval-index-"));
     try {
       const json = join(directory, "index.json");
       const markdown = join(directory, "index.md");

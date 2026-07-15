@@ -11,16 +11,15 @@ interface M7FixtureProvenance {
     readonly strongEntityTag: string;
   };
   readonly blobs: readonly {
-    readonly kind: "unit" | "static";
-    readonly rendition?: string;
-    readonly unit?: string;
-    readonly staticFrame?: string;
+    readonly kind: "unit";
+    readonly rendition: string;
+    readonly unit: string;
     readonly offset: number;
     readonly length: number;
     readonly paddingOffset: number;
     readonly paddingLength: number;
   }[];
-  readonly initialStatic: { readonly staticFrame: string };
+  readonly bootstrapUnits: readonly string[];
   readonly selectedRendition: { readonly id: string };
 }
 
@@ -50,7 +49,7 @@ const MAX_ACTIVE_RESPONSES_PER_SESSION = 8;
 
 export function m7HttpFixturePlugin(): Plugin {
   const fixturePath = fileURLToPath(new URL(
-    "../../fixtures/conformance/m7/reference-packed.rma",
+    "../../fixtures/conformance/m7/reference-packed.avl",
     import.meta.url
   ));
   const provenancePath = fileURLToPath(new URL(
@@ -157,7 +156,7 @@ export function m7HttpFixturePlugin(): Plugin {
   }
 
   return {
-    name: "rendered-motion-m7-http-fixture",
+    name: "aval-m7-http-fixture",
     enforce: "pre",
     async buildStart() {
       await loadAssets();
@@ -198,7 +197,7 @@ export function m7HttpFixturePlugin(): Plugin {
     response.statusCode = sendFull ? 200 : 206;
     response.setHeader("Accept-Ranges", "bytes");
     response.setHeader("Cache-Control", "no-store");
-    response.setHeader("Content-Type", "application/vnd.rendered-motion");
+    response.setHeader("Content-Type", "application/vnd.aval");
     response.setHeader(
       "Content-Encoding",
       scenario === "compressed-body" ? "gzip" : "identity"
@@ -282,16 +281,15 @@ function mutateScenarioBody(
       kind === "unit" && rendition === provenance.selectedRendition.id
     );
     absoluteOffset = blob === undefined ? null : blob.offset + (blob.length >> 1);
-  } else if (scenario === "corrupt-static") {
-    const blob = provenance.blobs.find(({ kind, staticFrame }) =>
-      kind === "static" && staticFrame === provenance.initialStatic.staticFrame
+  } else if (scenario === "corrupt-bootstrap-unit") {
+    const blob = provenance.blobs.find(({ rendition, unit }) =>
+      rendition === provenance.selectedRendition.id &&
+      provenance.bootstrapUnits.includes(unit)
     );
     absoluteOffset = blob === undefined ? null : blob.offset + (blob.length >> 1);
   } else if (scenario === "nonzero-padding") {
-    const blob = provenance.blobs.find(({ kind, rendition, paddingLength }) =>
-      paddingLength > 0 && (
-        kind === "static" || rendition === provenance.selectedRendition.id
-      )
+    const blob = provenance.blobs.find(({ rendition, paddingLength }) =>
+      paddingLength > 0 && rendition === provenance.selectedRendition.id
     );
     absoluteOffset = blob?.paddingOffset ?? null;
   }

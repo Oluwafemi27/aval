@@ -6,8 +6,8 @@
 
 **Authority:**
 
-- [Web Rendered Motion Format Design](2026-07-11-web-rendered-motion-format-design.md)
-- [Web Rendered Motion Implementation Plan](../plans/2026-07-11-web-rendered-motion-implementation.md)
+- [AVAL Format Design](2026-07-11-aval-format-design.md)
+- [AVAL Implementation Plan](../plans/2026-07-11-aval-implementation.md)
 - [M3 Deterministic Graph Design](2026-07-11-m3-deterministic-graph-design.md)
 - [M4 Minimal Compiled Format Design](2026-07-11-m4-minimal-compiled-format-design.md)
 - [M5 Opaque AVC Compiler and Dedicated Worker Design](2026-07-11-m5-opaque-avc-compiler-worker-design.md)
@@ -45,19 +45,19 @@ performance certification. Those remain M6 through M9.
 The existing packages keep their current authority:
 
 ```text
-@rendered-motion/graph
+@aval/graph
   owns graph validation, authored cursors, routing, effects, and settlements
 
-@rendered-motion/format
+@aval/format
   owns container bytes, manifest validity, record/range relations, and AVC syntax
 
-@rendered-motion/player-web
+@aval/player-web
   owns rendition choice, decoded resources, readiness, scheduling, rendering,
   host promises/events, failure recovery, and lifecycle
 ```
 
-`@rendered-motion/player-web` gains a direct production dependency and
-TypeScript project reference on `@rendered-motion/graph`. Depending on graph
+`@aval/player-web` gains a direct production dependency and
+TypeScript project reference on `@aval/graph`. Depending on graph
 only through format would hide a real runtime dependency.
 
 M5.5 does not create a second graph reducer, container validator, Annex B
@@ -474,9 +474,9 @@ declared runway ends.
 
 ### 10.5 Initial unit and body loops
 
-If the initial state remains requested when animation begins, its initial unit
-plays once and joins initial body frame zero. If a different valid destination
-was accepted during preparation, the intro is skipped exactly as M3 specifies.
+The initial unit plays once and joins initial body frame zero. A different
+valid destination accepted during preparation remains queued behind that
+one-shot and never suppresses it.
 
 Every body loop is a sequence of complete independently decodable occurrences.
 The next occurrence's frame-zero key sample is submitted early enough to be in
@@ -1011,10 +1011,10 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @rendered-motion/graph
-npm pack --dry-run -w @rendered-motion/format
-npm pack --dry-run -w @rendered-motion/compiler
-npm pack --dry-run -w @rendered-motion/player-web
+npm pack --dry-run -w @aval/graph
+npm pack --dry-run -w @aval/format
+npm pack --dry-run -w @aval/compiler
+npm pack --dry-run -w @aval/player-web
 git diff --check
 ```
 

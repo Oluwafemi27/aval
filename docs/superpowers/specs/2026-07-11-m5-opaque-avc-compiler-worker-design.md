@@ -2,28 +2,28 @@
 
 **Date:** 2026-07-11
 
-**Status:** Approved implementation slice derived from the committed web
-rendered-motion design and the frozen M4 format contract
+**Status:** Approved implementation slice derived from the committed AVAL
+design and the frozen M4 format contract
 
 ## 1. Objective
 
-M5 turns rendered source media into the first production-codec `.rma` assets
+M5 turns rendered source media into the first production-codec `.avl` assets
 and proves that their H.264 access units decode in a dedicated web worker
 without a seek, decoder reset, reconfiguration, flush, or end-of-stream action
 at a loop or unit boundary.
 
 This milestone adds:
 
-- a Node-only `@rendered-motion/compiler` package and noninteractive CLI;
+- a Node-only `@aval/compiler` package and noninteractive CLI;
 - a pure, platform-independent `avc/` extension inside
-  `@rendered-motion/format` containing the one Annex B parser and opaque-
+  `@aval/format` containing the one Annex B parser and opaque-
   profile inspector used by both compiler and player;
 - deterministic ingestion of local PNG sequences and local rendered video;
 - independently decodable opaque H.264 units for bodies, intros, bridges, and
   reversible clips;
 - compiler-owned per-state static PNG generation and SHA-256 calculation;
 - deterministic pre-encode loop and transition continuity reports;
-- a low-level dedicated-worker decoder client in `@rendered-motion/player-web`;
+- a low-level dedicated-worker decoder client in `@aval/player-web`;
   and
 - checked-in compiler and real-AVC worker conformance fixtures.
 
@@ -59,11 +59,11 @@ tokenizer or writer.
 The packages form this dependency graph:
 
 ```text
-@rendered-motion/graph
+@aval/graph
           ↑
-@rendered-motion/format (including its pure avc/ profile inspector)
+@aval/format (including its pure avc/ profile inspector)
           ↑                                      ↑
-@rendered-motion/compiler          @rendered-motion/player-web
+@aval/compiler          @aval/player-web
 ```
 
 The M5 `format/src/avc/` extension preserves format's existing
@@ -71,7 +71,7 @@ The M5 `format/src/avc/` extension preserves format's existing
 owns checked bit reads, Annex B normalization, RBSP decoding, SPS/PPS/slice
 parsing, access-unit inspection, and the AVC rejection paths on M4's stable
 `FormatError` surface. It imports neither Node nor browser APIs. The approved
-inspector entry points are exported from `@rendered-motion/format`; unchecked
+inspector entry points are exported from `@aval/format`; unchecked
 bit readers and mutable parser state remain private.
 
 The default inspector policy requires exact `42 E0 20`. A separately named
@@ -79,7 +79,7 @@ encoder-candidate entry point permits only `42 C0 20` or `42 E0 20` while
 enforcing every other profile and dependency rule. Only the Node compiler uses
 that candidate entry point; worker/runtime code always uses strict inspection.
 
-`@rendered-motion/compiler` is Node-only. It depends on `format`, uses Node
+`@aval/compiler` is Node-only. It depends on `format`, uses Node
 filesystem/process/crypto APIs behind narrow adapters, and never enters a
 browser dependency graph. `player-web` also depends on `format` so its worker
 uses the same inspector rather than a second H.264 parser.
@@ -581,7 +581,7 @@ The package never includes, downloads, installs, updates, or redistributes
 FFmpeg, FFprobe, `libx264`, or a codec binary. Tool resolution order is:
 
 1. explicit `--ffmpeg` and `--ffprobe` absolute paths;
-2. `RMA_FFMPEG` and `RMA_FFPROBE` absolute paths; then
+2. `AVL_FFMPEG` and `AVL_FFPROBE` absolute paths; then
 3. `ffmpeg` and a sibling `ffprobe` resolved from the caller's `PATH`.
 
 Both resolved paths are converted to real absolute regular files before use.
@@ -640,7 +640,7 @@ Every successful `compile` writes a deterministic asset plus a canonical
 - every internal unit/static digest; and
 - final byte length and host-facing whole-file SHA-256.
 
-The report is provenance, not part of the `.rma` file and not an authenticity
+The report is provenance, not part of the `.avl` file and not an authenticity
 trust root. Machine-specific report fields may differ between machines. Asset
 byte determinism is defined by identical project semantics, input bytes,
 compiler version, normalized compiler options, and the complete recorded
@@ -650,7 +650,7 @@ digest. Calibration is required because a stable executable may load a
 different codec library dynamically.
 
 The on-wire `generator` is the fixed ASCII string
-`rendered-motion-compiler/0.1`; it contains no machine path, timestamp, host
+`aval-compiler/0.1`; it contains no machine path, timestamp, host
 name, Git state, or tool output.
 
 ## 9. Annex B Inspection
@@ -866,7 +866,7 @@ these manifest values remain advisory.
 ## 13. Deterministic Build Contract
 
 For the determinism inputs defined in Section 8.3, two compiles must produce
-byte-identical `.rma` output. The compiler enforces this through:
+byte-identical `.avl` output. The compiler enforces this through:
 
 - immutable normalized source objects and canonical ID ordering;
 - exact rational timestamp arithmetic;
@@ -888,7 +888,7 @@ in provenance rather than incorrectly promised byte-identical output.
 
 ## 14. CLI Contract
 
-The provisional executable name is `rma`; like `.rma`, it remains private and
+The provisional executable name is `avl`; like `.avl`, it remains private and
 is not a public product name. All commands are noninteractive. `--json` writes
 one canonical JSON result to stdout and newline-delimited canonical diagnostic
 objects to stderr. Without `--json`, M5 provides concise text; richer guidance
@@ -897,13 +897,13 @@ is M8 work.
 ### 14.1 Compile a project
 
 ```text
-rma compile <project.json> --out <asset.rma>
+avl compile <project.json> --out <asset.avl>
   [--report <asset.build.json>]
   [--ffmpeg <absolute-path>] [--ffprobe <absolute-path>]
   [--force] [--json]
 ```
 
-The default report path is `<asset.rma>.build.json`. Existing asset or report
+The default report path is `<asset.avl>.build.json`. Existing asset or report
 paths are refused unless `--force`; symlink outputs are always refused. The
 compiler writes and fsyncs private same-filesystem stages, validates the
 complete asset and canonical report, then installs the report and asset with
@@ -915,16 +915,16 @@ raced path. On failure, no transaction-owned partial pair remains.
 ### 14.2 Direct one-state compile
 
 ```text
-rma compile <input.mov|input.mp4|input.m4v> \
-  --loop <start:end> --out <asset.rma>
+avl compile <input.mov|input.mp4|input.m4v> \
+  --loop <start:end> --out <asset.avl>
   [--fps <numerator/denominator>]
   [--canvas <width>x<height>]
   [--bitrate <average>:<peak>]
   [common compile options]
 
-rma compile <directory/prefix%0Nd.png> \
+avl compile <directory/prefix%0Nd.png> \
   --frames <first-number:count> --fps <numerator/denominator> \
-  --loop <start:end> --canvas <width>x<height> --out <asset.rma>
+  --loop <start:end> --canvas <width>x<height> --out <asset.avl>
   [--bitrate <average>:<peak>] [common compile options]
 ```
 
@@ -950,8 +950,8 @@ requires `--canvas`.
 ### 14.3 Inspect and validate
 
 ```text
-rma inspect <asset.rma> [--json]
-rma validate <asset.rma> [--json]
+avl inspect <asset.avl> [--json]
+avl validate <asset.avl> [--json]
 ```
 
 `inspect` is read-only and prints header/manifest summaries, exact frame/time
@@ -967,7 +967,7 @@ M5 check passes.
 ### 14.4 Unpack
 
 ```text
-rma unpack <asset.rma> --out <empty-directory> [--json]
+avl unpack <asset.avl> --out <empty-directory> [--json]
 ```
 
 Unpack validates before writing. It produces canonical `manifest.json`,
@@ -979,8 +979,8 @@ target must not exist or must be empty; no overwrite flag exists in M5.
 ### 14.5 Baseline init and dev
 
 ```text
-rma init <directory> [--json]
-rma dev <project.json> --out <asset.rma> [common compile options]
+avl init <directory> [--json]
+avl dev <project.json> --out <asset.avl> [common compile options]
 ```
 
 M5 `init` writes a schema-valid minimal two-frame, one-state generated example
@@ -1414,8 +1414,8 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @rendered-motion/format
-npm pack --dry-run -w @rendered-motion/compiler
+npm pack --dry-run -w @aval/format
+npm pack --dry-run -w @aval/compiler
 git diff --check
 ```
 

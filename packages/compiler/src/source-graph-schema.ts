@@ -5,7 +5,7 @@ import type {
   StartV01,
   TransitionV01,
   TriggerV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import {
   boundedArray,
@@ -150,7 +150,7 @@ function cloneStart(
       type,
       sourcePort: identifier(input.sourcePort, `${path}.sourcePort`),
       targetPort: identifier(input.targetPort, `${path}.targetPort`),
-      maxWaitFrames: integer(input.maxWaitFrames, `${path}.maxWaitFrames`, 0, 900)
+      maxWaitFrames: integer(input.maxWaitFrames, `${path}.maxWaitFrames`, 0)
     });
   }
   exactKeys(input, ["type", "targetPort", "maxWaitFrames"], path);
@@ -162,7 +162,7 @@ function cloneStart(
   return Object.freeze({
     type,
     targetPort,
-    maxWaitFrames: integer(input.maxWaitFrames, `${path}.maxWaitFrames`, 0, 900)
+    maxWaitFrames: integer(input.maxWaitFrames, `${path}.maxWaitFrames`, 0)
   });
 }
 

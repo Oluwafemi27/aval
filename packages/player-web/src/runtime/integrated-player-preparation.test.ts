@@ -34,7 +34,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     const result = await first;
 
     expect(result.mode).toBe("animated");
-    expect(harness.staticStore.calls).toEqual([
+    expect(harness.fallbackStore.calls).toEqual([
       "install:idle",
       "validate-all",
       "reveal-animated"
@@ -46,7 +46,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     });
   });
 
-  it("disposes a failed higher candidate before preparing the lower candidate", async () => {
+  it("falls back to static after the preferred candidate fails", async () => {
     const harness = createHarness({
       behaviors: [
         { kind: "failure", code: "unsupported-profile" },
@@ -57,24 +57,21 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     const result = await harness.player.prepare();
 
     expect(result).toMatchObject({
-      mode: "animated",
-      report: { selectedRendition: "opaque-low" }
+      mode: "static",
+      reason: "codec-unsupported",
+      report: { selectedRendition: null }
     });
     expect(result.report.candidates.map(({ rendition, outcome }) =>
       [rendition, outcome]
     )).toEqual([
-      ["opaque-high", "rejected"],
-      ["opaque-low", "selected"]
+      ["opaque-high", "rejected"]
     ]);
     expect(harness.factory.calls).toEqual([
       "create:opaque-high",
       "prepare:opaque-high",
-      "dispose:opaque-high",
-      "create:opaque-low",
-      "prepare:opaque-low",
-      "draw:opaque-low:intro"
+      "dispose:opaque-high"
     ]);
-    expect(harness.events.some(({ type }) => type === "fallback")).toBe(false);
+    expect(harness.events.some(({ type }) => type === "fallback")).toBe(true);
   });
 
   it.each([
@@ -83,7 +80,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     "worker-decode-failure",
     "renderer-failure"
   ] satisfies readonly RuntimeFailureCode[])(
-    "tries the lower candidate after a %s failure",
+    "does not try a lower candidate after a %s failure",
     async (code) => {
       const harness = createHarness({
         behaviors: [
@@ -94,11 +91,15 @@ describe("IntegratedPlayer preparation lifecycle", () => {
       const result = await harness.player.prepare();
 
       expect(result).toMatchObject({
-        mode: "animated",
-        report: { selectedRendition: "opaque-low" }
+        mode: "static",
+        report: {
+          selectedRendition: null,
+          candidates: [{ rendition: "opaque-high", outcome: "rejected" }]
+        }
       });
-      expect(harness.factory.activeAttempts).toBe(1);
-      expect(harness.events.some(({ type }) => type === "fallback")).toBe(false);
+      expect(harness.factory.activeAttempts).toBe(0);
+      expect(harness.factory.calls).not.toContain("create:opaque-low");
+      expect(harness.events.some(({ type }) => type === "fallback")).toBe(true);
     }
   );
 
@@ -146,7 +147,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
       timers
     });
     const preparation = harness.player.prepare({ timeoutMs: 25 });
-    await waitForCall(harness.staticStore.calls, "install:idle");
+    await waitForCall(harness.fallbackStore.calls, "install:idle");
     timers.fireAll();
 
     await expect(preparation).rejects.toBeInstanceOf(PlaybackFallbackError);
@@ -174,7 +175,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     )).toHaveLength(2);
   });
 
-  it("plays the authored intro by default and skips it for a prepared request", async () => {
+  it("plays the authored intro before a prepared request", async () => {
     const defaultHarness = createHarness();
     await defaultHarness.player.prepare();
     expect(defaultHarness.factory.draws[0]).toMatchObject({
@@ -188,7 +189,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     void request.catch(() => undefined);
     await requestedHarness.player.prepare();
     expect(requestedHarness.factory.draws[0]).toMatchObject({
-      kind: "body",
+      kind: "intro",
       state: "idle",
       frameIndex: 0
     });
@@ -255,7 +256,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
       isTransitioning: true
     });
     expect(harness.factory.draws[0]).toMatchObject({
-      kind: "body",
+      kind: "intro",
       state: "idle",
       frameIndex: 0
     });
@@ -366,7 +367,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
       "draw:opaque-high:intro",
       "dispose:opaque-high"
     ]));
-    expect(harness.staticStore.calls).toEqual(expect.arrayContaining([
+    expect(harness.fallbackStore.calls).toEqual(expect.arrayContaining([
       "stage:idle",
       "cover-current"
     ]));
@@ -388,16 +389,16 @@ describe("IntegratedPlayer preparation lifecycle", () => {
       ]
     });
     const preparation = harness.player.prepare();
-    await waitForCall(harness.staticStore.calls, "present:idle");
+    await waitForCall(harness.fallbackStore.calls, "present:idle");
     const hover = harness.player.requestState("hover");
     gate.resolve(undefined);
 
     await expect(preparation).resolves.toMatchObject({ mode: "static" });
     await expect(hover).resolves.toBeUndefined();
-    expect(harness.staticStore.calls.filter((call) =>
+    expect(harness.fallbackStore.calls.filter((call) =>
       call.startsWith("present:")
     )).toEqual(["present:idle", "present:hover"]);
-    expect(harness.staticStore.committed).toEqual(["hover"]);
+    expect(harness.fallbackStore.committed).toEqual(["hover"]);
     expect(harness.player.snapshot()).toMatchObject({
       readiness: "staticReady",
       requestedState: "hover",
@@ -461,7 +462,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     });
   });
 
-  it("rejects corrupt high AVC before factory creation and selects valid low", async () => {
+  it("rejects corrupt preferred AVC without inspecting a lower rendition", async () => {
     const harness = createHarness({
       bytes: createIntegratedOpaqueTestAsset({
         corruptHighIntroDelta: true
@@ -469,17 +470,16 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     });
 
     await expect(harness.player.prepare()).resolves.toMatchObject({
-      mode: "animated",
+      mode: "static",
       report: {
-        selectedRendition: "opaque-low",
+        selectedRendition: null,
         candidates: [
-          { rendition: "opaque-high", outcome: "rejected" },
-          { rendition: "opaque-low", outcome: "selected" }
+          { rendition: "opaque-high", outcome: "rejected" }
         ]
       }
     });
     expect(harness.factory.calls.filter((call) => call.startsWith("create:")))
-      .toEqual(["create:opaque-low"]);
+      .toEqual([]);
   });
 
   it.each(["throw", "invalid"] as const)(
@@ -531,7 +531,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     const boundedPreparation = bounded.player.prepare({ timeoutMs: 25 });
     await waitForCall(bounded.factory.calls, "prepare:opaque-high");
     timers.fireAll();
-    await waitForCall(bounded.staticStore.calls, "present:idle");
+    await waitForCall(bounded.fallbackStore.calls, "present:idle");
     timers.fireAll();
     await expect(boundedPreparation).rejects.toMatchObject({
       name: "TimeoutError"
@@ -546,7 +546,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     const disposalPreparation = disposal.player.prepare({ timeoutMs: 25 });
     await waitForCall(disposal.factory.calls, "prepare:opaque-high");
     disposalTimers.fireAll();
-    await waitForCall(disposal.staticStore.calls, "present:idle");
+    await waitForCall(disposal.fallbackStore.calls, "present:idle");
     const rejected = expect(disposalPreparation).rejects.toMatchObject({
       name: "AbortError"
     });
@@ -565,7 +565,7 @@ describe("IntegratedPlayer preparation lifecycle", () => {
     expect(harness.factory.calls.filter((call) =>
       call === "dispose:opaque-high"
     )).toHaveLength(1);
-    expect(harness.staticStore.calls.at(-1)).toBe("dispose");
+    expect(harness.fallbackStore.calls.at(-1)).toBe("dispose");
     expect(harness.player.snapshot()).toMatchObject({
       readiness: "disposed",
       disposed: true

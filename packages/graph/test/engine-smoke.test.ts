@@ -86,7 +86,6 @@ function hoverGraph(): MotionGraphDefinition {
     states: [
       {
         id: "idle",
-        staticFrameId: "idle-static",
         body: {
           unitId: "idle-body",
           kind: "loop",
@@ -96,7 +95,6 @@ function hoverGraph(): MotionGraphDefinition {
       },
       {
         id: "hovered",
-        staticFrameId: "hover-static",
         body: {
           unitId: "hover-body",
           kind: "loop",

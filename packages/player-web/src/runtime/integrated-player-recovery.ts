@@ -1,7 +1,7 @@
 import {
   GRAPH_LIMITS,
   MotionGraphEngine
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import type { EffectHost } from "./effect-host.js";
@@ -10,7 +10,7 @@ import {
   PlaybackFallbackError,
   type IntegratedCandidateAttempt,
   type IntegratedPlaybackTraceState,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player-contracts.js";
 import {
   assertIntegratedStaticPresentation,
@@ -35,7 +35,7 @@ interface IntegratedRecoveryCoordinatorOptions {
   readonly catalog: RuntimeAssetCatalog;
   readonly graph: MotionGraphEngine;
   readonly effects: EffectHost;
-  readonly staticStore: IntegratedStaticSurfaceStore;
+  readonly fallbackStore: IntegratedFallbackStore;
   readonly trace: IntegratedTraceHarness;
   readonly getActiveCandidate: () => IntegratedCandidateAttempt | null;
   readonly detachActiveCandidate: (
@@ -56,7 +56,7 @@ export class IntegratedRecoveryCoordinator {
   readonly #catalog: RuntimeAssetCatalog;
   readonly #graph: MotionGraphEngine;
   readonly #effects: EffectHost;
-  readonly #staticStore: IntegratedStaticSurfaceStore;
+  readonly #fallbackStore: IntegratedFallbackStore;
   readonly #trace: IntegratedTraceHarness;
   readonly #getActiveCandidate: () => IntegratedCandidateAttempt | null;
   readonly #detachActiveCandidate: (
@@ -84,7 +84,7 @@ export class IntegratedRecoveryCoordinator {
     this.#catalog = options.catalog;
     this.#graph = options.graph;
     this.#effects = options.effects;
-    this.#staticStore = options.staticStore;
+    this.#fallbackStore = options.fallbackStore;
     this.#trace = options.trace;
     this.#getActiveCandidate = options.getActiveCandidate;
     this.#detachActiveCandidate = options.detachActiveCandidate;
@@ -211,15 +211,15 @@ export class IntegratedRecoveryCoordinator {
         this.#recoveryPresentation = presentation;
         try {
           await raceIntegratedAbort(
-            this.#staticStore.presentState(requested, {
+            this.#fallbackStore.presentState(requested, {
               signal: controller.signal,
               cover: false
             }),
             controller.signal
           );
-          if (this.#staticStore.currentState() !== requested) {
+          if (this.#fallbackStore.currentState() !== requested) {
             throw new IntegratedPlaybackInvariantError(
-              "recovery static store committed the wrong state"
+              "recovery fallback store committed the wrong state"
             );
           }
         } catch (error) {
@@ -248,13 +248,13 @@ export class IntegratedRecoveryCoordinator {
       let retainedStaticMatches = false;
       try {
         retainedStaticMatches = retainedVisualState !== null &&
-          this.#staticStore.currentState() === retainedVisualState;
+          this.#fallbackStore.currentState() === retainedVisualState;
       } catch {
         // The original static failure remains authoritative.
       }
       if (retainedStaticMatches) {
         try {
-          this.#staticStore.coverCurrent();
+          this.#fallbackStore.coverCurrent();
         } catch {
           // Preserve the original static installation failure and candidate.
         }
@@ -313,12 +313,12 @@ export class IntegratedRecoveryCoordinator {
         (presentation) => {
           assertIntegratedStaticPresentation(presentation, requested);
           try {
-            this.#staticStore.coverCurrent();
+            this.#fallbackStore.coverCurrent();
           } catch {
             // A visibility host can fail before applying its side effect. One
             // bounded retry handles that transient without replaying graph
-            // effects or replacing the already-staged strict surface.
-            this.#staticStore.coverCurrent();
+            // effects or replacing the already-staged fallback state.
+            this.#fallbackStore.coverCurrent();
           }
         }
       );
@@ -356,7 +356,7 @@ export class IntegratedRecoveryCoordinator {
     }
 
     // The candidate owns the last usable animated pixels and its presentation
-    // backend. Retire it only after the newest strict static has crossed the
+    // backend. Retire it only after the newest fallback state has crossed the
     // effect host's draw barrier and is visibly covering that backend.
     if (candidate !== null) {
       await this.#retireCandidate(
@@ -370,21 +370,21 @@ export class IntegratedRecoveryCoordinator {
   async #requestStatic(target: string, signal: AbortSignal): Promise<void> {
     throwIfIntegratedAborted(signal);
     const prePresent = this.#canPrePresent(target);
-    let strictStaticCovered = false;
+    let hostFallbackCovered = false;
     if (prePresent) {
       try {
         await raceIntegratedAbort(
-          this.#staticStore.presentState(target, { signal }),
+          this.#fallbackStore.presentState(target, { signal }),
           signal
         );
-        if (this.#staticStore.currentState() !== target) {
+        if (this.#fallbackStore.currentState() !== target) {
           throw new IntegratedPlaybackInvariantError(
             "static request store committed the wrong state"
           );
         }
-        // StaticPresentationPlane.present() is an atomic draw-and-cover
-        // contract unless cover:false is explicitly requested.
-        strictStaticCovered = true;
+        // The fallback store owns an atomic host cover unless cover:false is
+        // explicitly requested.
+        hostFallbackCovered = true;
       } catch (error) {
         if (signal.aborted) throw integratedAbortReason(signal);
         const failure = normalizeRuntimeFailure(
@@ -419,15 +419,15 @@ export class IntegratedRecoveryCoordinator {
       }
       this.#effects.apply(result, (presentation) => {
         assertIntegratedStaticPresentation(presentation, staticState);
-        // The strict store already completed its atomic draw-and-cover before
-        // graph commit. This callback is the graph's ordering barrier only;
+        // The host fallback already completed its atomic cover before graph
+        // commit. This callback is the graph's ordering barrier only;
         // re-running a fallible visibility host would create a partial commit.
-        strictStaticCovered = true;
+        hostFallbackCovered = true;
       });
     } else {
       this.#effects.apply(result);
     }
-    if (strictStaticCovered) {
+    if (hostFallbackCovered) {
       await this.#retireCandidateAfterStaticCover();
     }
     return request;

@@ -1,4 +1,4 @@
-import type { GraphEdgeDefinition } from "@rendered-motion/graph";
+import type { GraphEdgeDefinition } from "@aval/graph";
 
 import { graphBodyFrameAt } from "./body-frame-semantics.js";
 import type { BrowserFrameMedia } from "./browser-playback-types.js";
@@ -11,8 +11,7 @@ import type {
 } from "./avc-candidate-factory.js";
 import type {
   BrowserProductionMotionPolicyEvidence,
-  BrowserProductionProfileEvidence,
-  BrowserProductionStrictStaticEvidence
+  BrowserProductionProfileEvidence
 } from "./browser-production-readiness-m6-evidence.js";
 
 export interface BrowserProductionMediaEvidence {
@@ -82,7 +81,6 @@ export interface BrowserProductionReadinessReport {
   readonly passed: boolean;
   readonly ringCapacity: number;
   readonly profile: Readonly<BrowserProductionProfileEvidence>;
-  readonly strictStatic: Readonly<BrowserProductionStrictStaticEvidence>;
   readonly motionPolicy: Readonly<BrowserProductionMotionPolicyEvidence>;
   readonly initialRingReady: boolean;
   readonly loops: readonly Readonly<BrowserProductionLoopEvidence>[];

@@ -1,4 +1,5 @@
 import { deriveAvcRenditionGeometryAtPath } from "./avc/rendition-geometry.js";
+import { checkedMultiply } from "./checked-integer.js";
 import {
   exactKeys,
   integerInRange,
@@ -12,9 +13,6 @@ import type {
   FormatBudgets,
   RenditionV01
 } from "./model.js";
-
-const MAX_COMPILED_BYTES = 32 * 1024 * 1024;
-const MAX_RUNTIME_BYTES = 64 * 1024 * 1024;
 
 export function cloneDeclaredLimits(
   value: unknown,
@@ -38,12 +36,11 @@ export function cloneDeclaredLimits(
   const maxCompiledBytes = positiveInteger(
     input.maxCompiledBytes,
     `${path}.maxCompiledBytes`,
-    Math.min(MAX_COMPILED_BYTES, budgets.maxFileBytes)
+    budgets.maxFileBytes
   );
   const maxRuntimeBytes = positiveInteger(
     input.maxRuntimeBytes,
-    `${path}.maxRuntimeBytes`,
-    MAX_RUNTIME_BYTES
+    `${path}.maxRuntimeBytes`
   );
   const decodedPixelBytes = integerInRange(
     input.decodedPixelBytes,
@@ -75,7 +72,17 @@ export function cloneDeclaredLimits(
   const minimumDecodedBytes = Math.max(
     ...renditions.map((rendition, index) => {
       if (rendition.profile === "reference-rgba-v0") {
-        return rendition.codedWidth * rendition.codedHeight * 4;
+        return checkedMultiply(
+          checkedMultiply(
+            rendition.codedWidth,
+            rendition.codedHeight,
+            Number.MAX_SAFE_INTEGER,
+            `renditions[${String(index)}] decoded pixel count`
+          ),
+          4,
+          Number.MAX_SAFE_INTEGER,
+          `renditions[${String(index)}] decoded RGBA bytes`
+        );
       }
       const common = {
         canvasWidth: canvas.width,
@@ -85,7 +92,8 @@ export function cloneDeclaredLimits(
         colorRect: rendition.alphaLayout.colorRect
       } as const;
       return deriveAvcRenditionGeometryAtPath(
-        rendition.profile === "avc-annexb-packed-alpha-v0"
+        rendition.profile === "avc-annexb-packed-alpha-v0" ||
+          rendition.profile === "avc-annexb-packed-alpha-v1"
           ? {
               ...common,
               profile: rendition.profile,

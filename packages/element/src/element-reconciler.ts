@@ -4,7 +4,7 @@ import type {
   RuntimeReadiness,
   RuntimeReadinessResult,
   StaticReason
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import {
   ElementAssetGeneration,
@@ -64,12 +64,12 @@ import {
   createTerminalCleanupProof
 } from "./element-terminal-cleanup.js";
 import { aggregateElementTerminalCleanup } from "./element-terminal-aggregation.js";
-import { RenderedMotionNotReadyError, renderedMotionAbortError } from "./errors.js";
+import { AvalNotReadyError, avalAbortError } from "./errors.js";
 import { assertInteractionTarget } from "./interaction-target.js";
 import type {
-  RenderedMotionDiagnostics,
-  RenderedMotionMode,
-  RenderedMotionTerminalCleanupProof
+  AvalDiagnostics,
+  AvalMode,
+  AvalTerminalCleanupProof
 } from "./public-types.js";
 
 const SOURCE_ATTRIBUTES: ReadonlySet<string> = new Set([
@@ -78,7 +78,7 @@ const SOURCE_ATTRIBUTES: ReadonlySet<string> = new Set([
   "crossorigin"
 ]);
 
-/** Sole effect and command authority behind the rendered-motion facade. */
+/** Sole effect and command authority behind the aval facade. */
 export class ElementReconciler implements ElementOwnerAuthority {
   readonly #host: HTMLElement;
   readonly #desired = new ElementDesiredState();
@@ -106,7 +106,7 @@ export class ElementReconciler implements ElementOwnerAuthority {
   #appliedMotionSubscription: string | null = null;
   readonly #cleanupFailures = new ElementCleanupFailureTracker();
   readonly #prepareReservations = new ElementPrepareReservations();
-  #terminalCleanup: Readonly<RenderedMotionTerminalCleanupProof> | null = null;
+  #terminalCleanup: Readonly<AvalTerminalCleanupProof> | null = null;
   #terminalLayersDisposed = false;
   public constructor(
     host: HTMLElement,
@@ -152,7 +152,7 @@ export class ElementReconciler implements ElementOwnerAuthority {
   public get connected(): boolean { return this.#owners.lifecycle.connected; }
   public get terminal(): boolean { return this.#owners.lifecycle.terminal; }
   public get readiness(): RuntimeReadiness { return this.#publicState.readiness; }
-  public get mode(): RenderedMotionMode { return this.#publicState.mode; }
+  public get mode(): AvalMode { return this.#publicState.mode; }
   public get assurance(): "best-effort" | null { return this.#publicState.assurance; }
   public get staticReason(): StaticReason | null { return this.#publicState.staticReason; }
   public get requestedState(): string | null { return this.#publicState.requestedState; }
@@ -218,9 +218,9 @@ export class ElementReconciler implements ElementOwnerAuthority {
     options: Readonly<{ signal?: AbortSignal; timeoutMs?: number }> = {}
   ): Promise<RuntimeReadinessResult> {
     if (this.#owners.events.active) return this.#owners.events.after(() => this.prepare(options));
-    if (this.#owners.lifecycle.terminal) throw renderedMotionAbortError();
+    if (this.#owners.lifecycle.terminal) throw avalAbortError();
     if (!this.#owners.lifecycle.connected) {
-      throw new RenderedMotionNotReadyError("rendered-motion must be connected before prepare");
+      throw new AvalNotReadyError("aval-player must be connected before prepare");
     }
     const releaseReservation = this.#prepareReservations.reserve();
     let ownership: ReturnType<ElementOwnershipLedger["acquire"]> | null = null;
@@ -261,7 +261,7 @@ export class ElementReconciler implements ElementOwnerAuthority {
     if (
       this.#owners.lifecycle.terminal || this.#owners.controller.active === null ||
       this.#publicState.stateNames.length === 0
-    ) return Promise.reject(new RenderedMotionNotReadyError());
+    ) return Promise.reject(new AvalNotReadyError());
     const current = this.#stateCommand.current();
     if (
       current !== null &&
@@ -322,9 +322,9 @@ export class ElementReconciler implements ElementOwnerAuthority {
 
   public resume(): Promise<void> {
     if (this.#owners.events.active) return this.#owners.events.after(() => this.resume());
-    if (this.#owners.lifecycle.terminal) return Promise.reject(renderedMotionAbortError());
+    if (this.#owners.lifecycle.terminal) return Promise.reject(avalAbortError());
     if (this.#owners.controller.active === null) {
-      return Promise.reject(new RenderedMotionNotReadyError());
+      return Promise.reject(new AvalNotReadyError());
     }
     this.#metrics.add("resume");
     const previousPlaying = this.#desired.snapshot().manualPlaying;
@@ -344,7 +344,7 @@ export class ElementReconciler implements ElementOwnerAuthority {
 
   public getDiagnostics(
     options: Readonly<{ trace?: boolean }> = {}
-  ): Readonly<RenderedMotionDiagnostics> {
+  ): Readonly<AvalDiagnostics> {
     return this.#diagnostics.get(options);
   }
 

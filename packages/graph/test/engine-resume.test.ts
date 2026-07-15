@@ -7,7 +7,7 @@ import type {
 } from "../src/model.js";
 
 describe("MotionGraphEngine animated reentry", () => {
-  it("resumes the initial state at body zero without replaying its intro", () => {
+  it("plays the intro when first animated activation follows static preparation", () => {
     const engine = new MotionGraphEngine();
     engine.install(graph("loop", 2));
     const reduced = engine.beginStatic("reduced-motion");
@@ -16,12 +16,105 @@ describe("MotionGraphEngine animated reentry", () => {
 
     expect(resumed).toEqual({
       operation: "resume-animated",
-      presentation: bodyFrame("idle", 0),
+      presentation: introFrame(0),
       effects: [readiness("static", "animated")],
       snapshot: {
         ...reduced.snapshot,
         readiness: "animated",
+        phase: "intro",
+        presentation: introFrame(0)
+      }
+    });
+  });
+
+  it("does not replay an intro that already reached its body", () => {
+    const engine = new MotionGraphEngine();
+    engine.install(graph("loop", 2));
+    engine.beginAnimated();
+    engine.tick({ contentOrdinal: 0n });
+    engine.tick({ contentOrdinal: 1n });
+    engine.recoverStatic("visibility-hidden");
+
+    const resumed = engine.resumeAnimated();
+
+    expect(resumed).toMatchObject({
+      operation: "resume-animated",
+      presentation: bodyFrame("idle", 0),
+      snapshot: {
+        readiness: "animated",
         phase: "stable",
+        presentation: bodyFrame("idle", 0),
+        initialUnitPending: false,
+        contentOrdinal: 1n
+      }
+    });
+  });
+
+  it("restarts an intro suspended before it reaches the body", () => {
+    const engine = new MotionGraphEngine();
+    engine.install(graph("loop", 3));
+    engine.beginAnimated();
+    engine.tick({ contentOrdinal: 0n });
+    expect(engine.snapshot()).toMatchObject({
+      phase: "intro",
+      initialUnitPending: true,
+      presentation: introFrame(1)
+    });
+    engine.recoverStatic("visibility-hidden");
+
+    const resumed = engine.resumeAnimated();
+
+    expect(resumed).toMatchObject({
+      operation: "resume-animated",
+      presentation: introFrame(0),
+      snapshot: {
+        phase: "intro",
+        initialUnitPending: true,
+        presentation: introFrame(0)
+      }
+    });
+  });
+
+  it("rolls back intro consumption when the body join is only previewed", () => {
+    const engine = new MotionGraphEngine();
+    engine.install(graph("loop", 2));
+    engine.beginAnimated();
+    engine.tick({ contentOrdinal: 0n });
+    const before = engine.snapshot();
+
+    const preview = engine.previewTick({ contentOrdinal: 1n });
+
+    expect(preview).toMatchObject({
+      presentation: bodyFrame("idle", 0),
+      snapshot: {
+        phase: "stable",
+        initialUnitPending: false
+      }
+    });
+    expect(engine.snapshot()).toEqual(before);
+    expect(before).toMatchObject({
+      phase: "intro",
+      initialUnitPending: true,
+      presentation: introFrame(1)
+    });
+    expect(engine.tick({ contentOrdinal: 1n })).toEqual(preview);
+  });
+
+  it("does not replay an intro after an explicit noninitial static commit", () => {
+    const engine = new MotionGraphEngine();
+    engine.install(graph("loop", 3));
+    engine.beginStatic("reduced-motion");
+    engine.request("hover");
+    expect(engine.snapshot().initialUnitPending).toBe(false);
+    engine.request("idle");
+
+    const resumed = engine.resumeAnimated();
+
+    expect(resumed).toMatchObject({
+      presentation: bodyFrame("idle", 0),
+      snapshot: {
+        phase: "stable",
+        initialUnitPending: false,
         presentation: bodyFrame("idle", 0)
       }
     });
@@ -94,7 +187,6 @@ function graph(
     initialState: "idle",
     states: [{
       id: "idle",
-      staticFrameId: "idle-static",
       body: {
         unitId: "idle-body",
         kind: "loop",
@@ -106,7 +198,6 @@ function graph(
         : { initialUnit: { unitId: "idle-intro", frameCount: introFrames } })
     }, {
       id: "hover",
-      staticFrameId: "hover-static",
       body: {
         unitId: "hover-body",
         kind: hoverKind,
@@ -124,6 +215,12 @@ function graph(
       to: "hover",
       start: { type: "cut", targetPort: "handoff", maxWaitFrames: 1 },
       continuity: "cut"
+    }, {
+      id: "hover-to-idle",
+      from: "hover",
+      to: "idle",
+      start: { type: "cut", targetPort: "handoff", maxWaitFrames: 1 },
+      continuity: "cut"
     }]
   };
 }
@@ -133,6 +230,15 @@ function bodyFrame(state: "idle" | "hover", frameIndex: number) {
     kind: "body",
     state,
     unitId: `${state}-body`,
+    frameIndex
+  } as const;
+}
+
+function introFrame(frameIndex: number) {
+  return {
+    kind: "intro",
+    state: "idle",
+    unitId: "idle-intro",
     frameIndex
   } as const;
 }

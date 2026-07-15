@@ -1,17 +1,16 @@
-import { GRAPH_LIMITS } from "@rendered-motion/graph";
+import { GRAPH_LIMITS } from "@aval/graph";
 
 import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
 import { createAvcRenditionCandidates } from "./avc-rendition-selection.js";
 import {
   FuzzCandidateFactory,
-  FuzzStaticStore,
+  FuzzFallbackStore,
   IdleFuzzTimers,
   type FuzzFailurePhase
 } from "./integrated-player-fuzz-fixture.js";
 import {
   exerciseFuzzMotionPolicyActions,
-  exerciseFuzzResizeAction,
-  runFuzzStrictStaticAction
+  exerciseFuzzResizeAction
 } from "./integrated-player-fuzz-m6-actions.js";
 import {
   FuzzRecorder,
@@ -37,16 +36,17 @@ export interface IntegratedFuzzSummary {
   readonly seed: number;
   readonly profile:
     | "avc-annexb-opaque-v0"
-    | "avc-annexb-packed-alpha-v0";
+    | "avc-annexb-packed-alpha-v0"
+    | "avc-annexb-opaque-v1"
+    | "avc-annexb-packed-alpha-v1";
   readonly selectedRendition: string;
-  readonly strictStaticPath: "native" | "pure";
   readonly resizeActions: number;
   readonly abortAction: boolean;
   readonly finalStaticState: string;
   readonly requestOutcomes: readonly string[];
   readonly order: readonly string[];
   readonly trace: readonly unknown[];
-  readonly presentedStaticStates: readonly string[];
+  readonly presentedFallbackStates: readonly string[];
   readonly diagnosticCodes: readonly string[];
 }
 
@@ -61,14 +61,12 @@ export async function runIntegratedFuzzSeed(
 ): Promise<Readonly<IntegratedFuzzSummary>> {
   const random = mulberry32(seed);
   const recorder = new FuzzRecorder(seed);
-  const failHigh = (seed & 1) === 1;
-  const strictStaticPath = (seed & 0x100) === 0 ? "pure" : "native";
-  const factory = new FuzzCandidateFactory(recorder, failHigh);
-  const store = new FuzzStaticStore(recorder, strictStaticPath);
+  const factory = new FuzzCandidateFactory(recorder);
+  const store = new FuzzFallbackStore(recorder);
   const diagnostics: string[] = [];
   const player = new IntegratedPlayer({
     bytes: options.bytes ?? createIntegratedOpaqueTestAsset(),
-    createStaticStore: () => store,
+    createFallbackStore: () => store,
     candidateFactory: factory,
     eventSink: (event) => recorder.recordEvent(event),
     diagnosticsSink: (failure) => {
@@ -139,7 +137,7 @@ export async function runIntegratedFuzzSeed(
     fuzzInvariant(
       candidates.length >= 2,
       recorder,
-      "fuzz asset does not expose a fallback candidate"
+      "fuzz asset does not expose multiple authored candidates"
     );
     const profile = candidates[0]!.rendition.profile;
     fuzzInvariant(
@@ -148,17 +146,6 @@ export async function runIntegratedFuzzSeed(
       "fuzz candidates mix alpha profiles"
     );
     recorder.push(`action:profile:${profile}`);
-    const strictStatic = await runFuzzStrictStaticAction(
-      player,
-      strictStaticPath
-    );
-    fuzzInvariant(
-      strictStatic.selected === strictStaticPath && strictStatic.abortObserved,
-      recorder,
-      "strict static decoder selection/abort action diverged"
-    );
-    recorder.push(`action:strict-static:${strictStatic.selected}`);
-    recorder.push("action:abort-static-decode");
     fuzzInvariant(
       player.catalog.manifest.readiness.policy === "all-routes",
       recorder,
@@ -184,11 +171,18 @@ export async function runIntegratedFuzzSeed(
       recorder,
       "animated readiness has no rendition"
     );
-    const expectedRendition = candidates[failHigh ? 1 : 0]!.rendition.id;
+    const expectedRendition = candidates[0]!.rendition.id;
     fuzzInvariant(
       selectedRendition === expectedRendition,
       recorder,
-      "candidate fallback selected the wrong rendition"
+      "preparation did not select the preferred rendition"
+    );
+    fuzzInvariant(
+      recorder.entries
+        .filter((entry) => entry.startsWith("candidate:create:"))
+        .every((entry) => entry === `candidate:create:${expectedRendition}`),
+      recorder,
+      "preparation attempted a lower authored rendition"
     );
     fuzzInvariant(
       factory.maximumActiveAttempts === 1,
@@ -381,16 +375,15 @@ export async function runIntegratedFuzzSeed(
       seed,
       profile,
       selectedRendition,
-      strictStaticPath,
       resizeActions,
-      abortAction: strictStatic.abortObserved,
+      abortAction: false,
       finalStaticState,
       requestOutcomes: Object.freeze(requests.map((request) =>
         `${String(request.id)}:${request.target}:${request.status}:${request.errorName ?? "none"}`
       )),
       order: Object.freeze([...recorder.entries]),
       trace: Object.freeze(trace.map(summarizeIntegratedFuzzTrace)),
-      presentedStaticStates: Object.freeze([...store.presented]),
+      presentedFallbackStates: Object.freeze([...store.presented]),
       diagnosticCodes: Object.freeze([...diagnostics])
     });
   } catch (error) {

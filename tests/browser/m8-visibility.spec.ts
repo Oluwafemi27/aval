@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("zero-size suspension preserves newest state and rebuilds on visibility", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?visibility");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -27,7 +27,7 @@ test("zero-size suspension preserves newest state and rebuilds on visibility", a
 
 test("real BFCache pagehide/pageshow restores visibility and resumes", async ({ page }) => {
   await page.goto("/__m8__/bfcache");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");

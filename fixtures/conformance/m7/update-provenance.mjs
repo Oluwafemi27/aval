@@ -13,13 +13,13 @@ const root = resolve(dirname(generatorPath), "../../..");
 const outputRoot = resolve(root, "fixtures/conformance/m7");
 const sourcePath = resolve(
   root,
-  "fixtures/conformance/m6/packed-alpha-all-routes.rma"
+  "fixtures/conformance/m6/packed-alpha-all-routes.avl"
 );
 const sourceProvenancePath = resolve(
   root,
   "fixtures/conformance/m6/provenance.json"
 );
-const outputPath = resolve(outputRoot, "reference-packed.rma");
+const outputPath = resolve(outputRoot, "reference-packed.avl");
 const provenancePath = resolve(
   outputRoot,
   "reference-packed.provenance.json"
@@ -41,7 +41,7 @@ const [
 const sourceProvenanceText = sourceProvenanceBytes.toString("utf8");
 const sourceProvenance = JSON.parse(sourceProvenanceText);
 const sourceEntry = sourceProvenance.assets.find(
-  ({ name }) => name === "packed-alpha-all-routes.rma"
+  ({ name }) => name === "packed-alpha-all-routes.avl"
 );
 requireValue(sourceEntry, "M6 packed all-routes provenance entry is missing");
 
@@ -53,8 +53,7 @@ requireValue(
 );
 
 const canonicalBlobs = [
-  ...sourceEntry.units.map((blob) => ({ kind: "unit", ...blob })),
-  ...sourceEntry.staticFrames.map((blob) => ({ kind: "static", ...blob }))
+  ...sourceEntry.units.map((blob) => ({ kind: "unit", ...blob }))
 ].sort((left, right) => left.offset - right.offset);
 let cursor = sourceEntry.frontIndex.length;
 const storage = canonicalBlobs.map((blob) => {
@@ -71,10 +70,6 @@ const storage = canonicalBlobs.map((blob) => {
 });
 requireValue(cursor === sourceBytes.byteLength, "M7 canonical blobs do not end at EOF");
 
-const initialState = sourceEntry.manifest.states.find(
-  ({ id }) => id === sourceEntry.manifest.initialState
-);
-requireValue(initialState, "M7 initial state is missing");
 const selectedRendition = sourceEntry.manifest.renditions.find(
   ({ id }) => id === "packed.1x"
 );
@@ -82,11 +77,14 @@ requireValue(selectedRendition, "M7 reference rendition is missing");
 const selectedUnits = storage.filter(
   (blob) => blob.kind === "unit" && blob.rendition === selectedRendition.id
 );
-const statics = storage.filter((blob) => blob.kind === "static");
-const initialStatic = statics.find(
-  ({ staticFrame }) => staticFrame === initialState.staticFrame
+const bootstrapBlobs = selectedUnits.filter(
+  ({ unit }) => sourceEntry.manifest.readiness.bootstrapUnits.includes(unit)
 );
-requireValue(initialStatic, "M7 initial static is missing");
+const bootstrapUnits = [...sourceEntry.manifest.readiness.bootstrapUnits];
+requireValue(
+  bootstrapBlobs.length === bootstrapUnits.length,
+  "M7 bootstrap unit blobs are incomplete"
+);
 
 const provenance = {
   provenanceVersion: "0.1",
@@ -102,7 +100,7 @@ const provenance = {
     sha256: sha256(scenariosBytes)
   },
   source: {
-    path: "fixtures/conformance/m6/packed-alpha-all-routes.rma",
+    path: "fixtures/conformance/m6/packed-alpha-all-routes.avl",
     provenance: {
       path: "fixtures/conformance/m6/provenance.json",
       bytes: sourceProvenanceBytes.byteLength,
@@ -112,7 +110,7 @@ const provenance = {
     compilerManifestSha256: sourceEntry.manifestSha256
   },
   asset: {
-    path: "fixtures/conformance/m7/reference-packed.rma",
+    path: "fixtures/conformance/m7/reference-packed.avl",
     bytes: sourceBytes.byteLength,
     sha256: assetSha256,
     externalIntegrity: `sha256-${createHash("sha256")
@@ -136,19 +134,14 @@ const provenance = {
       0
     )
   },
-  initialStatic: {
-    staticFrame: initialStatic.staticFrame,
-    offset: initialStatic.storageOffset,
-    length: initialStatic.storageLength
-  },
+  bootstrapUnits,
   expectedRangePlans: {
     header: [{ offset: 0, length: 64 }],
     frontIndexTail: [{
       offset: 64,
       length: sourceEntry.frontIndex.length - 64
     }],
-    currentStatic: coalesce([initialStatic]),
-    allStatics: coalesce(statics),
+    bootstrapUnits: coalesce(bootstrapBlobs),
     selectedRendition: coalesce(selectedUnits),
     allPayload: [{
       offset: sourceEntry.frontIndex.length,
@@ -156,11 +149,9 @@ const provenance = {
     }]
   },
   blobs: storage,
-  staticFirstOrder: [
+  unitOrder: [
     "metadata",
-    `static:${initialStatic.staticFrame}`,
-    "all-statics",
-    ...sourceEntry.manifest.readiness.bootstrapUnits.map(
+    ...bootstrapUnits.map(
       (unit) => `unit:${selectedRendition.id}/${unit}`
     ),
     `all-units:${selectedRendition.id}`

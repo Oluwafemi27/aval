@@ -12,7 +12,7 @@ import {
   parseFrontIndex,
   serializeCanonicalJson,
   validateCompleteAsset
-} from "@rendered-motion/format";
+} from "@aval/format";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { validateAssetReport } from "../src/commands/asset.js";
@@ -26,7 +26,7 @@ const REPOSITORY_ROOT = resolve(
 const SOURCE_ROOT = join(REPOSITORY_ROOT, "fixtures/compiler/m55/source");
 const PROJECT_PATH = join(SOURCE_ROOT, "all-routes.json");
 const CONFORMANCE_ROOT = join(REPOSITORY_ROOT, "fixtures/conformance/m55");
-const GOLDEN_PATH = join(CONFORMANCE_ROOT, "opaque-all-routes.rma");
+const GOLDEN_PATH = join(CONFORMANCE_ROOT, "opaque-all-routes.avl");
 const PROVENANCE_PATH = join(CONFORMANCE_ROOT, "provenance.json");
 const M5_PROVENANCE_PATH = join(
   REPOSITORY_ROOT,
@@ -71,7 +71,6 @@ interface FixtureProvenance {
     readonly sourceFrames: readonly FileDigest[];
     readonly manifestSha256: string;
     readonly units: readonly BlobDigest[];
-    readonly staticFrames: readonly StaticBlobDigest[];
     readonly strictInspections: readonly {
       readonly rendition: string;
       readonly units: readonly { readonly id: string; readonly frames: number }[];
@@ -94,13 +93,6 @@ interface BlobDigest {
   readonly sha256: string;
 }
 
-interface StaticBlobDigest {
-  readonly staticFrame: string;
-  readonly offset: number;
-  readonly length: number;
-  readonly sha256: string;
-}
-
 type DiscoveredTools = Awaited<ReturnType<typeof discoverFfmpeg>>;
 
 describe.skipIf(!HAS_TOOLCHAIN)("M5.5 compiler-backed all-routes fixture", () => {
@@ -110,7 +102,7 @@ describe.skipIf(!HAS_TOOLCHAIN)("M5.5 compiler-backed all-routes fixture", () =>
   let exactReviewedToolPair = false;
 
   beforeAll(async () => {
-    temporaryRoot = await mkdtemp(join(tmpdir(), "rma-m55-fixture-"));
+    temporaryRoot = await mkdtemp(join(tmpdir(), "aval-m55-fixture-"));
     provenance = JSON.parse(
       await readFile(PROVENANCE_PATH, "utf8")
     ) as FixtureProvenance;
@@ -141,12 +133,6 @@ describe.skipIf(!HAS_TOOLCHAIN)("M5.5 compiler-backed all-routes fixture", () =>
       expect(sha256(bytes.subarray(blob.offset, blob.offset + blob.length)))
         .toBe(blob.sha256);
     }
-    expect(front.staticBlobs).toEqual(provenance.fixture.staticFrames);
-    for (const blob of provenance.fixture.staticFrames) {
-      expect(sha256(bytes.subarray(blob.offset, blob.offset + blob.length)))
-        .toBe(blob.sha256);
-    }
-
     const inspections = inspectEveryRendition(bytes);
     expect(inspections).toEqual(provenance.fixture.strictInspections.map(
       ({ rendition, units }) => ({ rendition, units })
@@ -301,8 +287,8 @@ describe.skipIf(!HAS_TOOLCHAIN)("M5.5 compiler-backed all-routes fixture", () =>
   });
 
   it("compiles twice to byte-identical strict assets and matches the reviewed golden", async () => {
-    const firstPath = join(temporaryRoot, "first.rma");
-    const secondPath = join(temporaryRoot, "second.rma");
+    const firstPath = join(temporaryRoot, "first.avl");
+    const secondPath = join(temporaryRoot, "second.avl");
     const first = await compileProjectFile({
       projectPath: PROJECT_PATH,
       outputPath: firstPath,
@@ -356,8 +342,9 @@ function inspectEveryRendition(
         frameRate: front.manifest.frameRate,
         averageBitrate: rendition.bitrate.average,
         peakBitrate: rendition.bitrate.peak,
-        cpbBufferBits: rendition.bitrate.peak,
-        requireBt709LimitedRange: true
+      cpbBufferBits: rendition.bitrate.peak,
+      quantizationPolicy: "fixed-qp26-v0",
+      requireBt709LimitedRange: true
       },
       units: front.manifest.units.map((unit, unitIndex) => ({
         id: unit.id,

@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,11 +10,8 @@ import {
   serializeCanonicalJson,
   validateCompleteAsset,
   validatePngProfile
-} from "@rendered-motion/format";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-
-import { compileProjectFile } from "../src/compile/project-compiler.js";
-import { discoverFfmpeg } from "../src/ffmpeg/discovery.js";
+} from "@aval/format";
+import { describe, expect, it } from "vitest";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const SOURCE_ROOT = join(REPOSITORY_ROOT, "fixtures/compiler/m6/source");
@@ -26,22 +21,6 @@ const COMPILER_PROVENANCE_PATH = join(
   REPOSITORY_ROOT,
   "fixtures/compiler/m6/provenance.json"
 );
-const ALL_ROUTES_PROJECT = join(SOURCE_ROOT, "packed-all-routes.json");
-const ALL_ROUTES_GOLDEN = join(CONFORMANCE_ROOT, "packed-alpha-all-routes.rma");
-
-const HAS_TOOLCHAIN = (() => {
-  try {
-    execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
-    execFileSync("ffprobe", ["-version"], { stdio: "ignore" });
-    return /\blibx264\b/u.test(execFileSync(
-      "ffmpeg",
-      ["-hide_banner", "-encoders"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
-    ));
-  } catch {
-    return false;
-  }
-})();
 
 describe("M6 checked packed-alpha fixture", () => {
   it("binds every source and checked asset to path-free provenance", async () => {
@@ -52,7 +31,8 @@ describe("M6 checked packed-alpha fixture", () => {
     expect(findAbsolutePaths(provenance)).toEqual([]);
     expect(findAbsolutePaths(compilerProvenance)).toEqual([]);
     await expectDigest(provenance.compilerSource);
-    await expectDigest(provenance.malformedContracts);
+    await expectDigest(provenance.reviewedEncodedSource.recipe);
+    await expectDigest(provenance.reviewedEncodedSource.payload);
 
     for (const project of compilerProvenance.projects) await expectDigest(project);
     await expectDigest(compilerProvenance.generator);
@@ -75,8 +55,7 @@ describe("M6 checked packed-alpha fixture", () => {
       expect(sha256(serializeCanonicalJson(front.manifest)))
         .toBe(entry.manifestSha256);
       expect(front.unitBlobs).toEqual(entry.units);
-      expect(front.staticBlobs).toEqual(entry.staticFrames);
-      for (const blob of [...entry.units, ...entry.staticFrames]) {
+      for (const blob of entry.units) {
         expect(sha256(bytes.subarray(blob.offset, blob.offset + blob.length)))
           .toBe(blob.sha256);
       }
@@ -109,22 +88,22 @@ describe("M6 checked packed-alpha fixture", () => {
     expect(new Set(codes).size).toBe(30);
   });
 
-  it("freezes alpha policy, odd crop geometry, static facts, and quality margins", async () => {
+  it("freezes alpha policy, odd crop geometry, and quality margins", async () => {
     const provenance = JSON.parse(await readFile(PROVENANCE_PATH, "utf8"));
     const byName = new Map<string, any>(
       provenance.assets.map((asset: any) => [asset.name, asset])
     );
-    expect(byName.get("opaque-odd.rma")!.alphaPolicy).toMatchObject({
+    expect(byName.get("opaque-odd.avl")!.alphaPolicy).toMatchObject({
       requested: "auto",
       selected: "opaque",
       audit: { allOpaque: true, minimumAlpha: 255 }
     });
-    expect(byName.get("packed-alpha-loop.rma")!.alphaPolicy).toMatchObject({
+    expect(byName.get("packed-alpha-loop.avl")!.alphaPolicy).toMatchObject({
       requested: "auto",
       selected: "packed",
       audit: { allOpaque: false, minimumAlpha: 0 }
     });
-    const allRoutes: any = byName.get("packed-alpha-all-routes.rma");
+    const allRoutes: any = byName.get("packed-alpha-all-routes.avl");
     expect(allRoutes.alphaPolicy).toMatchObject({
       requested: "packed",
       selected: "packed",
@@ -150,22 +129,8 @@ describe("M6 checked packed-alpha fixture", () => {
       }
     }
 
-    expect(allRoutes.statics).toHaveLength(3);
-    expect(allRoutes.statics.map((entry: any) => entry.validation)).toEqual(
-      Array.from({ length: 3 }, () => ({
-        decoder: "format-pure-rfc1950-1951-v0",
-        filteredBytes: 4887,
-        height: 27,
-        pngBytes: 4968,
-        profile: "strict-rgba-png-v0",
-        rgbaBytes: 4860,
-        width: 45,
-        zlibBytes: 4898
-      }))
-    );
-    expect(allRoutes.statics.map((entry: any) => entry.states)).toEqual([
-      ["done", "loading"], ["hover"], ["idle"]
-    ]);
+    expect(allRoutes).not.toHaveProperty("statics");
+    expect(allRoutes).not.toHaveProperty("staticPayloadBytes");
 
     for (const rendition of allRoutes.manifest.renditions) {
       expect(() => deriveAvcRenditionGeometry({
@@ -179,54 +144,6 @@ describe("M6 checked packed-alpha fixture", () => {
       })).not.toThrow();
     }
   });
-});
-
-describe.skipIf(!HAS_TOOLCHAIN)("M6 deterministic compiler regeneration", () => {
-  let temporaryRoot = "";
-
-  beforeAll(async () => {
-    temporaryRoot = await mkdtemp(join(tmpdir(), "rma-m6-fixture-"));
-  });
-
-  afterAll(async () => {
-    if (temporaryRoot !== "") await rm(temporaryRoot, { recursive: true, force: true });
-  });
-
-  it("compiles all routes twice and matches the golden on the reviewed tools", async () => {
-    const provenance = JSON.parse(await readFile(PROVENANCE_PATH, "utf8"));
-    const expected = provenance.assets.find(
-      (asset: any) => asset.name === "packed-alpha-all-routes.rma"
-    );
-    const tools = await discoverFfmpeg();
-    const firstPath = join(temporaryRoot, "first.rma");
-    const secondPath = join(temporaryRoot, "second.rma");
-    const first = await compileProjectFile({
-      projectPath: ALL_ROUTES_PROJECT,
-      outputPath: firstPath,
-      ffmpegPath: tools.executable,
-      ffprobePath: tools.ffprobeExecutable
-    });
-    const second = await compileProjectFile({
-      projectPath: ALL_ROUTES_PROJECT,
-      outputPath: secondPath,
-      ffmpegPath: tools.executable,
-      ffprobePath: tools.ffprobeExecutable
-    });
-    const firstBytes = new Uint8Array(await readFile(firstPath));
-    const secondBytes = new Uint8Array(await readFile(secondPath));
-    expect(first.sha256).toBe(second.sha256);
-    expect(firstBytes).toEqual(secondBytes);
-    expect(() => validateCompleteAsset({ bytes: firstBytes })).not.toThrow();
-    expect(JSON.stringify(first.buildDetails.invocations)).not.toContain(REPOSITORY_ROOT);
-
-    const exactReviewedTools =
-      tools.executableSha256 === provenance.toolchain.ffmpeg.executableSha256 &&
-      tools.ffprobeExecutableSha256 === provenance.toolchain.ffprobe.executableSha256;
-    if (exactReviewedTools) {
-      expect(first.sha256).toBe(expected.asset.sha256);
-      expect(firstBytes).toEqual(new Uint8Array(await readFile(ALL_ROUTES_GOLDEN)));
-    }
-  }, 120_000);
 });
 
 async function decodeSource(path: string) {

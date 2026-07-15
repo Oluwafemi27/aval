@@ -38,7 +38,7 @@ const mitigation = await loadMitigationEvidence({
 const registryOptions = { registry: authorization.policy.registry.url };
 const operations = [];
 let terminalError = null;
-const notice = "Withdrawn: see the Rendered Motion 1.0 rollback mitigation notice";
+const notice = "Withdrawn: see the AVAL 1.0 rollback mitigation notice";
 
 for (const name of certification.rollbackOrder(authorization.releaseSet.order)) {
   const archive = authorization.releaseSet.packages.find((entry) => entry.name === name);

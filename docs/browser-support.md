@@ -1,11 +1,16 @@
 # Browser support
 
 Functional CI uses pinned Playwright Chromium, Firefox, and WebKit engines. It
-proves browser-path correctness and static fallback; it is not a branded Chrome,
-Edge, Firefox, or Safari certificate.
+proves browser-path correctness and fallback-state behavior; it is not a
+branded Chrome, Edge, Firefox, or Safari certificate.
+
+The player probes the exact authored WebCodecs configuration and WebGL texture
+requirements. If a browser or GPU cannot allocate them, playback uses the
+host's external fallback/error path; it does not retry with a smaller canvas,
+rendition, cache, or frame rate.
 
 <!-- BEGIN GENERATED SUPPORT -->
-| Profile | Static fallback | Runtime scheduling | Observed display |
+| Profile | Host fallback | Runtime scheduling | Observed display |
 | --- | --- | --- | --- |
 | No named profiles | not run | not run | not measured |
 <!-- END GENERATED SUPPORT -->

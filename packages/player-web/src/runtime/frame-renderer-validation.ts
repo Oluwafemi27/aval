@@ -2,7 +2,7 @@ import {
   deriveAvcRenditionGeometry,
   type AvcRenditionGeometry,
   type Rect
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { STREAMING_TEXTURE_LAYER_COUNT } from "./checked-runtime-bytes.js";
 import type {
@@ -184,9 +184,7 @@ export function validateFrameBackendLimits(
   validateFrameDimension(maxArrayTextureLayers, "MAX_ARRAY_TEXTURE_LAYERS");
   if (
     layout.geometry.codedWidth > maxTextureSize ||
-    layout.geometry.codedHeight > maxTextureSize ||
-    layout.logicalWidth > maxTextureSize ||
-    layout.logicalHeight > maxTextureSize
+    layout.geometry.codedHeight > maxTextureSize
   ) {
     throw new RangeError("frame texture dimensions exceed MAX_TEXTURE_SIZE");
   }
@@ -275,7 +273,8 @@ function freezeFrameGeometry(
 ): Readonly<AvcRenditionGeometry> {
   const normalized = freezeFrameGeometryStructure(geometry);
   const derived = deriveAvcRenditionGeometry(
-    normalized.profile === "avc-annexb-packed-alpha-v0"
+    normalized.profile === "avc-annexb-packed-alpha-v0" ||
+      normalized.profile === "avc-annexb-packed-alpha-v1"
       ? {
           profile: normalized.profile,
           canvasWidth: logicalWidth,
@@ -348,11 +347,17 @@ function freezeFrameGeometryStructure(
   }
 
   let visibleAlphaRect: Rect | undefined;
-  if (geometry.profile === "avc-annexb-opaque-v0") {
+  if (
+    geometry.profile === "avc-annexb-opaque-v0" ||
+    geometry.profile === "avc-annexb-opaque-v1"
+  ) {
     if (geometry.visibleAlphaRect !== undefined) {
       throw new RangeError("opaque frame geometry must not contain alpha");
     }
-  } else if (geometry.profile === "avc-annexb-packed-alpha-v0") {
+  } else if (
+    geometry.profile === "avc-annexb-packed-alpha-v0" ||
+    geometry.profile === "avc-annexb-packed-alpha-v1"
+  ) {
     if (geometry.visibleAlphaRect === undefined) {
       throw new RangeError("packed-alpha frame geometry requires alpha");
     }

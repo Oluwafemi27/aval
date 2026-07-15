@@ -31,7 +31,7 @@ const sourceIndex = await reconstructReportIndex({
 if (sha256(sourceIndex.indexBytes) !== expectedReportIndexDigest) throw new Error("source report index does not match the approved digest");
 if (sourceIndex.index.releaseStatus !== "passed" || sourceIndex.index.runtimeScheduling !== "passed") throw new Error("source report index has not passed release certification");
 
-const temporary = await mkdtemp(join(dirname(output), ".rendered-motion-finalize-"));
+const temporary = await mkdtemp(join(dirname(output), ".aval-finalize-"));
 const stagedRoot = join(temporary, "release");
 let sealed = false;
 try {

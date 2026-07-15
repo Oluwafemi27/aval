@@ -59,14 +59,14 @@ describe("asset-wide canonical alpha policy", () => {
     expect(resolveAlphaPolicy("auto", transparent).selected).toBe("packed");
   });
 
-  it("includes poster-only alpha and excludes unreferenced frames supplied by no caller", () => {
+  it("includes every referenced frame and excludes frames supplied by no caller", () => {
     const audit = auditCanonicalAlphaFrames([
-      frame("animation", 0, [255, 255], "unit"),
-      frame("poster", 17, [255, 99], "poster")
+      frame("animation", 0, [255, 255]),
+      frame("secondary", 17, [255, 99])
     ]);
     expect(audit.uniqueReferencedFrames).toBe(2);
     expect(audit.firstNonopaque).toMatchObject({
-      source: "poster",
+      source: "secondary",
       frame: 17,
       x: 1,
       alpha: 99
@@ -158,11 +158,10 @@ describe("asset-wide canonical alpha policy", () => {
     expect(first.rgba).toEqual(before);
   });
 
-  it("rejects invalid geometry, hostile counts, and cancellation", () => {
+  it("rejects invalid geometry and cancellation without a media frame ceiling", () => {
     expect(() => auditCanonicalAlphaFrames([{
       source: "source",
       frame: 0,
-      role: "unit",
       width: 2,
       height: 1,
       rgba: Uint8Array.of(0, 0, 0, 255)
@@ -171,7 +170,7 @@ describe("asset-wide canonical alpha policy", () => {
     const tooMany = Array.from({ length: 934 }, (_, index) =>
       frame("source", index, [255, 255])
     );
-    expect(() => auditCanonicalAlphaFrames(tooMany)).toThrow(CompilerError);
+    expect(auditCanonicalAlphaFrames(tooMany).uniqueReferencedFrames).toBe(934);
 
     const controller = new AbortController();
     controller.abort("test");
@@ -179,18 +178,28 @@ describe("asset-wide canonical alpha policy", () => {
       frame("source", 0, [255, 255])
     ], controller.signal)).toThrow(expect.objectContaining({ code: "CANCELLED" }));
   });
+
+  it("accepts coordinates and geometry above former frame and canvas ceilings", () => {
+    const rgba = new Uint8Array(513 * 4).fill(255);
+    rgba[512 * 4 + 3] = 17;
+    expect(auditCanonicalAlphaFrames([{
+      source: "source",
+      frame: 1_800,
+      width: 513,
+      height: 1,
+      rgba
+    }]).firstNonopaque).toMatchObject({ frame: 1_800, x: 512, alpha: 17 });
+  });
 });
 
 function frame(
   source: string,
   frameIndex: number,
-  alpha: readonly [number, number],
-  role: "unit" | "poster" = "unit"
+  alpha: readonly [number, number]
 ) {
   return {
     source,
     frame: frameIndex,
-    role,
     width: 2,
     height: 1,
     rgba: Uint8Array.of(10, 20, 30, alpha[0], 40, 50, 60, alpha[1])

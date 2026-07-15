@@ -1,4 +1,4 @@
-import { deriveAvcRenditionGeometry } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometry } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -34,6 +34,38 @@ const LAYOUT: FrameTextureLayout = {
 };
 
 describe("profile-neutral frame renderer", () => {
+  it("applies MAX_TEXTURE_SIZE only to allocated coded textures", () => {
+    const backend = new FakeBackend();
+    const geometry = deriveAvcRenditionGeometry({
+      profile: "avc-annexb-opaque-v0",
+      canvasWidth: 12_000,
+      canvasHeight: 4_000,
+      colorRect: [0, 0, 3, 1],
+      codedWidth: 16,
+      codedHeight: 16
+    });
+
+    expect(() => new FrameRenderer(backend, {
+      geometry,
+      logicalWidth: 12_000,
+      logicalHeight: 4_000,
+      residentLayerCount: 0
+    })).not.toThrow();
+    expect(backend.allocations).toHaveLength(1);
+  });
+
+  it("keeps the legacy device check scoped to coded textures", () => {
+    const backend = new FakeLegacyBackend();
+
+    expect(() => new LegacyOpaqueFrameRenderer(backend, {
+      codedWidth: 16,
+      codedHeight: 16,
+      logicalWidth: 12_000,
+      logicalHeight: 4_000,
+      residentLayerCount: 0
+    })).not.toThrow();
+  });
+
   it("rejects a forged packed-alpha gutter before allocating a backend", () => {
     const backend = new FakeBackend();
     expect(() => new FrameRenderer(backend, {

@@ -9,7 +9,7 @@ import {
   adaptManifestToMotionGraph,
   parseFrontIndex,
   validateCompleteAsset
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { inspectAssetFile } from "../src/commands/asset.js";
 import { compileProjectFile } from "../src/compile/project-compiler.js";
@@ -32,10 +32,10 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
   let secondPath = "";
 
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), "rma-project-compiler-"));
-    projectPath = join(directory, "motion.rma-project.json");
-    firstPath = join(directory, "first.rma");
-    secondPath = join(directory, "second.rma");
+    directory = await mkdtemp(join(tmpdir(), "aval-project-compiler-"));
+    projectPath = join(directory, "motion.avl-project.json");
+    firstPath = join(directory, "first.avl");
+    secondPath = join(directory, "second.avl");
     const framesDirectory = join(directory, "frames");
     await mkdir(framesDirectory);
 
@@ -64,7 +64,7 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
     const first = await compileProjectFile({ projectPath, outputPath: firstPath });
     const second = await compileProjectFile({ projectPath, outputPath: secondPath });
     const modernProjectPath = join(directory, "motion-v02.json");
-    const modernOutputPath = join(directory, "modern.rma");
+    const modernOutputPath = join(directory, "modern.avl");
     await writeFile(modernProjectPath, JSON.stringify(sourceProjectV02(), null, 2));
     const modern = await compileProjectFile({
       projectPath: modernProjectPath,
@@ -82,14 +82,12 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
     expect(first.buildDetails.projectFile).toMatchObject({
       sha256: expect.stringMatching(/^[0-9a-f]{64}$/u)
     });
+    expect(first.buildDetails.detailsVersion).toBe("0.2");
     expect(first.buildDetails.sources).toHaveLength(1);
-    expect(first.buildDetails.statics[0]?.validation).toMatchObject({
-      profile: "strict-rgba-png-v0",
-      decoder: "format-pure-rfc1950-1951-v0",
-      width: 32,
-      height: 32,
-      rgbaBytes: 32 * 32 * 4
-    });
+    expect(first.buildDetails).not.toHaveProperty("statics");
+    expect(first.buildDetails).not.toHaveProperty("staticPayloadBytes");
+    expect(first.buildDetails.manifest).not.toHaveProperty("staticFrames");
+    expect(first.buildDetails.manifest).not.toHaveProperty("fallback");
     expect(first.buildDetails.sources[0]?.inputFiles).toHaveLength(16);
     expect(first.buildDetails.invocations.map(({ operation }) => operation))
       .toEqual(expect.arrayContaining([
@@ -108,7 +106,127 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
       selected: "opaque",
       audit: { allOpaque: true, uniqueReferencedFrames: 16 }
     });
+    for (const result of [first, modern]) {
+      const rendition = result.buildDetails.renditions[0]!;
+      expect(rendition).toMatchObject({
+        profile: "avc-annexb-opaque-v0",
+        bitrate: { average: 300_000, peak: 600_000 },
+        encoding: {
+          codec: "libx264",
+          preset: "medium",
+          legacyZeroLatency: true,
+          rateControl: {
+            mode: "abr",
+            averageBitrate: 300_000,
+            maxBitrate: 600_000
+          },
+          canonicalBytes: result.buildDetails.encodedPayloadBytes,
+          measuredAverageBitrate: expect.any(Number)
+        }
+      });
+      expect(rendition.encoding.measuredAverageBitrate).toBe(
+        Math.ceil(rendition.encoding.canonicalBytes * 8 * 30 / 16)
+      );
+      expect(result.buildDetails.manifest.renditions[0]).toMatchObject({
+        profile: "avc-annexb-opaque-v0",
+        bitrate: { average: 300_000, peak: 600_000 }
+      });
+    }
     expect(JSON.stringify(first.buildDetails.invocations)).not.toContain(directory);
+  }, 30_000);
+
+  it.each([
+    {
+      name: "capped CRF",
+      preset: "veryslow",
+      rateControl: {
+        mode: "crf",
+        crf: 20,
+        maxBitrate: 1_000_000
+      },
+      requiredArguments: [
+        "-preset", "veryslow",
+        "-crf", "20",
+        "-maxrate", "1000000",
+        "-bufsize", "1000000"
+      ],
+      forbiddenArgument: "-b:v",
+      peak: 1_000_000
+    },
+    {
+      name: "nonlegacy ABR",
+      preset: "slow",
+      rateControl: {
+        mode: "abr",
+        averageBitrate: 300_000,
+        maxBitrate: 600_000
+      },
+      requiredArguments: [
+        "-preset", "slow",
+        "-b:v", "300000",
+        "-maxrate", "600000",
+        "-bufsize", "600000"
+      ],
+      forbiddenArgument: "-crf",
+      peak: 600_000
+    }
+  ] as const)("compiles project 0.3 $name as AVC-v1 with measured bitrate evidence", async ({
+    name,
+    preset,
+    rateControl,
+    requiredArguments,
+    forbiddenArgument,
+    peak
+  }) => {
+    const configuredProjectPath = join(directory, `motion-v1-${name}.json`);
+    const outputPath = join(directory, `motion-v1-${name}.avl`);
+    await writeFile(
+      configuredProjectPath,
+      JSON.stringify(sourceProjectV03(preset, rateControl), null, 2)
+    );
+    const result = await compileProjectFile({
+      projectPath: configuredProjectPath,
+      outputPath
+    });
+    const rendition = result.buildDetails.renditions[0]!;
+    const manifestRendition = parseFrontIndex(
+      new Uint8Array(await readFile(outputPath))
+    ).manifest.renditions[0]!;
+
+    expect(rendition).toMatchObject({
+      profile: "avc-annexb-opaque-v1",
+      encoding: {
+        codec: "libx264",
+        preset,
+        legacyZeroLatency: false,
+        rateControl,
+        canonicalBytes: result.buildDetails.encodedPayloadBytes,
+        measuredAverageBitrate: expect.any(Number)
+      }
+    });
+    expect(rendition.encoding.measuredAverageBitrate).toBe(
+      Math.ceil(rendition.encoding.canonicalBytes * 8 * 30 / 16)
+    );
+    expect(rendition.encoding.measuredAverageBitrate).toBeLessThanOrEqual(peak);
+    expect(rendition.bitrate).toEqual({
+      average: rendition.encoding.measuredAverageBitrate,
+      peak
+    });
+    expect(manifestRendition).toMatchObject({
+      profile: "avc-annexb-opaque-v1",
+      bitrate: rendition.bitrate
+    });
+    const encodeInvocations = result.buildDetails.invocations.filter(
+      ({ operation }) => operation.startsWith("encode:opaque:")
+    );
+    expect(encodeInvocations).toHaveLength(2);
+    for (const invocation of encodeInvocations) {
+      expect(invocation.arguments).toEqual(
+        expect.arrayContaining([...requiredArguments])
+      );
+      expect(invocation.arguments).not.toContain(forbiddenArgument);
+      expect(invocation.arguments).not.toContain("-tune");
+    }
   }, 30_000);
 
   it("preserves source states, ports, event routes, bindings, and readiness", async () => {
@@ -120,13 +238,11 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
     expect(front.manifest.states).toEqual([
       {
         id: "active",
-        bodyUnit: "active-body",
-        staticFrame: "static.00"
+        bodyUnit: "active-body"
       },
       {
         id: "idle",
-        bodyUnit: "idle-body",
-        staticFrame: "static.01"
+        bodyUnit: "idle-body"
       }
     ]);
     expect(front.manifest.units.map((unit) => ({
@@ -165,29 +281,24 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
       bootstrapUnits: ["active-body", "idle-body"],
       immediateEdges: ["idle-to-active"]
     });
-    expect(front.manifest.staticFrames.map(({ id }) => id)).toEqual([
-      "static.00",
-      "static.01"
-    ]);
+    expect(front.manifest).not.toHaveProperty("staticFrames");
+    expect(front.manifest).not.toHaveProperty("fallback");
     expect(front.records).toHaveLength(16);
 
     expect(graph.initialState).toBe("idle");
     expect(graph.states.map((state) => ({
       id: state.id,
       bodyUnit: state.body.unitId,
-      staticFrame: state.staticFrameId,
       ports: state.body.ports
     }))).toEqual([
       {
         id: "active",
         bodyUnit: "active-body",
-        staticFrame: "static.00",
         ports: [{ id: "default", entryFrame: 0, portalFrames: [0] }]
       },
       {
         id: "idle",
         bodyUnit: "idle-body",
-        staticFrame: "static.01",
         ports: [{ id: "default", entryFrame: 0, portalFrames: [0] }]
       }
     ]);
@@ -201,17 +312,27 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
     }]);
   });
 
-  it("honors an explicit project-wide packed profile and decode-back gate", async () => {
+  it("honors explicit packed output and enforces the decode-back gate", async () => {
     const packedProjectPath = join(directory, "motion-packed.json");
-    const packedOutputPath = join(directory, "packed.rma");
+    const packedOutputPath = join(directory, "packed.avl");
     const project = structuredClone(sourceProjectV02()) as any;
     project.profile = "avc-annexb-packed-alpha-v0";
     await writeFile(packedProjectPath, JSON.stringify(project, null, 2));
 
-    const result = await compileProjectFile({
-      projectPath: packedProjectPath,
-      outputPath: packedOutputPath
-    });
+    let result: Awaited<ReturnType<typeof compileProjectFile>>;
+    try {
+      result = await compileProjectFile({
+        projectPath: packedProjectPath,
+        outputPath: packedOutputPath
+      });
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "ALPHA_QUALITY_REJECTED",
+        statistic: "mae",
+        limit: 2 / 255
+      });
+      return;
+    }
     expect(result.buildDetails.alphaPolicy).toMatchObject({
       requested: "packed",
       selected: "packed",
@@ -249,9 +370,62 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
     });
   }, 30_000);
 
-  it("rejects an explicit poster that differs from the body entry pixels", async () => {
+  it("publishes authored source pixels when the visual seam heuristic needs review", async () => {
+    const framesDirectory = join(directory, "review-frames");
+    await mkdir(framesDirectory);
+    const values = [0, 1, 2, 3, 4, 100, 101, 102, 103, 104, 105, 106];
+    await Promise.all(values.map(async (value, index) => {
+      const rgba = new Uint8Array(32 * 32 * 4);
+      for (let offset = 0; offset < rgba.length; offset += 4) {
+        rgba.set([value, value, value, 255], offset);
+      }
+      await writeFile(
+        join(framesDirectory, `frame-${String(index).padStart(4, "0")}.png`),
+        encodeCanonicalRgbaPng({ width: 32, height: 32, rgba })
+      );
+    }));
+    const reviewProjectPath = join(directory, "motion-review.json");
+    const reviewOutputPath = join(directory, "review.avl");
+    const project = structuredClone(sourceProjectV02()) as any;
+    project.sources[0].directory = "review-frames";
+    project.sources[0].frameCount = values.length;
+    project.units = [{
+      id: "idle-body",
+      kind: "body",
+      source: "frames",
+      range: [0, values.length],
+      playback: "loop",
+      ports: [{ id: "default", entryFrame: 0, portalFrames: [0] }]
+    }];
+    project.initialState = "idle";
+    project.states = [{ id: "idle", bodyUnit: "idle-body" }];
+    project.edges = [];
+    project.bindings = [];
+    await writeFile(reviewProjectPath, JSON.stringify(project, null, 2));
+
+    const result = await compileProjectFile({
+      projectPath: reviewProjectPath,
+      outputPath: reviewOutputPath
+    });
+
+    expect(result.warnings).toEqual([
+      expect.stringMatching(/^idle-body loop needs visual review:/u)
+    ]);
+    expect(result.buildDetails.continuity).toEqual([
+      expect.objectContaining({
+        name: "idle-body loop",
+        status: "review",
+        from: expect.objectContaining({ frame: values.length - 1 }),
+        to: expect.objectContaining({ frame: 0 })
+      })
+    ]);
+    const compiled = new Uint8Array(await readFile(reviewOutputPath));
+    expect(() => validateCompleteAsset({ bytes: compiled })).not.toThrow();
+  }, 30_000);
+
+  it("rejects the removed poster authoring field before compilation", async () => {
     const mismatchProjectPath = join(directory, "motion-poster-mismatch.json");
-    const mismatchOutputPath = join(directory, "poster-mismatch.rma");
+    const mismatchOutputPath = join(directory, "poster-mismatch.avl");
     const project = structuredClone(sourceProjectV02()) as any;
     project.states[0].poster = { source: "frames", frame: 1 };
     await writeFile(mismatchProjectPath, JSON.stringify(project, null, 2));
@@ -261,7 +435,7 @@ describe.skipIf(!HAS_FFMPEG)("source-project compiler integration", () => {
       outputPath: mismatchOutputPath
     })).rejects.toMatchObject({
       code: "INPUT_INVALID",
-      field: "states[1].poster"
+      field: "states[0]"
     });
   }, 30_000);
 });
@@ -339,6 +513,36 @@ function sourceProjectV02(): unknown {
     width: rendition.codedWidth,
     height: rendition.codedHeight,
     bitrate: rendition.bitrate
+  }));
+  return value;
+}
+
+function sourceProjectV03(
+  preset: "slow" | "veryslow",
+  rateControl:
+    | {
+        readonly mode: "crf";
+        readonly crf: number;
+        readonly maxBitrate: number;
+      }
+    | {
+        readonly mode: "abr";
+        readonly averageBitrate: number;
+        readonly maxBitrate: number;
+      }
+): unknown {
+  const value = structuredClone(sourceProjectV02()) as any;
+  value.projectVersion = "0.3";
+  value.profile = "avc-annexb-auto-v1";
+  value.renditions = value.renditions.map((rendition: any) => ({
+    id: rendition.id,
+    width: rendition.width,
+    height: rendition.height,
+    encoding: {
+      codec: "h264",
+      preset,
+      rateControl
+    }
   }));
   return value;
 }

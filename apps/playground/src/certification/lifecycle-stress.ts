@@ -1,4 +1,4 @@
-import type { RenderedMotionDiagnostics } from "@rendered-motion/element";
+import type { AvalDiagnostics } from "@aval/element";
 
 import { BrowserResourceLedger } from "./resource-ledger.js";
 import { createPublicMotionElement, preparePublicMotion, retirePublicMotion } from "./public-element-host.js";
@@ -32,7 +32,7 @@ export async function runLifecycleStress(options: Readonly<{
   let completedCycles = 0;
   let sourceReplacements = 0;
   let adoptionCycles = 0;
-  let final: Readonly<RenderedMotionDiagnostics> | null = null;
+  let final: Readonly<AvalDiagnostics> | null = null;
   for (let cycle = 0; cycle < cycles; cycle += 1) {
     if (options.signal?.aborted === true) break;
     const element = createPublicMotionElement(

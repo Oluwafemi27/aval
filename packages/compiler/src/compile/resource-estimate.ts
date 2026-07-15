@@ -2,15 +2,13 @@ import type {
   AccessUnitInputV01,
   AvcRenditionGeometry,
   DeclaredLimitsV01
-} from "@rendered-motion/format";
+} from "@aval/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
 
 import { CompilerError } from "../diagnostics.js";
 import type { NormalizedSourceProject } from "../model.js";
 
-const MAX_COMPILED_BYTES = 32 * 1024 * 1024;
-const MAX_RUNTIME_BYTES = 64 * 1024 * 1024;
-
-/** Compute the conservative M5 one-rendition runtime budget from real bytes. */
+/** Compute diagnostic runtime terms without inventing a hard host policy. */
 export function estimateRuntimeLimits(
   project: NormalizedSourceProject,
   accessUnits: readonly AccessUnitInputV01[],
@@ -81,15 +79,9 @@ export function estimateRuntimeLimits(
     canvasPixelBytes
   ].reduce((total, value) =>
     checkedSum(total, value, "runtime working-set bytes"), 0);
-  if (runtimeWorkingSetBytes > MAX_RUNTIME_BYTES) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      "Compiled runtime estimate exceeds 64 MiB"
-    );
-  }
   return Object.freeze({
-    maxCompiledBytes: MAX_COMPILED_BYTES,
-    maxRuntimeBytes: MAX_RUNTIME_BYTES,
+    maxCompiledBytes: FORMAT_DEFAULT_BUDGETS.maxFileBytes,
+    maxRuntimeBytes: Number.MAX_SAFE_INTEGER,
     decodedPixelBytes,
     persistentCacheBytes,
     runtimeWorkingSetBytes

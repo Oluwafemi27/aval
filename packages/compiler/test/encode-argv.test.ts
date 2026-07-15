@@ -3,11 +3,21 @@ import { describe, expect, it } from "vitest";
 import {
   createEncodeAvcUnitInvocation,
   createExtractRgbaRangeInvocation,
-  encodeAvcUnit,
-  FROZEN_AVC_KEYINT,
+  mediaTimeout,
   sourceArguments
 } from "../src/ffmpeg/encode-unit.js";
 import { createCalibrationInvocation } from "../src/ffmpeg/discovery.js";
+
+const LEGACY_ENCODING = Object.freeze({
+  codec: "h264" as const,
+  preset: "medium" as const,
+  legacyZeroLatency: true,
+  rateControl: Object.freeze({
+    mode: "abr" as const,
+    averageBitrate: 2_000_000,
+    maxBitrate: 3_000_000
+  })
+});
 
 describe("frozen FFmpeg encode invocation", () => {
   it("owns an exact raw-yuv spool range without pixel filters", () => {
@@ -25,7 +35,7 @@ describe("frozen FFmpeg encode invocation", () => {
       codedWidth: 48,
       codedHeight: 32,
       decodedStorageRect: [0, 0, 34, 22],
-      bitrate: { average: 2_000_000, peak: 3_000_000 }
+      encoding: LEGACY_ENCODING
     });
 
     expect(invocation.stdinFile).toEqual({
@@ -47,7 +57,7 @@ describe("frozen FFmpeg encode invocation", () => {
     expect(x264).toContain("crop-rect=0,0,14,10");
   });
 
-  it("owns the complete compiler-packed YUV pipe vector and fixed key interval", () => {
+  it("owns the complete compiler-packed YUV pipe vector and unit-length key interval", () => {
     const invocation = createEncodeAvcUnitInvocation({
       source: {
         type: "raw-yuv420p",
@@ -61,10 +71,9 @@ describe("frozen FFmpeg encode invocation", () => {
       endFrame: 7,
       codedWidth: 32,
       codedHeight: 32,
-      bitrate: { average: 2_000_000, peak: 3_000_000 }
+      encoding: LEGACY_ENCODING
     });
 
-    expect(FROZEN_AVC_KEYINT).toBe(901);
     expect(invocation).toEqual({
       cwd: "/private/job",
       stdinFile: {
@@ -74,7 +83,6 @@ describe("frozen FFmpeg encode invocation", () => {
       },
       arguments: [
         "-nostdin", "-hide_banner", "-loglevel", "error", "-xerror",
-        "-max_alloc", "67108864",
         "-protocol_whitelist", "pipe",
         "-f", "rawvideo", "-pixel_format", "yuv420p",
         "-video_size", "32x32", "-framerate", "30/1", "-i", "pipe:0",
@@ -82,17 +90,91 @@ describe("frozen FFmpeg encode invocation", () => {
         "-map_metadata", "-1", "-map_chapters", "-1",
         "-frames:v", "4", "-fps_mode", "passthrough",
         "-c:v", "libx264", "-preset", "medium", "-tune", "zerolatency",
-        "-profile:v", "baseline", "-level:v", "3.2", "-pix_fmt", "yuv420p",
+        "-profile:v", "baseline", "-pix_fmt", "yuv420p",
         "-color_range", "tv", "-color_primaries", "bt709",
         "-color_trc", "bt709", "-colorspace", "bt709",
         "-threads", "1", "-filter_threads", "1",
-        "-g", "901", "-keyint_min", "901", "-sc_threshold", "0",
+        "-g", "4", "-keyint_min", "4", "-sc_threshold", "0",
         "-bf", "0", "-refs", "1",
         "-b:v", "2000000", "-maxrate", "3000000", "-bufsize", "3000000",
-        "-x264-params", "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=901:min-keyint=901:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
+        "-x264-params", "aud=1:bframes=0:cabac=0:colormatrix=bt709:colorprim=bt709:force-cfr=1:keyint=4:min-keyint=4:open-gop=0:ref=1:range=tv:repeat-headers=1:scenecut=0:sliced-threads=0:slices=1:threads=1:lookahead-threads=1:sync-lookahead=0:transfer=bt709",
         "-f", "h264", "pipe:1"
       ]
     });
+  });
+
+  it("uses allowlisted capped CRF without legacy zerolatency tuning", () => {
+    const arguments_ = createEncodeAvcUnitInvocation({
+      source: {
+        type: "raw-yuv420p",
+        path: "/private/job/canonical.yuv",
+        width: 32,
+        height: 32,
+        frameRate: { numerator: 30, denominator: 1 },
+        frameBytes: 1_536
+      },
+      startFrame: 0,
+      endFrame: 4,
+      codedWidth: 32,
+      codedHeight: 32,
+      encoding: {
+        codec: "h264",
+        preset: "veryslow",
+        legacyZeroLatency: false,
+        rateControl: {
+          mode: "crf",
+          crf: 20,
+          maxBitrate: 10_000_000
+        }
+      }
+    }).arguments;
+
+    expect(arguments_).toEqual(expect.arrayContaining([
+      "-preset", "veryslow",
+      "-crf", "20",
+      "-maxrate", "10000000",
+      "-bufsize", "10000000"
+    ]));
+    expect(arguments_).not.toContain("-b:v");
+    expect(arguments_).not.toContain("-tune");
+    const x264 = arguments_[arguments_.indexOf("-x264-params") + 1]!;
+    expect(x264).not.toContain("sync-lookahead=0");
+  });
+
+  it("uses allowlisted nonlegacy ABR without CRF", () => {
+    const arguments_ = createEncodeAvcUnitInvocation({
+      source: {
+        type: "raw-yuv420p",
+        path: "/private/job/canonical.yuv",
+        width: 32,
+        height: 32,
+        frameRate: { numerator: 30, denominator: 1 },
+        frameBytes: 1_536
+      },
+      startFrame: 0,
+      endFrame: 4,
+      codedWidth: 32,
+      codedHeight: 32,
+      encoding: {
+        codec: "h264",
+        preset: "slow",
+        legacyZeroLatency: false,
+        rateControl: {
+          mode: "abr",
+          averageBitrate: 6_000_000,
+          maxBitrate: 10_000_000
+        }
+      }
+    }).arguments;
+
+    expect(arguments_).toEqual(expect.arrayContaining([
+      "-preset", "slow",
+      "-b:v", "6000000",
+      "-maxrate", "10000000",
+      "-bufsize", "10000000"
+    ]));
+    expect(arguments_).not.toContain("-crf");
+    expect(arguments_).not.toContain("-tune");
   });
 
   it("calibrates the cropped production encoder with compiler-packed YUV", () => {
@@ -119,7 +201,14 @@ describe("frozen FFmpeg encode invocation", () => {
       endFrame: 1,
       codedWidth: 16,
       codedHeight: 16,
-      bitrate: { average: 100_000, peak: 200_000 }
+      encoding: {
+        ...LEGACY_ENCODING,
+        rateControl: {
+          mode: "abr",
+          averageBitrate: 100_000,
+          maxBitrate: 200_000
+        }
+      }
     };
     for (const source of [
       { type: "video", path: "/input/clip.mov" },
@@ -165,7 +254,7 @@ describe("frozen FFmpeg encode invocation", () => {
       cwd: "/input",
       arguments: [
         "-nostdin", "-hide_banner", "-loglevel", "error", "-xerror",
-        "-max_alloc", "67108864", "-protocol_whitelist", "file,pipe",
+        "-protocol_whitelist", "file,pipe",
         "-f", "mov", "-i", "/input/clip.mov",
         "-map", "0:v:0", "-an", "-sn", "-dn",
         "-map_metadata", "-1", "-map_chapters", "-1",
@@ -177,7 +266,8 @@ describe("frozen FFmpeg encode invocation", () => {
     });
   });
 
-  it("only permits low-level callers to lower the media timeout ceiling", async () => {
+  it("permits authors to raise the media timeout", () => {
+    expect(mediaTimeout(120_001)).toBe(120_001);
     const source = {
       type: "raw-yuv420p" as const,
       path: "/input/canonical.yuv",
@@ -186,15 +276,21 @@ describe("frozen FFmpeg encode invocation", () => {
       frameRate: { numerator: 30, denominator: 1 },
       frameBytes: 1_536
     };
-    await expect(encodeAvcUnit({
+    expect(() => createEncodeAvcUnitInvocation({
       source,
       startFrame: 0,
       endFrame: 1,
       codedWidth: 32,
       codedHeight: 32,
-      bitrate: { average: 100_000, peak: 200_000 },
-      executable: "not-used",
+      encoding: {
+        ...LEGACY_ENCODING,
+        rateControl: {
+          mode: "abr",
+          averageBitrate: 100_000,
+          maxBitrate: 200_000
+        }
+      },
       timeoutMs: 120_001
-    })).rejects.toMatchObject({ code: "INPUT_INVALID" });
+    })).not.toThrow();
   });
 });

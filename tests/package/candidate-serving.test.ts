@@ -12,7 +12,7 @@ import {
 
 describe("candidate server byte authority", () => {
   it("serves only manifest-allowlisted paths and the exact manifest bytes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-serve-candidate-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-serve-candidate-"));
     try {
       const harness = Buffer.from("<!doctype html><title>certification</title>\n");
       const manifest = Buffer.from("{}\n");
@@ -35,7 +35,7 @@ describe("candidate server byte authority", () => {
   });
 
   it("fails closed when an allowlisted file changes after startup", async () => {
-    const root = await mkdtemp(join(tmpdir(), "rma-serve-mutated-"));
+    const root = await mkdtemp(join(tmpdir(), "aval-serve-mutated-"));
     try {
       const before = Buffer.from("before\n");
       const manifest = Buffer.from("{}\n");

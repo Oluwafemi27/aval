@@ -6,25 +6,11 @@ import type {
   ParsedFrontIndex
 } from "../src/model.js";
 import { validManifest } from "./manifest-fixture.js";
-import { makeSizedTestPng } from "./png-test-fixture.js";
-
-/** Build one deterministic strict PNG with a requested minimum byte length. */
-export function strictPng(
-  width: number,
-  height: number,
-  length = 33,
-  marker = 0
-): Uint8Array {
-  if (!Number.isSafeInteger(length) || length < 0) {
-    throw new Error("test PNG minimum length must be nonnegative");
-  }
-  return makeSizedTestPng(width, height, length, marker);
-}
 
 function manifestInputFromCompiled(
   manifest: CompiledManifestV01
 ): CompiledManifestInputV01 {
-  const { units, staticFrames, ...rest } = manifest;
+  const { units, ...rest } = manifest;
   return {
     ...rest,
     units: units.map((unit) => {
@@ -33,22 +19,15 @@ function manifestInputFromCompiled(
         ...fields,
         samples: samples.map(({ rendition, sha256 }) => ({ rendition, sha256 }))
       };
-    }),
-    staticFrames: staticFrames.map(({ id, width, height, sha256 }) => ({
-      id,
-      width,
-      height,
-      sha256
-    }))
+    })
   } as CompiledManifestInputV01;
 }
 
 export interface WriterFixtureOptions {
   readonly generatorSuffix?: string;
-  readonly staticLength?: number | ((index: number) => number);
 }
 
-/** A fresh valid writer input with real RMRF samples and strict PNG payloads. */
+/** A fresh valid writer input with real AVRF samples. */
 export function validWriterInput(
   options: WriterFixtureOptions = {}
 ): CanonicalAssetInputV01 {
@@ -81,19 +60,7 @@ export function validWriterInput(
       })
     )
   );
-  const staticPayloads = compiled.staticFrames.map((frame, index) => ({
-    staticFrame: frame.id,
-    bytes: strictPng(
-      frame.width,
-      frame.height,
-      typeof options.staticLength === "function"
-        ? options.staticLength(index)
-        : (options.staticLength ?? 33 + index),
-      index + 1
-    )
-  }));
-
-  return { manifest, accessUnits, staticPayloads };
+  return { manifest, accessUnits };
 }
 
 /** Extend the compact fixture to exercise rendition-major canonicalization. */
@@ -137,7 +104,7 @@ export function avcWriterInput(extraPayloadBytes: number): CanonicalAssetInputV0
   const input = validWriterInput();
   let remaining = extraPayloadBytes;
   const accessUnits = input.accessUnits.map((sample, ordinal) => {
-    const extra = Math.min(remaining, 2 * 1024 * 1024 - 1);
+    const extra = remaining;
     remaining -= extra;
     return {
       ...sample,
@@ -161,7 +128,10 @@ export function avcWriterInput(extraPayloadBytes: number): CanonicalAssetInputV0
       }],
       limits: {
         ...input.manifest.limits,
-        maxCompiledBytes: 32 * 1024 * 1024,
+        maxCompiledBytes: Math.max(
+          32 * 1024 * 1024,
+          extraPayloadBytes + 1024 * 1024
+        ),
         decodedPixelBytes: 1_024,
         runtimeWorkingSetBytes: 1_024
       }
@@ -173,12 +143,11 @@ export function avcWriterInput(extraPayloadBytes: number): CanonicalAssetInputV0
 /** Rebuild writer metadata from parsed values while reusing caller payloads. */
 export function writerInputFromParsed(
   front: ParsedFrontIndex,
-  payloads: Pick<CanonicalAssetInputV01, "accessUnits" | "staticPayloads">
+  payloads: Pick<CanonicalAssetInputV01, "accessUnits">
 ): CanonicalAssetInputV01 {
   return {
     manifest: manifestInputFromCompiled(front.manifest),
-    accessUnits: payloads.accessUnits,
-    staticPayloads: payloads.staticPayloads
+    accessUnits: payloads.accessUnits
   };
 }
 
@@ -215,7 +184,6 @@ export function shuffledWriterInput(
         }
         return { ...unit, samples: [...unit.samples].reverse() };
       }),
-      staticFrames: [...input.manifest.staticFrames].reverse(),
       states: [...input.manifest.states].reverse(),
       edges: [...input.manifest.edges].reverse(),
       bindings: [...input.manifest.bindings].reverse(),
@@ -225,8 +193,7 @@ export function shuffledWriterInput(
         immediateEdges: [...input.manifest.readiness.immediateEdges].reverse()
       }
     },
-    accessUnits: [...input.accessUnits].reverse(),
-    staticPayloads: [...input.staticPayloads].reverse()
+    accessUnits: [...input.accessUnits].reverse()
   };
 }
 

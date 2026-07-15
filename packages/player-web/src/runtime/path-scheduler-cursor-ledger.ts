@@ -1,7 +1,7 @@
 import type {
   GraphBodyDefinition,
   GraphStartPolicy
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type {
   RuntimeMediaCursor,

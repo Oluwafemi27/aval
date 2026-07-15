@@ -22,7 +22,8 @@ import type {
   AvcUnitInput
 } from "./types.js";
 
-const ENCODER_STREAM_MAX_NAL_UNITS = 65_536;
+const MAX_ENCODER_NAL_UNITS_PER_ACCESS_UNIT = 4;
+const MAX_ENCODER_PARAMETER_SET_NAL_UNITS = 2;
 const FOUR_BYTE_START_CODE = Object.freeze([0, 0, 0, 1] as const);
 
 /**
@@ -161,10 +162,18 @@ function normalizeEncoderUnitStream(
   expectedAccessUnitCount: number,
   path: string
 ): readonly AvcAccessUnitInput[] {
+  const maximumNalUnits =
+    expectedAccessUnitCount * MAX_ENCODER_NAL_UNITS_PER_ACCESS_UNIT +
+    MAX_ENCODER_PARAMETER_SET_NAL_UNITS;
+  requireAvc(
+    Number.isSafeInteger(maximumNalUnits),
+    path,
+    "derived encoder NAL-unit budget is not representable"
+  );
   const nals = splitAnnexBAccessUnit(
     bytes,
     path,
-    ENCODER_STREAM_MAX_NAL_UNITS,
+    maximumNalUnits,
     true
   );
   requireAvc(
@@ -228,7 +237,16 @@ function normalizeEncoderAccessUnit(
       "normalized access unit exceeds the sample budget"
     );
   }
-  const normalized = new Uint8Array(length);
+  let normalized: Uint8Array;
+  try {
+    normalized = new Uint8Array(length);
+  } catch {
+    throw new FormatError(
+      "PROFILE_INVALID",
+      `normalized AVC access-unit allocation of ${String(length)} bytes failed`,
+      { path }
+    );
+  }
   let offset = 0;
   for (const nal of retained) {
     normalized.set(FOUR_BYTE_START_CODE, offset);

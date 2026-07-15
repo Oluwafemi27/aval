@@ -3,13 +3,16 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { expect, test, type Page } from "@playwright/test";
-import { maximumAvcDecodedRgbaBytes } from "@rendered-motion/format";
+import {
+  maximumAvcDecodedRgbaBytes,
+  type AvcCodecV01
+} from "@aval/format";
 
 interface BrowserSupport {
   readonly supported: boolean;
   readonly reason?: string;
   readonly formatVersion: "0.1";
-  readonly codec: "avc1.42E020";
+  readonly codec: AvcCodecV01;
   readonly codedWidth: number;
   readonly codedHeight: number;
   readonly assetBytes: number;
@@ -31,7 +34,7 @@ interface BrowserProofReport {
     readonly formatVersion: "0.1";
     readonly bytes: number;
     readonly renditionId: string;
-    readonly codec: "avc1.42E020";
+    readonly codec: AvcCodecV01;
     readonly codedWidth: number;
     readonly codedHeight: number;
     readonly frameRate: { readonly numerator: number; readonly denominator: number };
@@ -148,15 +151,15 @@ interface BrowserHarness {
 }
 
 const FIXTURE_PATH = fileURLToPath(
-  new URL("../../fixtures/conformance/m5/opaque-path.rma", import.meta.url)
+  new URL("../../fixtures/conformance/m5/opaque-path.avl", import.meta.url)
 );
 const FIXTURE_SHA256 =
-  "f3777ad640387940858e9ef52924dd7c1fec2c02d9f732b93c866fc0b39efa20";
+  "21f9d8665eccd2f5a84a99ae2d4c61138d32a8700d1ab2b3f3f95c53d1c95a08";
 const REVERSIBLE_FIXTURE_PATH = fileURLToPath(
-  new URL("../../fixtures/conformance/m5/opaque-reversible.rma", import.meta.url)
+  new URL("../../fixtures/conformance/m5/opaque-reversible.avl", import.meta.url)
 );
 const REVERSIBLE_FIXTURE_SHA256 =
-  "d7cfff018d1b42b9cde438f65ea7a56d267618cb3f2ec0a91b1819caf7d6bcc9";
+  "ae5f059de4a16e76bf19787ba8348a378526edaf7619b0c4957dcfc08db4301d";
 const EXPECTED_FRAME_COUNT = 2_008;
 
 test("decodes the compiled opaque path through one dedicated worker", async ({
@@ -180,7 +183,7 @@ test("decodes the compiled opaque path through one dedicated worker", async ({
   expect(support).toMatchObject({
     supported: true,
     formatVersion: "0.1",
-    codec: "avc1.42E020",
+    codec: "avc1.42E015",
     codedWidth: 32,
     codedHeight: 32,
     assetBytes: fixture.byteLength
@@ -192,7 +195,7 @@ test("decodes the compiled opaque path through one dedicated worker", async ({
     formatVersion: "0.1",
     bytes: fixture.byteLength,
     renditionId: "opaque.1x",
-    codec: "avc1.42E020",
+    codec: "avc1.42E015",
     codedWidth: 32,
     codedHeight: 32,
     frameRate: { numerator: 30, denominator: 1 }

@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-11
 
-**Status:** Approved implementation slice derived from the committed web
-rendered-motion format design
+**Status:** Approved implementation slice derived from the committed AVAL
+format design
 
 ## 1. Objective
 
@@ -18,7 +18,7 @@ format, decoder worker, readiness measurements, and renderer.
 
 ## 2. Package Boundary
 
-Create `@rendered-motion/graph` as a new npm workspace package:
+Create `@aval/graph` as a new npm workspace package:
 
 - `model.ts` contains public immutable definition, snapshot, presentation,
   effect, and result types;
@@ -81,10 +81,8 @@ the initial state's static presentation, and enters `preparing`.
 
 `beginAnimated()` changes readiness to animated:
 
-- if the newest request still names the initial state and an initial unit
-  exists, intro frame zero becomes current;
-- if a different request was accepted during preparation, the intro is skipped,
-  initial body frame zero becomes current, and that route is pending; or
+- if an initial unit exists, intro frame zero becomes current and any request
+  accepted during preparation remains pending behind it; or
 - otherwise initial body frame zero becomes stable.
 
 An intro is locked and emits no transition effects. A different valid request
@@ -209,10 +207,10 @@ end, then settlement. Static recovery prepends readiness and fallback. Event
 effects carry state/edge IDs and input sequence where relevant; they never
 carry executable callbacks.
 
-The snapshot exposes readiness, phase, requested and visual states,
-`isTransitioning`, prospective state, current presentation, pending/active and
-follow-on edge IDs, direction/cursor, tick ordinal, input sequence, and pending
-request count.
+The snapshot exposes readiness, phase, whether the initial unit remains
+pending, requested and visual states, `isTransitioning`, prospective state,
+current presentation, pending/active and follow-on edge IDs, direction/cursor,
+tick ordinal, input sequence, and pending request count.
 
 A bounded 256-operation trace stores immutable results for diagnostics.
 
@@ -223,7 +221,8 @@ M3 passes when browser-independent tests prove:
 - validation limits, references, direct/event ambiguity, portal geometry,
   inverse consistency, and immutability;
 - loop portal, finite portal, finish, held, cut, and no-bridge timing;
-- intro play, skip, locked queue, and body-zero join;
+- intro play, interrupted restart, explicit static bypass, locked queue, and
+  body-zero join;
 - pending inverse cancellation by state and event;
 - adjacent active reversal in both directions;
 - reversible and locked follow-on acceptance/rejection;

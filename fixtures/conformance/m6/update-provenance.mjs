@@ -1,28 +1,15 @@
 import { createHash } from "node:crypto";
-import {
-  copyFile,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { chmod, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { inflateSync } from "node:zlib";
 
 import {
-  compileProjectFile
-} from "../../../packages/compiler/dist/index.js";
-
-import {
-  decodePngRgba,
   deriveAvcRenditionGeometry,
   inspectAvcAnnexBRendition,
   parseFrontIndex,
   serializeCanonicalJson,
   validateCompleteAsset,
-  validatePngProfile
+  writeCanonicalAsset
 } from "../../../packages/format/dist/index.js";
 
 const outputRoot = dirname(fileURLToPath(import.meta.url));
@@ -31,248 +18,174 @@ const compilerProvenancePath = resolve(
   repositoryRoot,
   "fixtures/compiler/m6/provenance.json"
 );
+const recipePath = resolve(outputRoot, "reviewed-motion/recipe.json");
 const outputPath = resolve(outputRoot, "provenance.json");
 const check = process.argv.includes("--check");
 const assetNames = [
-  "opaque-odd.rma",
-  "packed-alpha-loop.rma",
-  "packed-alpha-all-routes.rma"
+  "opaque-odd.avl",
+  "packed-alpha-loop.avl",
+  "packed-alpha-all-routes.avl"
 ];
 const projectByAsset = Object.freeze({
-  "opaque-odd.rma": "fixtures/compiler/m6/source/opaque-odd.json",
-  "packed-alpha-loop.rma": "fixtures/compiler/m6/source/packed-loop.json",
-  "packed-alpha-all-routes.rma":
+  "opaque-odd.avl": "fixtures/compiler/m6/source/opaque-odd.json",
+  "packed-alpha-loop.avl": "fixtures/compiler/m6/source/packed-loop.json",
+  "packed-alpha-all-routes.avl":
     "fixtures/compiler/m6/source/packed-all-routes.json"
 });
-const validPngs = [
-  ["stored-filter0.png", 0, 0, "conformance-pattern"],
-  ["fixed-filter1.png", 1, 1, "conformance-pattern"],
-  ["dynamic-filter2.png", 2, 2, "conformance-pattern"],
-  ["dynamic-filter3.png", 3, 2, "conformance-pattern"],
-  ["dynamic-filter4.png", 4, 2, "conformance-pattern"],
-  ["dynamic-literal-only-filter0.png", 0, 2, "transparent-black"]
-];
 
-const temporaryRoot = await mkdtemp(join(tmpdir(), "rma-m6-provenance-"));
-try {
-  const provenance = await regenerateProvenance(temporaryRoot);
-  assertNoAbsolutePaths(provenance);
-  const serialized = `${JSON.stringify(provenance, null, 2)}\n`;
-  if (check) {
-    const recorded = await readFile(outputPath, "utf8");
-    require(recorded === serialized, "complete M6 conformance provenance is stale");
-  } else {
-    await Promise.all(assetNames.map((name) => copyFile(
-      resolve(temporaryRoot, name),
-      resolve(outputRoot, name)
-    )));
-    await writeFile(outputPath, serialized);
-  }
-} finally {
-  await rm(temporaryRoot, { recursive: true, force: true });
+const [compilerProvenanceBytes, recipeBytes] = await Promise.all([
+  readFile(compilerProvenancePath),
+  readFile(recipePath)
+]);
+const recipe = JSON.parse(recipeBytes.toString("utf8"));
+require(recipe.recipeVersion === "0.1", "reviewed-motion recipe version drifted");
+assertNoRemovedPosterKeys(recipe);
+assertNoAbsolutePaths(recipe, "recipe");
+const payloadPath = resolve(repositoryRoot, recipe.payload.path);
+const payloadBytes = new Uint8Array(await readFile(payloadPath));
+requireDigest(payloadBytes, recipe.payload, "reviewed AVC payload");
+const reviewedBlobs = validateReviewedBlobs(recipe.blobs, payloadBytes);
+
+requireEqual(
+  recipe.assets.map(({ name }) => name),
+  assetNames,
+  "reviewed-motion asset order drifted"
+);
+const assembled = [];
+for (const source of recipe.assets) {
+  assembled.push(await assembleAsset(source, reviewedBlobs, payloadBytes));
 }
 
-async function regenerateProvenance(assetRoot) {
-  const compilerProvenanceBytes = await readFile(compilerProvenancePath);
-  const compiled = [];
-  for (const name of assetNames) {
-    const projectRelative = projectByAsset[name];
-    require(projectRelative !== undefined, `${name} has no source project mapping`);
-    const assetPath = resolve(assetRoot, name);
-    const result = await compileProjectFile({
-      projectPath: resolve(repositoryRoot, projectRelative),
-      outputPath: assetPath
-    });
-    compiled.push(await buildAssetProvenance(name, assetPath, result));
-  }
-  const referenceToolchain = normalizedToolchain(compiled[0].provenance);
-  for (const entry of compiled.slice(1)) {
-    requireEqual(
-      normalizedToolchain(entry.provenance),
-      referenceToolchain,
-      "M6 assets were not produced by one reviewed toolchain"
-    );
-  }
-  const pngCorpus = await buildValidPngCorpus();
-  const malformedCorpus = await buildMalformedCorpus();
-  const malformedCorpusManifest = await digest("malformed/corpus.json");
-  const malformedContracts = await digest("malformed/contracts.json");
-  return {
-    provenanceVersion: "0.1",
-    generatedAt: "2026-07-12",
-    generator: "rendered-motion-compiler/0.2-web",
-    regeneration: {
-      build: "npm run build",
-      compilerSourceCheck:
-        "node fixtures/compiler/m6/update-provenance.mjs --check",
-      completeConformanceCheck:
-        "node fixtures/conformance/m6/update-provenance.mjs --check"
+const provenance = {
+  provenanceVersion: "0.1",
+  generatedAt: "2026-07-14",
+  generator: "aval-format-writer/0.1",
+  regeneration: {
+    build: "npm run build -w @aval/format",
+    compilerSourceCheck:
+      "node fixtures/compiler/m6/update-provenance.mjs --check",
+    completeConformanceCheck:
+      "node fixtures/conformance/m6/update-provenance.mjs --check"
+  },
+  compilerSource: {
+    path: "fixtures/compiler/m6/provenance.json",
+    bytes: compilerProvenanceBytes.byteLength,
+    sha256: sha256(compilerProvenanceBytes)
+  },
+  reviewedEncodedSource: {
+    recipe: {
+      path: "fixtures/conformance/m6/reviewed-motion/recipe.json",
+      bytes: recipeBytes.byteLength,
+      sha256: sha256(recipeBytes)
     },
-    compilerSource: {
-      path: "fixtures/compiler/m6/provenance.json",
-      bytes: compilerProvenanceBytes.byteLength,
-      sha256: sha256(compilerProvenanceBytes)
-    },
-    toolchain: referenceToolchain,
-    coverage: [
-      "odd-visible-and-coded-crop-geometry",
-      "opaque-and-stacked-alpha-renditions",
-      "two-ranked-packed-alpha-renditions",
-      "alpha-auto-and-explicit-policy",
-      "hostile-hidden-rgb-and-edge-dilation",
-      "alpha-and-three-background-composite-quality",
-      "shared-and-distinct-strict-static-pngs",
-      "all-route-classes-and-readiness",
-      "stored-fixed-dynamic-deflate-and-all-png-filters",
-      "rfc1951-literal-only-dynamic-empty-distance-alphabet",
-      "exhaustive-reachable-strict-png-envelope-zlib-deflate-and-scanline-rejections",
-      "executable-png-and-deflate-limit-only-contracts",
-      "malformed-geometry-sps-crop-alpha-quality-and-resource-contracts"
-    ],
-    assets: compiled.map(({ provenance: _provenance, ...asset }) => asset),
-    pngCorpus,
-    malformedCorpus,
-    malformedCorpusManifest,
-    malformedContracts
-  };
-}
+    payload: recipe.payload,
+    claim: "The recorded AVC unit blobs are preserved byte-for-byte; the current writer deterministically assembles poster-free AVAL containers without re-encoding."
+  },
+  toolchain: recipe.toolchain,
+  coverage: [
+    "odd-visible-and-coded-crop-geometry",
+    "opaque-and-stacked-alpha-renditions",
+    "two-ranked-packed-alpha-renditions",
+    "alpha-auto-and-explicit-policy",
+    "hostile-hidden-rgb-and-edge-dilation",
+    "alpha-and-three-background-composite-quality",
+    "all-route-classes-and-readiness",
+    "motion-only-canonical-payload-layout",
+    "tool-free-reviewed-sample-container-reassembly"
+  ],
+  assets: assembled.map(({ bytes: _bytes, ...entry }) => entry)
+};
+assertNoRemovedPosterKeys(provenance);
+assertNoAbsolutePaths(provenance);
+const serialized = `${JSON.stringify(provenance, null, 2)}\n`;
 
-async function buildValidPngCorpus() {
-  return Promise.all(validPngs.map(async ([name, filter, btype, pixelFixture]) => {
-    const bytes = new Uint8Array(await readFile(resolve(outputRoot, "png", name)));
-    const plan = validatePngProfile({
-      png: bytes,
-      expectedWidth: 32,
-      expectedHeight: 16
-    });
-    const decoded = decodePngRgba(plan);
-    const zlib = plan.copyZlibBytes();
-    const filtered = inflateSync(zlib);
+if (check) {
+  const [recorded, ...assets] = await Promise.all([
+    readFile(outputPath, "utf8"),
+    ...assetNames.map((name) => readFile(resolve(outputRoot, name)))
+  ]);
+  require(recorded === serialized, "complete M6 conformance provenance is stale");
+  for (let index = 0; index < assetNames.length; index += 1) {
     require(
-      Array.from({ length: 16 }, (_, row) => filtered[row * 129])
-        .every((value) => value === filter),
-      `${name} does not use filter ${String(filter)} on every row`
+      Buffer.compare(assets[index], assembled[index].bytes) === 0,
+      `${assetNames[index]} is stale`
     );
-    require(firstDeflateBlockType(zlib) === btype, `${name} has the wrong block type`);
-    return {
-      ...await digest(`png/${name}`),
-      width: decoded.width,
-      height: decoded.height,
-      rgbaBytes: decoded.rgba.byteLength,
-      filteredBytes: filtered.byteLength,
-      zlibBytes: zlib.byteLength,
-      rowFilter: filter,
-      firstDeflateBlockType: btype,
-      pixelFixture
-    };
-  }));
-}
-
-async function buildMalformedCorpus() {
-  const manifest = JSON.parse(
-    await readFile(resolve(outputRoot, "malformed/corpus.json"), "utf8")
-  );
-  require(manifest.corpusVersion === "0.1", "malformed corpus version drifted");
-  require(
-    manifest.expectedWidth === 32 && manifest.expectedHeight === 16,
-    "malformed corpus dimensions drifted"
-  );
-  require(
-    Array.isArray(manifest.cases) && manifest.cases.length >= 50,
-    "malformed corpus is not comprehensive"
-  );
-  const names = new Set();
-  const rejectionClasses = new Set();
-  for (const entry of manifest.cases) {
-    require(
-      typeof entry.name === "string" && entry.name.endsWith(".png"),
-      "malformed corpus contains an invalid file name"
-    );
-    require(!names.has(entry.name), `duplicate malformed file ${entry.name}`);
-    require(
-      typeof entry.rejectionClass === "string" &&
-        !rejectionClasses.has(entry.rejectionClass),
-      `duplicate malformed rejection class ${String(entry.rejectionClass)}`
-    );
-    require(
-      entry.expected?.name === "FormatError" &&
-        [
-          "PNG_ENVELOPE_INVALID",
-          "PNG_DEFLATE_INVALID",
-          "PNG_SCANLINE_INVALID"
-        ].includes(entry.expected.code),
-      `${entry.name} has an invalid expected public failure`
-    );
-    names.add(entry.name);
-    rejectionClasses.add(entry.rejectionClass);
   }
-  return Promise.all(manifest.cases.map(async (entry) => {
-    const { name, rejectionClass, expected } = entry;
-    const bytes = new Uint8Array(
-      await readFile(resolve(outputRoot, "malformed", name))
-    );
-    let rejection;
-    try {
-      const plan = validatePngProfile({
-        png: bytes,
-        expectedWidth: 32,
-        expectedHeight: 16
-      });
-      decodePngRgba(plan);
-    } catch (error) {
-      rejection = {
-        name: error?.constructor?.name ?? "Error",
-        code: typeof error?.code === "string" ? error.code : "UNKNOWN"
-      };
+} else {
+  await Promise.all(assembled.map(({ name, bytes }) =>
+    writeFile(resolve(outputRoot, name), bytes)
+  ));
+  await writeFile(outputPath, serialized);
+  await Promise.all(assetNames.map((name) =>
+    chmod(resolve(outputRoot, name), 0o644)
+  ));
+}
+
+async function assembleAsset(source, blobs, payload) {
+  require(assetNames.includes(source.name), `unexpected reviewed asset ${source.name}`);
+  const accessUnits = [];
+  let encodedPayloadBytes = 0;
+  for (const rendition of source.manifest.renditions) {
+    for (const unit of source.manifest.units) {
+      const sample = unit.samples.find(({ rendition: id }) => id === rendition.id);
+      require(sample !== undefined, `${source.name} is missing ${rendition.id}/${unit.id}`);
+      const blob = blobs.get(sample.sha256);
+      require(blob !== undefined, `${source.name} references an unknown reviewed blob`);
+      require(
+        blob.samples.length === unit.frameCount,
+        `${source.name} ${rendition.id}/${unit.id} frame count drifted`
+      );
+      let cursor = blob.offset;
+      for (let frameIndex = 0; frameIndex < blob.samples.length; frameIndex += 1) {
+        const frame = blob.samples[frameIndex];
+        accessUnits.push({
+          rendition: rendition.id,
+          unit: unit.id,
+          frameIndex,
+          key: frame.key,
+          bytes: payload.slice(cursor, cursor + frame.length)
+        });
+        cursor += frame.length;
+      }
+      require(cursor === blob.offset + blob.length, "reviewed blob sample layout drifted");
+      encodedPayloadBytes += blob.length;
     }
-    require(rejection !== undefined, `${name} unexpectedly decoded`);
-    require(
-      rejection.name === expected.name && rejection.code === expected.code,
-      `${name} crossed its frozen ${rejectionClass} failure boundary`
-    );
-    return {
-      ...await digest(`malformed/${name}`),
-      rejectionClass,
-      rejection
-    };
-  }));
-}
-
-async function buildAssetProvenance(name, assetPath, result) {
-  const bytes = new Uint8Array(await readFile(assetPath));
+  }
+  require(
+    encodedPayloadBytes === source.encodedPayloadBytes,
+    `${source.name} encoded payload accounting drifted`
+  );
+  const manifest = {
+    ...source.manifest,
+    units: source.manifest.units.map((unit) => ({
+      ...unit,
+      samples: unit.samples.map(({ rendition, sha256: digest }) => ({
+        rendition,
+        sha256: digest
+      }))
+    }))
+  };
+  const bytes = writeCanonicalAsset({ manifest, accessUnits });
   const { frontIndex } = validateCompleteAsset({ bytes });
-  requireEqual(frontIndex, parseFrontIndex(bytes), `${name} front index drifted`);
+  requireEqual(frontIndex, parseFrontIndex(bytes), `${source.name} front index drifted`);
   require(
-    result.bytes === bytes.byteLength && result.sha256 === sha256(bytes),
-    `${name} compile result does not identify the asset`
+    frontIndex.unitBlobs.at(-1).offset + frontIndex.unitBlobs.at(-1).length ===
+      bytes.byteLength,
+    `${source.name} does not end at its final motion sample`
   );
 
-  const projectRelative = projectByAsset[name];
-  require(projectRelative !== undefined, `${name} has no source project mapping`);
-  const projectPath = resolve(repositoryRoot, projectRelative);
-  const projectBytes = await readFile(projectPath);
-  require(
-    result.buildDetails.projectFile.sha256 === sha256(projectBytes),
-    `${name} compile result does not identify its project`
-  );
-
+  const projectRelative = projectByAsset[source.name];
+  require(projectRelative !== undefined, `${source.name} has no source project mapping`);
+  const projectBytes = await readFile(resolve(repositoryRoot, projectRelative));
   const units = frontIndex.unitBlobs.map((blob) => {
     require(
       sha256(bytes.subarray(blob.offset, blob.offset + blob.length)) === blob.sha256,
-      `${name} unit ${blob.rendition}/${blob.unit} digest mismatch`
+      `${source.name} unit ${blob.rendition}/${blob.unit} digest mismatch`
     );
     return { ...blob };
   });
-  const staticFrames = frontIndex.staticBlobs.map((blob) => {
-    require(
-      sha256(bytes.subarray(blob.offset, blob.offset + blob.length)) === blob.sha256,
-      `${name} static ${blob.staticFrame} digest mismatch`
-    );
-    return { ...blob };
-  });
-
   return {
-    name,
+    name: source.name,
     sourceProject: {
       path: projectRelative,
       bytes: projectBytes.byteLength,
@@ -283,26 +196,46 @@ async function buildAssetProvenance(name, assetPath, result) {
     manifestSha256: sha256(serializeCanonicalJson(frontIndex.manifest)),
     manifest: frontIndex.manifest,
     units,
-    staticFrames,
     strictInspections: inspectEveryRendition(bytes, frontIndex),
-    alphaPolicy: result.buildDetails.alphaPolicy,
-    sources: result.buildDetails.sources.map((source) => ({
-      id: source.id,
-      hasAlpha: source.hasAlpha,
-      alphaAudit: source.alphaAudit,
-      width: source.width,
-      height: source.height,
-      frameCount: source.frameCount,
-      frameRate: source.frameRate,
-      pixelFormat: source.pixelFormat
-    })),
-    renditions: result.buildDetails.renditions,
-    statics: result.buildDetails.statics,
-    continuity: result.buildDetails.continuity,
-    encodedPayloadBytes: result.buildDetails.encodedPayloadBytes,
-    staticPayloadBytes: result.buildDetails.staticPayloadBytes,
-    provenance: result.provenance
+    alphaPolicy: source.alphaPolicy,
+    sources: source.sources,
+    renditions: source.renditions,
+    continuity: source.continuity,
+    encodedPayloadBytes: source.encodedPayloadBytes,
+    bytes
   };
+}
+
+function validateReviewedBlobs(entries, payload) {
+  require(Array.isArray(entries) && entries.length > 0, "reviewed blob set is empty");
+  const blobs = new Map();
+  let cursor = 0;
+  for (const entry of entries) {
+    require(entry.offset === cursor, "reviewed blob pack is not contiguous");
+    require(
+      Number.isSafeInteger(entry.length) && entry.length > 0,
+      "reviewed blob length is invalid"
+    );
+    require(Array.isArray(entry.samples) && entry.samples.length > 0, "reviewed sample set is empty");
+    let sampleBytes = 0;
+    for (const sample of entry.samples) {
+      require(
+        Number.isSafeInteger(sample.length) && sample.length > 0 &&
+          typeof sample.key === "boolean",
+        "reviewed sample metadata is invalid"
+      );
+      sampleBytes += sample.length;
+    }
+    require(sampleBytes === entry.length, "reviewed sample lengths do not fill their blob");
+    const bytes = payload.subarray(entry.offset, entry.offset + entry.length);
+    require(bytes.byteLength === entry.length, "reviewed blob range is truncated");
+    require(sha256(bytes) === entry.sha256, "reviewed blob digest mismatch");
+    require(!blobs.has(entry.sha256), "reviewed blob digest is duplicated");
+    blobs.set(entry.sha256, entry);
+    cursor += entry.length;
+  }
+  require(cursor === payload.byteLength, "reviewed blobs do not end at payload EOF");
+  return blobs;
 }
 
 function inspectEveryRendition(bytes, frontIndex) {
@@ -327,7 +260,8 @@ function inspectEveryRendition(bytes, frontIndex) {
         averageBitrate: rendition.bitrate.average,
         peakBitrate: rendition.bitrate.peak,
         cpbBufferBits: rendition.bitrate.peak,
-        requireBt709LimitedRange: true
+        requireBt709LimitedRange: true,
+        quantizationPolicy: "fixed-qp26-v0"
       },
       units: frontIndex.manifest.units.map((unit, unitIndex) => ({
         id: unit.id,
@@ -357,39 +291,47 @@ function inspectEveryRendition(bytes, frontIndex) {
   });
 }
 
-async function digest(relativePath) {
-  const bytes = await readFile(resolve(outputRoot, relativePath));
-  return {
-    path: `fixtures/conformance/m6/${relativePath}`,
-    bytes: bytes.byteLength,
-    sha256: sha256(bytes)
-  };
+function requireDigest(bytes, descriptor, label) {
+  require(
+    bytes.byteLength === descriptor.bytes && sha256(bytes) === descriptor.sha256,
+    `${label} digest drifted`
+  );
 }
 
-function firstDeflateBlockType(zlib) {
-  require(zlib.byteLength >= 3, "zlib stream is truncated");
-  return (zlib[2] >> 1) & 0b11;
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
-function normalizedToolchain(toolchain) {
-  return {
-    aggregateMemoryLimit: toolchain.aggregateMemoryLimit,
-    ffmpeg: {
-      executableSha256: toolchain.executableSha256,
-      version: toolchain.versionLine,
-      versionOutputSha256: toolchain.versionOutputSha256,
-      configurationSha256: sha256(
-        new TextEncoder().encode(toolchain.configurationLine)
-      ),
-      encodersOutputSha256: toolchain.encodersOutputSha256,
-      calibrationSha256: toolchain.calibrationSha256
-    },
-    ffprobe: {
-      executableSha256: toolchain.ffprobeExecutableSha256,
-      version: toolchain.ffprobeVersionLine,
-      versionOutputSha256: toolchain.ffprobeVersionOutputSha256
-    }
-  };
+function require(value, message) {
+  if (!value) throw new Error(message);
+}
+
+function requireEqual(actual, expected, message) {
+  require(JSON.stringify(actual) === JSON.stringify(expected), message);
+}
+
+function assertNoRemovedPosterKeys(value, path = "value") {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      assertNoRemovedPosterKeys(entry, `${path}[${String(index)}]`)
+    );
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  const removed = new Set([
+    "poster",
+    "fallback",
+    "staticFrame",
+    "staticFrames",
+    "staticPayloads",
+    "staticPayloadBytes",
+    "staticBlobs",
+    "statics"
+  ]);
+  for (const [key, entry] of Object.entries(value)) {
+    require(!removed.has(key), `${path}.${key} is removed poster metadata`);
+    assertNoRemovedPosterKeys(entry, `${path}.${key}`);
+  }
 }
 
 function assertNoAbsolutePaths(value, path = "provenance") {
@@ -409,21 +351,9 @@ function assertNoAbsolutePaths(value, path = "provenance") {
     );
     return;
   }
-  if (typeof value === "object" && value !== null) {
-    for (const [key, child] of Object.entries(value)) {
-      assertNoAbsolutePaths(child, `${path}.${key}`);
+  if (value !== null && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) {
+      assertNoAbsolutePaths(entry, `${path}.${key}`);
     }
   }
-}
-
-function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-function requireEqual(actual, expected, message) {
-  require(JSON.stringify(actual) === JSON.stringify(expected), message);
-}
-
-function require(condition, message) {
-  if (!condition) throw new Error(message);
 }

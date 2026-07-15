@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("native click routes the authored activate binding without keyboard synthesis", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?inputs");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -15,7 +15,7 @@ test("native click routes the authored activate binding without keyboard synthes
 
 test("bindings none removes automatic routing but preserves direct send", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?bindings-none");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -34,7 +34,7 @@ test("bindings none removes automatic routing but preserves direct send", async 
 
 test("automatic focus sampling follows the interaction target shadow root", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?shadow-focus-input");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -76,7 +76,7 @@ test("automatic focus sampling follows the interaction target shadow root", asyn
 
 test("touch pointer hover does not become sticky during source metadata sampling", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?touch-hover-input");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");

@@ -3,12 +3,11 @@ import type {
   EdgeV01,
   RenditionV01,
   UnitV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import type { RuntimeFrameKey } from "./model.js";
 import { manifestBodyFrameAt } from "./body-frame-semantics.js";
 import {
-  RUNTIME_MEBIBYTE,
   checkedByteNumber,
   checkedRgbaBytes,
   roundedGpuAllocationBytes,
@@ -16,12 +15,14 @@ import {
 } from "./checked-runtime-bytes.js";
 
 export const MIN_REVERSIBLE_CLIP_FRAMES = 1;
-export const MAX_REVERSIBLE_CLIP_FRAMES = 24;
+/** Compatibility export; reversible clips are bounded only by representation. */
+export const MAX_REVERSIBLE_CLIP_FRAMES = 0xffff_ffff;
 export const MIN_ENDPOINT_RUNWAY_FRAMES = 6;
 export const MAX_ENDPOINT_RUNWAY_FRAMES = 12;
-export const MAX_INTERACTION_CACHE_LAYERS = 128;
-export const MAX_REVERSIBLE_CLIP_BYTES = 24 * RUNTIME_MEBIBYTE;
-export const MAX_REVERSIBLE_ENDPOINT_PAIR_BYTES = 48 * RUNTIME_MEBIBYTE;
+/** Compatibility exports; the active layer boundary is the queried device. */
+export const MAX_INTERACTION_CACHE_LAYERS = Number.MAX_SAFE_INTEGER;
+export const MAX_REVERSIBLE_CLIP_BYTES = Number.MAX_SAFE_INTEGER;
+export const MAX_REVERSIBLE_ENDPOINT_PAIR_BYTES = Number.MAX_SAFE_INTEGER;
 
 export interface InteractionCacheDeviceLimits {
   readonly maxArrayTextureLayers: number;
@@ -194,7 +195,9 @@ type ProductionAvcRendition = Extract<
   {
     readonly profile:
       | "avc-annexb-opaque-v0"
-      | "avc-annexb-packed-alpha-v0";
+      | "avc-annexb-packed-alpha-v0"
+      | "avc-annexb-opaque-v1"
+      | "avc-annexb-packed-alpha-v1";
   }
 >;
 
@@ -205,7 +208,9 @@ function requireProductionAvcRendition(
   const selected = renditions.find((candidate) => candidate.id === id);
   if (
     selected?.profile !== "avc-annexb-opaque-v0" &&
-    selected?.profile !== "avc-annexb-packed-alpha-v0"
+    selected?.profile !== "avc-annexb-packed-alpha-v0" &&
+    selected?.profile !== "avc-annexb-opaque-v1" &&
+    selected?.profile !== "avc-annexb-packed-alpha-v1"
   ) {
     throw new RangeError("selected rendition must be a production AVC rendition");
   }
@@ -266,7 +271,11 @@ export function createInteractionCachePlanFromSemanticSequences(
       frames.push(key);
       layers.push(layer);
     }
-    semanticFrameCount += sequence.length;
+    const nextSemanticFrameCount = semanticFrameCount + sequence.length;
+    if (!Number.isSafeInteger(nextSemanticFrameCount)) {
+      throw new RangeError("interaction cache semantic frame count exceeds safe integer range");
+    }
+    semanticFrameCount = nextSemanticFrameCount;
     return Object.freeze({
       frames: Object.freeze(frames),
       layers: Object.freeze(layers)
@@ -314,17 +323,11 @@ export function createInteractionCachePlanFromSemanticSequences(
         `${label} target endpoint runway`
       );
       const clipBytes = frameBytes * BigInt(new Set(clip.layers).size);
-      if (clipBytes > BigInt(MAX_REVERSIBLE_CLIP_BYTES)) {
-        throw new RangeError("reversible clip bytes exceed the 24 MiB cap");
-      }
       const endpointLayers = new Set([
         ...source.layers,
         ...target.layers
       ]);
       const endpointPairBytes = frameBytes * BigInt(endpointLayers.size);
-      if (endpointPairBytes > BigInt(MAX_REVERSIBLE_ENDPOINT_PAIR_BYTES)) {
-        throw new RangeError("reversible endpoint pair bytes exceed the 48 MiB cap");
-      }
       return Object.freeze({
         unit: candidate.unit,
         sourceEndpoint: Object.freeze({
@@ -369,10 +372,7 @@ export function createInteractionCachePlanFromSemanticSequences(
     });
 
   const layerCount = uniqueFrames.length;
-  const layerLimit = Math.min(
-    MAX_INTERACTION_CACHE_LAYERS,
-    input.deviceLimits.maxArrayTextureLayers
-  );
+  const layerLimit = input.deviceLimits.maxArrayTextureLayers;
   if (layerCount > layerLimit) {
     throw new RangeError(
       `interaction cache layer count ${String(layerCount)} exceeds layer limit ${String(layerLimit)}`
@@ -507,6 +507,11 @@ function validateSequenceLength(
 ): void {
   if (!Array.isArray(sequence)) throw new TypeError(`${label} must be an array`);
   if (sequence.length < minimum || sequence.length > maximum) {
+    if (maximum === MAX_REVERSIBLE_CLIP_FRAMES) {
+      throw new RangeError(
+        `${label} must contain at least ${String(minimum)} frame${minimum === 1 ? "" : "s"}`
+      );
+    }
     throw new RangeError(
       `${label} must contain ${String(minimum)}–${String(maximum)} frames`
     );

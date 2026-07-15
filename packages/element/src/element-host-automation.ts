@@ -1,4 +1,4 @@
-import type { BindingSourceV01 } from "@rendered-motion/player-web";
+import type { BindingSourceV01 } from "@aval/player-web";
 
 import { AutomaticInputs } from "./automatic-inputs.js";
 import { BindingRouter } from "./binding-router.js";

@@ -484,7 +484,10 @@ class LegacyOpaqueBackendAdapter implements FrameRendererBackend {
   }
 
   public allocate(layout: FrameTextureLayout, slots: number): void {
-    if (layout.geometry.profile !== "avc-annexb-opaque-v0") {
+    if (
+      layout.geometry.profile !== "avc-annexb-opaque-v0" &&
+      layout.geometry.profile !== "avc-annexb-opaque-v1"
+    ) {
       throw new RangeError(
         "deprecated opaque backend cannot render packed alpha"
       );

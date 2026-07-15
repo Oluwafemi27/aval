@@ -113,14 +113,14 @@ describe("MotionPolicyCoordinator", () => {
     expect(coordinator.snapshot().actualMode).toBe("animated");
   });
 
-  it("keeps codec, resource, readiness, animation, and PNG failures sticky", () => {
+  it("keeps codec, resource, readiness, animation, and fallback failures sticky", () => {
     for (const origin of [
       "no-avc-rendition",
       "codec-unsupported",
       "resource-budget",
       "readiness-failed",
       "animation-failure",
-      "png-failure"
+      "fallback-failure"
     ] as const) {
       const coordinator = new MotionPolicyCoordinator({ policy: "full" });
       coordinator.installStatic(origin);

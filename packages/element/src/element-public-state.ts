@@ -3,18 +3,18 @@ import type {
   RuntimeReadiness,
   RuntimeReadinessResult,
   StaticReason
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import type {
-  RenderedMotionMode,
-  RenderedMotionMotion,
-  RenderedMotionPublicFailure
+  AvalMode,
+  AvalMotion,
+  AvalPublicFailure
 } from "./public-types.js";
 
 /** Sole mutable authority for the element's public playback state. */
 export class ElementPublicState {
   #readiness: RuntimeReadiness = "unready";
-  #mode: RenderedMotionMode = null;
+  #mode: AvalMode = null;
   #assurance: "best-effort" | null = null;
   #staticReason: StaticReason | null = null;
   #initialState: string | null = null;
@@ -24,10 +24,10 @@ export class ElementPublicState {
   #stateNames: readonly string[] = Object.freeze([]);
   #eventNames: readonly string[] = Object.freeze([]);
   #inputBindings: readonly Readonly<BindingV01>[] = Object.freeze([]);
-  #lastFailure: Readonly<RenderedMotionPublicFailure> | null = null;
+  #lastFailure: Readonly<AvalPublicFailure> | null = null;
 
   public get readiness(): RuntimeReadiness { return this.#readiness; }
-  public get mode(): RenderedMotionMode { return this.#mode; }
+  public get mode(): AvalMode { return this.#mode; }
   public get assurance(): "best-effort" | null { return this.#assurance; }
   public get staticReason(): StaticReason | null { return this.#staticReason; }
   public get initialState(): string | null { return this.#initialState; }
@@ -37,14 +37,14 @@ export class ElementPublicState {
   public get stateNames(): readonly string[] { return this.#stateNames; }
   public get eventNames(): readonly string[] { return this.#eventNames; }
   public get inputBindings(): readonly Readonly<BindingV01>[] { return this.#inputBindings; }
-  public get lastFailure(): Readonly<RenderedMotionPublicFailure> | null {
+  public get lastFailure(): Readonly<AvalPublicFailure> | null {
     return this.#lastFailure;
   }
 
   public setRequestedState(value: string): void { this.#requestedState = value; }
   public setVisualState(value: string): void { this.#visualState = value; }
   public setTransitioning(value: boolean): void { this.#transitioning = value; }
-  public setFailure(value: Readonly<RenderedMotionPublicFailure>): void {
+  public setFailure(value: Readonly<AvalPublicFailure>): void {
     this.#lastFailure = value;
   }
   public clearFailure(): void { this.#lastFailure = null; }
@@ -86,7 +86,7 @@ export class ElementPublicState {
   public stageReadiness(input: Readonly<{
     value: RuntimeReadiness;
     reason: StaticReason | null;
-    motion: RenderedMotionMotion;
+    motion: AvalMotion;
     hostReduced: boolean | null;
     effectivelyVisible: boolean;
   }>): void {

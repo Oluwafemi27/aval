@@ -30,7 +30,7 @@ const result = spawnSync("npx", ["vitest", "run", "--config", "vitest.m9.config.
   cwd: root,
   stdio: "inherit",
   timeout: profile === "release" ? 300_000 : 120_000,
-  env: { ...process.env, RMA_MUTATION_PROFILE: profile, RMA_MUTATION_SEEDS: seeds.join(",") }
+  env: { ...process.env, AVL_MUTATION_PROFILE: profile, AVL_MUTATION_SEEDS: seeds.join(",") }
 });
 if (result.error !== undefined) throw result.error;
 process.exitCode = result.status ?? 1;

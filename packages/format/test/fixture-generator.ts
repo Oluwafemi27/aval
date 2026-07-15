@@ -7,25 +7,18 @@ import type {
   CanonicalAssetInputV01,
   CompiledManifestInputV01,
   CompiledManifestV01,
-  StaticPayloadInputV01,
   UnitInputV01,
   UnitV01
 } from "../src/model.js";
 import { validManifest } from "./manifest-fixture.js";
-import { makeSizedTestPng } from "./png-test-fixture.js";
 
 const DECLARED_DIGEST = "0".repeat(64);
 
 export interface GeneratedConformanceFixture {
-  readonly fileName: "reference-loop.rma" | "reference-graph.rma";
+  readonly fileName: "reference-loop.avl" | "reference-graph.avl";
   readonly description: string;
   readonly bytes: Uint8Array;
   readonly sha256: string;
-}
-
-/** A deterministic strict stored-DEFLATE PNG fallback. */
-function staticPng(marker: number): Uint8Array {
-  return makeSizedTestPng(2, 2, 0, marker);
 }
 
 function referenceRgba(ordinal: number): Uint8Array {
@@ -107,35 +100,21 @@ function unitInput(unit: UnitV01): UnitInputV01 {
 function writerInputFromManifest(
   source: CompiledManifestV01
 ): CanonicalAssetInputV01 {
-  const { units, staticFrames, ...rest } = source;
+  const { units, ...rest } = source;
   const manifest: CompiledManifestInputV01 = {
     ...rest,
-    units: Object.freeze(units.map(unitInput)),
-    staticFrames: Object.freeze(
-      staticFrames.map(({ id, width, height, sha256 }) =>
-        Object.freeze({ id, width, height, sha256 })
-      )
-    )
+    units: Object.freeze(units.map(unitInput))
   };
-  const staticPayloads: readonly StaticPayloadInputV01[] = Object.freeze(
-    manifest.staticFrames.map((frame, index) =>
-      Object.freeze({
-        staticFrame: frame.id,
-        bytes: staticPng(index + 1)
-      })
-    )
-  );
   return Object.freeze({
     manifest,
-    accessUnits: referenceAccessUnits(manifest),
-    staticPayloads
+    accessUnits: referenceAccessUnits(manifest)
   });
 }
 
 function referenceLoopInput(): CanonicalAssetInputV01 {
   const manifest: CompiledManifestInputV01 = {
     formatVersion: "0.1",
-    generator: "rendered-motion-m4-reference-loop",
+    generator: "aval-m4-reference-loop",
     canvas: {
       width: 2,
       height: 2,
@@ -148,7 +127,7 @@ function referenceLoopInput(): CanonicalAssetInputV01 {
       {
         id: "reference",
         profile: "reference-rgba-v0",
-        codec: "rma.reference-rgba",
+        codec: "aval.reference-rgba",
         codedWidth: 2,
         codedHeight: 2,
         alphaLayout: { type: "straight-rgba-v0" },
@@ -165,28 +144,14 @@ function referenceLoopInput(): CanonicalAssetInputV01 {
         samples: [{ rendition: "reference", sha256: DECLARED_DIGEST }]
       }
     ],
-    staticFrames: [
-      {
-        id: "idle-static",
-        width: 2,
-        height: 2,
-        sha256: DECLARED_DIGEST
-      }
-    ],
     initialState: "idle",
-    states: [
-      { id: "idle", bodyUnit: "idle-body", staticFrame: "idle-static" }
-    ],
+    states: [{ id: "idle", bodyUnit: "idle-body" }],
     edges: [],
     bindings: [],
     readiness: {
       policy: "all-routes",
       bootstrapUnits: ["idle-body"],
       immediateEdges: []
-    },
-    fallback: {
-      unsupported: "per-state-static",
-      reducedMotion: "per-state-static"
     },
     limits: {
       maxCompiledBytes: 32 * 1024,
@@ -198,10 +163,7 @@ function referenceLoopInput(): CanonicalAssetInputV01 {
   };
   return Object.freeze({
     manifest,
-    accessUnits: referenceAccessUnits(manifest),
-    staticPayloads: Object.freeze([
-      Object.freeze({ staticFrame: "idle-static", bytes: staticPng(0x4c) })
-    ])
+    accessUnits: referenceAccessUnits(manifest)
   });
 }
 
@@ -221,12 +183,12 @@ export function fixtureSha256(bytes: Uint8Array): string {
 export function generateConformanceFixtures(): readonly GeneratedConformanceFixture[] {
   const definitions = [
     {
-      fileName: "reference-loop.rma" as const,
+      fileName: "reference-loop.avl" as const,
       description: "one-state, three-frame reference RGBA loop",
       bytes: generateReferenceLoopFixture()
     },
     {
-      fileName: "reference-graph.rma" as const,
+      fileName: "reference-graph.avl" as const,
       description:
         "multi-state finite/held graph with portal, finish, cut, locked, and reversible routes",
       bytes: generateReferenceGraphFixture()

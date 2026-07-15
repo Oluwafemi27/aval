@@ -1,12 +1,12 @@
 import {
-  defineRenderedMotionElement,
-  type RenderedMotionElement
-} from "@rendered-motion/element";
+  defineAvalElement,
+  type AvalElement
+} from "@aval/element";
 
-defineRenderedMotionElement();
+defineAvalElement();
 
 const button = document.querySelector<HTMLButtonElement>("#favorite");
-const motion = document.querySelector<RenderedMotionElement>("#motion");
+const motion = document.querySelector<AvalElement>("#motion");
 if (button === null || motion === null) throw new Error("example markup is incomplete");
 
 button.addEventListener("click", () => {

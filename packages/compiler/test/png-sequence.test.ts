@@ -16,7 +16,7 @@ afterEach(async () => {
 });
 
 async function fixture(numbers: readonly number[]): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), "rma-png-sequence-"));
+  const directory = await mkdtemp(join(tmpdir(), "aval-png-sequence-"));
   directories.push(directory);
   await Promise.all(numbers.map((number) =>
     writeFile(join(directory, `frame-${String(number).padStart(4, "0")}.png`), "png")

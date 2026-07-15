@@ -254,8 +254,11 @@ function plannedBlob(
 ): PlannedRuntimeBlob {
   return Object.freeze({
     ordinal: 0,
-    kind: "static",
-    staticFrame: "poster",
+    kind: "unit",
+    rendition: "opaque",
+    unit: "body",
+    sampleStart: 0,
+    sampleCount: 1,
     sha256: "00".repeat(32),
     paddingRange: Object.freeze({ offset: storageOffset, length: paddingLength }),
     blobRange: Object.freeze({

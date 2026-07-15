@@ -1,4 +1,8 @@
-import { maximumAvcDecodedRgbaBytes } from "@rendered-motion/format";
+import {
+  avcQuantizationPolicyForRendition,
+  avcCodecForLevel,
+  maximumAvcDecodedRgbaBytes
+} from "@aval/format";
 
 import type { DecoderWorkerConfigureOptions } from "../decoder-worker/client.js";
 import { DECODER_WORKER_HARD_LIMITS } from "../decoder-worker/protocol.js";
@@ -15,7 +19,7 @@ export function createAvcCandidateWorkerSetup(
   const parameterSet = context.inspection.parameterSet;
   const storage = geometry.decodedStorageRect;
   if (
-    rendition.codec !== "avc1.42E020" ||
+    rendition.codec !== avcCodecForLevel(parameterSet.levelIdc) ||
     rendition.codedWidth !== parameterSet.codedWidth ||
     rendition.codedHeight !== parameterSet.codedHeight ||
     geometry.codedWidth !== parameterSet.codedWidth ||
@@ -46,12 +50,6 @@ export function createAvcCandidateWorkerSetup(
   }
   const maxDecodedBytes =
     decodedBytesPerSurface * RESOURCE_DECODE_SURFACE_COUNT;
-  if (maxDecodedBytes > DECODER_WORKER_HARD_LIMITS.maxDecodedBytes) {
-    throw new RangeError(
-      "AVC candidate decoded surfaces exceed the worker byte limit"
-    );
-  }
-
   const limits = Object.freeze({
     maxDecodeQueueSize: DECODER_WORKER_HARD_LIMITS.maxDecodeQueueSize,
     maxPendingSamples: DECODER_WORKER_HARD_LIMITS.maxPendingSamples,
@@ -60,7 +58,7 @@ export function createAvcCandidateWorkerSetup(
   });
   const configure: Readonly<DecoderWorkerConfigureOptions> = Object.freeze({
     config: Object.freeze({
-      codec: "avc1.42E020" as const,
+      codec: rendition.codec,
       codedWidth: rendition.codedWidth,
       codedHeight: rendition.codedHeight,
       hardwareAcceleration: "no-preference" as const,
@@ -76,7 +74,8 @@ export function createAvcCandidateWorkerSetup(
       averageBitrate: rendition.bitrate.average,
       peakBitrate: rendition.bitrate.peak,
       cpbBufferBits: rendition.bitrate.peak,
-      requireBt709LimitedRange: true as const
+      requireBt709LimitedRange: true as const,
+      quantizationPolicy: avcQuantizationPolicyForRendition(rendition.profile)
     }),
     expectedOutput: Object.freeze({
       codedWidth: parameterSet.codedWidth,

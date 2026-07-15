@@ -2,7 +2,7 @@ import type {
   GraphBodyDefinition,
   GraphEdgeDefinition,
   GraphStateDefinition
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type {
   ReadinessFailureCollector,

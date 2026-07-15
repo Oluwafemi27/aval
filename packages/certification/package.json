@@ -1,5 +1,5 @@
 {
-  "name": "@rendered-motion/certification",
+  "name": "@aval/certification",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -13,5 +13,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run test"
+  },
+  "dependencies": {
+    "@aval/format": "1.0.0"
   }
 }

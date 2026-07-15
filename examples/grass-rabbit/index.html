@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="AVAL is an open-source format for stateful, interactive video on the web.">
+    <link rel="icon" href="data:,">
+    <script>
+      (() => {
+        const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        document.documentElement.dataset.intro = reducedMotion ? "skip" : "play";
+        document.documentElement.style.setProperty("--intro-opacity", reducedMotion ? "1" : "0");
+      })();
+    </script>
+    <link rel="stylesheet" href="/style.css">
+    <title>AVAL · Interactive video for the web</title>
+  </head>
+  <body>
+    <header class="intro-reveal sticky top-0 z-50 flex min-h-14 items-center border-b border-transparent bg-black/80 py-3 backdrop-blur" style="opacity: var(--intro-opacity, 1)">
+      <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-5 md:px-8">
+        <a class="rounded-sm text-base font-semibold tracking-tight text-white focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-white/50" href="/" aria-label="AVAL home">
+          AVAL
+        </a>
+        <div class="flex items-center gap-4">
+          <p class="text-sm leading-none font-medium tracking-tight text-white/30">
+            Made by <a class="inline-block border-b border-white/15 pb-[3px] text-white transition-colors duration-300 ease-out hover:border-white/40 focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-white/50" href="https://pixelpoint.io/" target="_blank" rel="nofollow noopener">Pixel Point</a>
+          </p>
+          <a
+            class="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-white px-3 text-sm font-medium tracking-tight text-black transition-colors hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            href="https://github.com/pixel-point/aval"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Star AVAL on GitHub"
+          >
+            <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M11.9317 1C5.91925 1 1 6.07047 1 12.2677C1 17.1973 4.14286 21.4227 8.51553 22.972C9.06211 23.1129 9.19876 22.6903 9.19876 22.4086C9.19876 22.1269 9.19876 21.4227 9.19876 20.4368C6.19255 21.141 5.50932 19.0283 5.50932 19.0283C4.96273 17.7607 4.2795 17.3382 4.2795 17.3382C3.32298 16.6339 4.41615 16.6339 4.41615 16.6339C5.50932 16.7748 6.0559 17.7607 6.0559 17.7607C7.01242 19.5917 8.65217 19.0283 9.19876 18.7466C9.3354 18.0424 9.6087 17.479 9.88199 17.1973C7.42236 16.9156 4.96273 15.9297 4.96273 11.5635C4.96273 10.2959 5.37267 9.30993 6.0559 8.6057C5.91925 8.32401 5.50932 7.19724 6.19255 5.64793C6.19255 5.64793 7.14907 5.36624 9.19876 6.7747C10.0186 6.49301 10.9752 6.35216 11.9317 6.35216C12.8882 6.35216 13.8447 6.49301 14.6646 6.7747C16.7143 5.36624 17.6708 5.64793 17.6708 5.64793C18.2174 7.19724 17.9441 8.32401 17.8075 8.6057C18.4907 9.45078 18.9006 10.4367 18.9006 11.5635C18.9006 15.9297 16.3043 16.7748 13.8447 17.0565C14.2547 17.6199 14.6646 18.3241 14.6646 19.31C14.6646 20.8593 14.6646 21.9861 14.6646 22.4086C14.6646 22.6903 14.8012 23.1129 15.4845 22.972C19.8571 21.4227 23 17.1973 23 12.2677C22.8634 6.07047 17.9441 1 11.9317 1Z" />
+            </svg>
+            <span>Star on Github</span>
+          </a>
+        </div>
+      </div>
+    </header>
+    <main class="isolate min-h-svh overflow-hidden bg-black text-white" aria-labelledby="page-title">
+      <div class="mx-auto flex min-h-svh max-w-6xl flex-col px-5 py-16 sm:px-8 sm:py-24 lg:px-12 lg:py-32">
+        <header class="flex flex-col items-center gap-6 text-center">
+          <p class="intro-reveal text-base font-semibold tracking-tight text-neutral-500 [animation-delay:100ms]" style="opacity: var(--intro-opacity, 1)">
+            Technical preview
+          </p>
+          <h1 id="page-title" data-title class="intro-reveal max-w-[24ch] text-balance text-4xl font-medium tracking-tight [animation-delay:200ms] sm:text-5xl lg:text-6xl" style="opacity: var(--intro-opacity, 1)">
+            Introducing AVAL
+          </h1>
+          <p data-description class="intro-reveal w-full max-w-125 text-pretty text-xl text-neutral-400 [animation-delay:300ms] sm:text-lg" style="opacity: var(--intro-opacity, 1)">
+            A new open-source format for interactive video on the web, with a built-in state machine, frame-accurate transitions, and packed-alpha transparency.
+          </p>
+        </header>
+
+        <div class="flex flex-col items-center gap-4 pt-20 pb-4">
+          <div class="relative aspect-video w-full max-w-160">
+            <span
+              class="interaction-hotspot pointer-events-none absolute top-[48%] left-[76%] z-10 size-11 -translate-x-1/2 -translate-y-1/2"
+              data-node-id="6015:5019"
+              aria-hidden="true"
+            >
+              <img class="block size-full" src="/interaction-hotspot.svg" alt="" draggable="false">
+            </span>
+            <aval-player
+              id="grass-rabbit"
+              class="video-reveal size-full"
+              src="/grass-rabbit.avl"
+              width="640"
+              height="360"
+              tabindex="0"
+              aria-label="Interactive grass rabbit animation. Hover or focus to change its state."
+            ></aval-player>
+          </div>
+          <p id="rabbit-state" class="state-badge inline-flex h-9 items-center justify-center overflow-hidden rounded-full bg-white px-4 text-base font-medium whitespace-nowrap text-black">
+            loading
+          </p>
+        </div>
+
+        <section class="@container mx-auto w-full max-w-5xl pt-24 sm:w-4/5 sm:pt-32" aria-labelledby="features-title">
+          <div class="border-b border-white/10 pb-4">
+            <h2 id="features-title" class="text-balance text-base font-medium tracking-tight text-neutral-500">
+              Key features
+            </h2>
+          </div>
+          <dl class="grid gap-x-12 gap-y-10 pt-8 @3xl:grid-cols-3 @3xl:gap-y-12">
+            <div class="grid gap-1">
+              <dt class="text-base/7 font-medium text-white sm:text-sm/6">Deterministic state graph</dt>
+              <dd class="text-pretty text-base/7 text-neutral-500 sm:text-sm/6">
+                Package named states, authored triggers, and latest-wins routing in the asset.
+              </dd>
+            </div>
+            <div class="grid gap-1">
+              <dt class="text-base/7 font-medium text-white sm:text-sm/6">Frame-accurate routes</dt>
+              <dd class="text-pretty text-base/7 text-neutral-500 sm:text-sm/6">
+                Start transitions on authored content frames using portals, finishes, cuts, and reversals.
+              </dd>
+            </div>
+            <div class="grid gap-1">
+              <dt class="text-base/7 font-medium text-white sm:text-sm/6">Seekless loops</dt>
+              <dd class="text-pretty text-base/7 text-neutral-500 sm:text-sm/6">
+                Keep the decoder timeline moving forward across loop seams instead of seeking.
+              </dd>
+            </div>
+            <div class="grid gap-1">
+              <dt class="text-base/7 font-medium text-white sm:text-sm/6">Packed-alpha transparency</dt>
+              <dd class="text-pretty text-base/7 text-neutral-500 sm:text-sm/6">
+                Composite transparent prerendered motion with a packed-alpha WebGL2 renderer.
+              </dd>
+            </div>
+            <div class="grid gap-1">
+              <dt class="text-base/7 font-medium text-white sm:text-sm/6">Web-native runtime</dt>
+              <dd class="text-pretty text-base/7 text-neutral-500 sm:text-sm/6">
+                Decode with WebCodecs and present with WebGL2, without a mandatory WASM runtime.
+              </dd>
+            </div>
+            <div class="grid gap-1">
+              <dt class="text-base/7 font-medium text-white sm:text-sm/6">Progressive fallback</dt>
+              <dd class="text-pretty text-base/7 text-neutral-500 sm:text-sm/6">
+                Keep host-owned fallback markup available for unsupported or reduced-motion contexts.
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+      </div>
+    </main>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

@@ -1,11 +1,14 @@
 import {
+  avcQuantizationPolicyForRendition,
   deriveAvcRenditionGeometry,
+  isAvcCodec,
   maximumAvcDecodedRgbaBytes,
   validateCompleteAsset,
   type AccessUnitRecord,
+  type AvcCodecV01,
   type RenditionV01,
   type UnitV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 import {
   createDecoderWorkerClient,
   durationForFrame,
@@ -13,7 +16,7 @@ import {
   type DecoderWorkerMetrics,
   type DecoderWorkerSample,
   type ManagedDecoderWorkerFrame
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 const WARMUP_OUTPUTS = 24;
 const MEASURED_OUTPUTS = 300;
@@ -22,7 +25,11 @@ const PROBE_TIMEOUT_MS = 30_000;
 const GENERATION = 1;
 
 type ProductionRendition = Extract<RenditionV01, {
-  readonly profile: "avc-annexb-opaque-v0" | "avc-annexb-packed-alpha-v0";
+  readonly profile:
+    | "avc-annexb-opaque-v0"
+    | "avc-annexb-packed-alpha-v0"
+    | "avc-annexb-opaque-v1"
+    | "avc-annexb-packed-alpha-v1";
 }>;
 
 interface PlannedOutput {
@@ -42,8 +49,8 @@ export interface BrowserDecoderThroughputLedger {
   readonly fixtureDigest: string;
   readonly selectedRendition: Readonly<{
     readonly id: string;
-    readonly profile: "avc-annexb-packed-alpha-v0" | "avc-annexb-opaque-v0";
-    readonly codec: "avc1.42E020";
+    readonly profile: ProductionRendition["profile"];
+    readonly codec: AvcCodecV01;
     readonly codedWidth: number;
     readonly codedHeight: number;
     readonly frameRateNumerator: number;
@@ -114,7 +121,10 @@ export async function runDecoderThroughputProbe(input: Readonly<{
   const records = selectedRecords(frontIndex.records, unit, unitIndex, renditionIndex);
   const frameRate = frontIndex.manifest.frameRate;
   const plan = createPlan(records, unit, frameRate);
-  const geometry = rendition.profile === "avc-annexb-packed-alpha-v0"
+  const geometry = (
+    rendition.profile === "avc-annexb-packed-alpha-v0" ||
+    rendition.profile === "avc-annexb-packed-alpha-v1"
+  )
     ? deriveAvcRenditionGeometry({
         canvasWidth: frontIndex.manifest.canvas.width,
         canvasHeight: frontIndex.manifest.canvas.height,
@@ -149,7 +159,7 @@ export async function runDecoderThroughputProbe(input: Readonly<{
     assertMeasurementActive(input);
     await client.configure({
       config: {
-        codec: "avc1.42E020",
+        codec: rendition.codec,
         codedWidth: rendition.codedWidth,
         codedHeight: rendition.codedHeight,
         hardwareAcceleration: "no-preference",
@@ -162,7 +172,8 @@ export async function runDecoderThroughputProbe(input: Readonly<{
         averageBitrate: rendition.bitrate.average,
         peakBitrate: rendition.bitrate.peak,
         cpbBufferBits: rendition.bitrate.peak,
-        requireBt709LimitedRange: true
+        requireBt709LimitedRange: true,
+        quantizationPolicy: avcQuantizationPolicyForRendition(rendition.profile)
       },
       expectedOutput: {
         codedWidth: rendition.codedWidth,
@@ -318,7 +329,16 @@ function assertTerminalMetrics(metrics: DecoderWorkerMetrics, expectedFrames: nu
 
 function requireProductionRendition(renditions: readonly RenditionV01[], id: string): ProductionRendition {
   const rendition = renditions.find((candidate) => candidate.id === id);
-  if (rendition === undefined || (rendition.profile !== "avc-annexb-opaque-v0" && rendition.profile !== "avc-annexb-packed-alpha-v0") || rendition.codec !== "avc1.42E020") {
+  if (
+    rendition === undefined ||
+    (
+      rendition.profile !== "avc-annexb-opaque-v0" &&
+      rendition.profile !== "avc-annexb-packed-alpha-v0" &&
+      rendition.profile !== "avc-annexb-opaque-v1" &&
+      rendition.profile !== "avc-annexb-packed-alpha-v1"
+    ) ||
+    !isAvcCodec(rendition.codec)
+  ) {
     throw new Error("public player selected an invalid production rendition");
   }
   return rendition;

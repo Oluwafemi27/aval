@@ -1,5 +1,5 @@
 {
-  "name": "rendered-motion-react-ref-example",
+  "name": "aval-react-ref-example",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -18,10 +18,10 @@
     "vite": "8.1.4"
   },
   "peerDependencies": {
-    "@rendered-motion/element": "1.0.0"
+    "@aval/element": "1.0.0"
   },
   "peerDependenciesMeta": {
-    "@rendered-motion/element": {
+    "@aval/element": {
       "optional": true
     }
   }

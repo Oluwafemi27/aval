@@ -12,13 +12,13 @@ export function testOnlyPublicationMetadata() {
     reviewId: "test-only-metadata-proof-001",
     reviewerRole: "qualified-publication-metadata-reviewer",
     reviewedAt: "2026-07-12T00:00:00.000Z",
-    repositoryUrl: "https://github.com/rendered-motion-test-only/non-release-proof.git",
-    homepageUrl: "https://github.com/rendered-motion-test-only/non-release-proof",
-    bugsUrl: "https://github.com/rendered-motion-test-only/non-release-proof/issues",
+    repositoryUrl: "https://github.com/aval-test-only/non-release-proof.git",
+    homepageUrl: "https://github.com/aval-test-only/non-release-proof",
+    bugsUrl: "https://github.com/aval-test-only/non-release-proof/issues",
     registryScopeAuthority: {
-      scope: "@rendered-motion",
+      scope: "@aval",
       registryUrl: "https://registry.npmjs.org/",
-      owner: "rendered-motion-test-only",
+      owner: "aval-test-only",
       evidenceId: "test-only-scope-proof-001"
     },
     note: "Synthetic local packed-browser proof authority. Forbidden from candidate, final-release, registry, and repository artifact paths."
@@ -32,7 +32,7 @@ export async function assertTestOnlyArchiveOutput(path, repositoryRoot) {
   const temporaryRelative = relative(lexicalTemporaryRoot, output);
   if (temporaryRelative === ".." || temporaryRelative.startsWith(`..${sep}`)) throw new Error("test-only archive proof output must be under one marked OS-temporary root");
   const parts = temporaryRelative.split(sep);
-  const markerIndex = parts.findIndex((part) => part.startsWith("rma-packed-archive-proof-"));
+  const markerIndex = parts.findIndex((part) => part.startsWith("aval-packed-archive-proof-"));
   if (markerIndex < 0) throw new Error("test-only archive proof output must be under one marked OS-temporary root");
   const marker = join(lexicalTemporaryRoot, ...parts.slice(0, markerIndex + 1));
   const markerInfo = await lstat(marker);

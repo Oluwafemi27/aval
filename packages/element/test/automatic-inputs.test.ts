@@ -43,6 +43,30 @@ describe("AutomaticInputs", () => {
     expect(ledger.snapshot().completed).toBe(true);
   });
 
+  it("defers automatic state input until the runtime is visible", () => {
+    const sources: string[] = [];
+    const target = new FakeElement();
+    target.hovered = true;
+    const inputs = new AutomaticInputs(
+      (source) => sources.push(source),
+      new ElementOwnershipLedger()
+    );
+    inputs.setTarget(target as unknown as Element);
+    inputs.setRuntimeVisible(false);
+    inputs.metadataReady();
+    target.dispatchEvent(new Event("pointerenter"));
+    target.dispatchEvent(new Event("click"));
+    expect(sources).toEqual([]);
+
+    inputs.setRuntimeVisible(true);
+    expect(sources).toEqual([
+      "pointer.enter",
+      "focus.out",
+      "engagement.on"
+    ]);
+    inputs.dispose();
+  });
+
   it("keeps failed removals owned and makes old-target callbacks inert", () => {
     const ledger = new ElementOwnershipLedger();
     const partial = new FaultyElement({ throwOnAdd: 3 });

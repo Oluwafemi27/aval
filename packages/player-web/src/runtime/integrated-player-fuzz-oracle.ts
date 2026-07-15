@@ -3,7 +3,7 @@ import {
   type GraphPresentation,
   type MotionGraphResult,
   type MotionGraphSnapshot
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { EffectHostEvent } from "./effect-host.js";
 import type { IntegratedPlayer } from "./integrated-player.js";
@@ -338,7 +338,7 @@ export function assertFuzzCleanup(
   recorder: FuzzRecorder
 ): void {
   fuzzInvariant(player.catalog.disposed, recorder, "catalog leaked");
-  fuzzInvariant(store.disposed, recorder, "static store leaked");
+  fuzzInvariant(store.disposed, recorder, "fallback store leaked");
   fuzzInvariant(
     store.activePresentations === 0,
     recorder,
@@ -410,7 +410,7 @@ export function fuzzPresentationTag(
 ): string {
   switch (presentation.kind) {
     case "static":
-      return `static:${presentation.state}:${presentation.staticFrameId}`;
+      return `static:${presentation.state}`;
     case "intro":
     case "body":
       return `${presentation.kind}:${presentation.state}:${presentation.unitId}:${String(presentation.frameIndex)}`;
@@ -422,7 +422,7 @@ export function fuzzPresentationTag(
 
 export function fuzzMediaTag(media: Readonly<RuntimeMediaPresentation>): string {
   if (media.kind === "static") {
-    return `static:${media.state}:${media.staticFrame}`;
+    return `static:${media.state}:${media.drawSource}`;
   }
   return `${media.graphKind}:${media.state ?? media.edge}:${media.frame.unit}:${String(media.frame.localFrame)}`;
 }

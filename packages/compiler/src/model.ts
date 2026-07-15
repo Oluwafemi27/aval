@@ -8,16 +8,13 @@ import type {
   PortV01,
   RationalV01,
   ResidencyEndpointV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 export type { RationalV01 };
 
-export const COMPILER_PROJECT_VERSION = "0.2" as const;
-export const MAX_SOURCE_DIMENSION = 4_096;
-export const MAX_SOURCE_DURATION_SECONDS = 30;
-export const MAX_SOURCE_FRAMES = 1_800;
+export const COMPILER_PROJECT_VERSION = "0.3" as const;
 export const MAX_PROCESS_STDERR_BYTES = 1024 * 1024;
-export const MAX_PROCESS_OUTPUT_BYTES = 32 * 1024 * 1024;
+export const MAX_PROCESS_OUTPUT_BYTES = Number.MAX_SAFE_INTEGER;
 export const DEFAULT_PROBE_TIMEOUT_MS = 15_000;
 export const DEFAULT_MEDIA_TIMEOUT_MS = 120_000;
 /** @deprecated Use the operation-specific timeout constants. */
@@ -76,10 +73,6 @@ export interface SourceStateV01 {
   readonly id: string;
   readonly bodyUnit: string;
   readonly initialUnit?: string;
-  readonly poster?: {
-    readonly source: string;
-    readonly frame: number;
-  };
 }
 
 export interface OpaqueRenditionTargetV01 {
@@ -97,6 +90,47 @@ export type SourceAvcProfileV02 =
   | "avc-annexb-opaque-v0"
   | "avc-annexb-packed-alpha-v0";
 
+export type SourceAvcProfileV03 =
+  | "avc-annexb-auto-v1"
+  | "avc-annexb-opaque-v1"
+  | "avc-annexb-packed-alpha-v1";
+
+export const AVC_ENCODER_PRESETS = Object.freeze([
+  "ultrafast",
+  "superfast",
+  "veryfast",
+  "faster",
+  "fast",
+  "medium",
+  "slow",
+  "slower",
+  "veryslow"
+] as const);
+
+export type AvcEncoderPreset = typeof AVC_ENCODER_PRESETS[number];
+
+export type AvcRateControlV03 =
+  | {
+      readonly mode: "abr";
+      readonly averageBitrate: number;
+      readonly maxBitrate: number;
+    }
+  | {
+      readonly mode: "crf";
+      readonly crf: number;
+      readonly maxBitrate: number;
+    };
+
+export interface AvcEncodingV03 {
+  readonly codec: "h264";
+  readonly preset: AvcEncoderPreset;
+  readonly rateControl: AvcRateControlV03;
+}
+
+export interface NormalizedAvcEncoding extends AvcEncodingV03 {
+  readonly legacyZeroLatency: boolean;
+}
+
 export type SourceAlphaPolicy = "auto" | "opaque" | "packed";
 
 export interface SourceRenditionTargetV02 {
@@ -109,6 +143,23 @@ export interface SourceRenditionTargetV02 {
     readonly average: number;
     readonly peak: number;
   };
+}
+
+export interface SourceRenditionTargetV03 {
+  readonly id: string;
+  /** Visible color-pane width. Storage and coded dimensions are derived. */
+  readonly width: number;
+  /** Visible color-pane height. Storage and coded dimensions are derived. */
+  readonly height: number;
+  readonly encoding: AvcEncodingV03;
+}
+
+export interface NormalizedSourceRenditionTarget {
+  readonly id: string;
+  readonly width: number;
+  readonly height: number;
+  readonly avcProfileVersion: "v0" | "v1";
+  readonly encoding: NormalizedAvcEncoding;
 }
 
 export interface SourceProjectV01 {
@@ -139,13 +190,28 @@ export interface SourceProjectV02 {
   readonly bindings: readonly BindingV01[];
 }
 
+export interface SourceProjectV03 {
+  readonly projectVersion: "0.3";
+  readonly profile: SourceAvcProfileV03;
+  readonly canvas: CanvasV01;
+  readonly frameRate: RationalV01;
+  readonly sources: readonly SourceDescriptorV01[];
+  readonly renditions: readonly SourceRenditionTargetV03[];
+  readonly units: readonly SourceUnitV01[];
+  readonly initialState: string;
+  readonly states: readonly SourceStateV01[];
+  readonly edges: readonly EdgeV01[];
+  readonly bindings: readonly BindingV01[];
+}
+
 /**
  * The sole compiler-internal project shape. Version-specific authoring fields
  * are removed before media inspection or encoding begins.
  */
 export interface NormalizedSourceProject {
   readonly sourceProjectVersion: SourceProjectV01["projectVersion"] |
-    SourceProjectV02["projectVersion"];
+    SourceProjectV02["projectVersion"] |
+    SourceProjectV03["projectVersion"];
   readonly alphaPolicy: SourceAlphaPolicy;
   /** Compatibility mapping selected only by the version adapter. */
   readonly alphaPolicyRejectionCode:
@@ -154,7 +220,7 @@ export interface NormalizedSourceProject {
   readonly canvas: CanvasV01;
   readonly frameRate: RationalV01;
   readonly sources: readonly SourceDescriptorV01[];
-  readonly renditions: readonly SourceRenditionTargetV02[];
+  readonly renditions: readonly NormalizedSourceRenditionTarget[];
   readonly units: readonly SourceUnitV01[];
   readonly initialState: string;
   readonly states: readonly SourceStateV01[];
@@ -301,13 +367,23 @@ export interface CompileRenditionDetails {
   readonly id: string;
   readonly profile:
     | "avc-annexb-opaque-v0"
-    | "avc-annexb-packed-alpha-v0";
+    | "avc-annexb-packed-alpha-v0"
+    | "avc-annexb-opaque-v1"
+    | "avc-annexb-packed-alpha-v1";
   readonly geometry: Readonly<AvcRenditionGeometry>;
   readonly codedWidth: number;
   readonly codedHeight: number;
   readonly bitrate: {
     readonly average: number;
     readonly peak: number;
+  };
+  readonly encoding: {
+    readonly codec: "libx264";
+    readonly preset: AvcEncoderPreset;
+    readonly rateControl: AvcRateControlV03;
+    readonly legacyZeroLatency: boolean;
+    readonly canonicalBytes: number;
+    readonly measuredAverageBitrate: number;
   };
   readonly encodedBytes: number;
   readonly accessUnits: number;
@@ -324,29 +400,10 @@ export interface CompileRenditionDetails {
   readonly compositeQuality: Readonly<CompositeQualitySummary> | null;
 }
 
-export interface CompileStaticDetails {
-  readonly id: string;
-  readonly bytes: number;
-  readonly sha256: string;
-  readonly states: readonly string[];
-  readonly validation: Readonly<CompileStaticValidationDetails>;
-}
-
-export interface CompileStaticValidationDetails {
-  readonly profile: "strict-rgba-png-v0";
-  readonly decoder: "format-pure-rfc1950-1951-v0";
-  readonly width: number;
-  readonly height: number;
-  readonly pngBytes: number;
-  readonly zlibBytes: number;
-  readonly filteredBytes: number;
-  readonly rgbaBytes: number;
-}
-
 export interface CompileContinuityDetails {
   readonly name: string;
   readonly kind: "loop" | "intro" | "departure" | "arrival" | "cut";
-  readonly status: "pass" | "cut";
+  readonly status: "pass" | "review" | "cut";
   readonly from: {
     readonly unit: string;
     readonly frame: number | null;
@@ -376,7 +433,7 @@ export interface CompileInvocationDetails {
 
 /** Structured facts captured by the compiler, without machine-local paths. */
 export interface CompileBuildDetails {
-  readonly detailsVersion: "0.1";
+  readonly detailsVersion: "0.2";
   readonly mode: "project" | "direct-video" | "direct-png-sequence";
   readonly projectFile: {
     readonly bytes: number;
@@ -386,11 +443,9 @@ export interface CompileBuildDetails {
   readonly manifest: CompiledManifestInputV01;
   readonly sources: readonly CompileSourceDetails[];
   readonly renditions: readonly CompileRenditionDetails[];
-  readonly statics: readonly CompileStaticDetails[];
   readonly invocations: readonly CompileInvocationDetails[];
   readonly accessUnits: number;
   readonly encodedPayloadBytes: number;
-  readonly staticPayloadBytes: number;
   readonly normalization: readonly string[];
   readonly continuity: readonly CompileContinuityDetails[];
 }
@@ -426,13 +481,19 @@ export interface DirectCompileOptions {
     readonly average: number;
     readonly peak: number;
   };
+  /** Capped H.264 CRF for direct input; mutually exclusive with `bitrate`. */
+  readonly crf?: number;
+  /** Required direct-input bitrate ceiling when `crf` is set. */
+  readonly maxBitrate?: number;
+  /** Allowlisted libx264 speed/quality preset for direct input. */
+  readonly preset?: AvcEncoderPreset;
   /** Asset-wide alpha selection. Direct input defaults to `auto`. */
   readonly alpha?: SourceAlphaPolicy;
   readonly ffmpegPath?: string;
   readonly ffprobePath?: string;
   /** Lower-only override for FFprobe operations (default/max 15 seconds). */
   readonly probeTimeoutMs?: number;
-  /** Lower-only override for FFmpeg decode/encode operations (default/max 120 seconds). */
+  /** Per-FFmpeg-operation timeout in milliseconds (default 120 seconds). */
   readonly mediaTimeoutMs?: number;
   readonly signal?: AbortSignal;
 }

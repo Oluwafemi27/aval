@@ -1,5 +1,5 @@
 {
-  "name": "rendered-motion-typescript-bundler-consumer",
+  "name": "aval-typescript-bundler-consumer",
   "version": "1.0.0",
   "private": true,
   "type": "module"

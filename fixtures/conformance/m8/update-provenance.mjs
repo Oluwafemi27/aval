@@ -34,8 +34,8 @@ const sourceFrames = resolve(
   "fixtures/compiler/m6/source/packed-frames"
 );
 const outputs = {
-  loop: resolve(directory, "one-state-partial-loop.rma"),
-  routes: resolve(directory, "user-states-all-routes-alpha.rma")
+  loop: resolve(directory, "one-state-partial-loop.avl"),
+  routes: resolve(directory, "user-states-all-routes-alpha.avl")
 };
 const ALL_BINDINGS = Object.freeze([
   { source: "activate", event: "activate-loading" },
@@ -49,7 +49,7 @@ const ALL_BINDINGS = Object.freeze([
   { source: "visible", event: "hover-on" }
 ]);
 
-const temporary = await mkdtemp(join(tmpdir(), "rma-m8-fixtures-"));
+const temporary = await mkdtemp(join(tmpdir(), "aval-m8-fixtures-"));
 try {
   const [loopBaseBytes, routesBaseBytes] = await Promise.all([
     readFile(sourceProjects.loop),
@@ -76,8 +76,8 @@ try {
   ]);
 
   const temporaryOutputs = {
-    loop: resolve(temporary, "one-state-partial-loop.rma"),
-    routes: resolve(temporary, "user-states-all-routes-alpha.rma")
+    loop: resolve(temporary, "one-state-partial-loop.avl"),
+    routes: resolve(temporary, "user-states-all-routes-alpha.avl")
   };
   const [loopResult, routesResult] = await Promise.all([
     compileProjectFile({
@@ -98,11 +98,11 @@ try {
   const provenance = {
     provenanceVersion: "0.1",
     formatVersion: "0.1",
-    generatedAt: "2026-07-12",
+    generatedAt: "2026-07-14",
     license: "CC0-1.0 generated fixture sources",
     generatedBy: await digestFile(generatorPath, "fixtures/conformance/m8/update-provenance.mjs"),
     regeneration: {
-      build: "npm run build -w @rendered-motion/compiler",
+      build: "npm run build -w @aval/compiler",
       check: "node fixtures/conformance/m8/update-provenance.mjs --check"
     },
     sourceFrames: await frameProvenance(),
@@ -131,13 +131,13 @@ try {
     fixtures: [
       await fixtureProvenance(
         "one-state-partial-loop",
-        "fixtures/conformance/m8/one-state-partial-loop.rma",
+        "fixtures/conformance/m8/one-state-partial-loop.avl",
         temporaryOutputs.loop,
         loopResult
       ),
       await fixtureProvenance(
         "user-states-all-routes-alpha",
-        "fixtures/conformance/m8/user-states-all-routes-alpha.rma",
+        "fixtures/conformance/m8/user-states-all-routes-alpha.avl",
         temporaryOutputs.routes,
         routesResult
       )

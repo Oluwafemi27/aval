@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { createOpaqueTestAsset } from "./asset-test-fixture.js";
-import { installRuntimeAssetCatalog } from "./asset-catalog.js";
 import {
-  collectProductionStrictStaticEvidence,
   createProductionProfileEvidence,
   rehearseProductionMotionPolicy
 } from "./browser-production-readiness-m6-evidence.js";
 import { assertRehearsalActive } from "./browser-readiness-rehearsal-driver.js";
-import { BrowserStaticSurfaceDecoder } from "./strict-static-decoder.js";
 
 describe("browser production readiness boundary", () => {
   it("rejects an abort before publishing production evidence", () => {
@@ -86,40 +82,6 @@ describe("browser production readiness boundary", () => {
     if (evidence.visibleAlphaRect !== null) {
       expect(Object.isFrozen(evidence.visibleAlphaRect)).toBe(true);
     }
-  });
-
-  it("records the strict pure PNG path and exact decoder cleanup facts", async () => {
-    const catalog = installRuntimeAssetCatalog(createOpaqueTestAsset());
-    const decoder = new BrowserStaticSurfaceDecoder({
-      nativeInflater: null,
-      createBitmap: async (_rgba, width, height) => ({
-        width,
-        height,
-        close() {}
-      } as ImageBitmap)
-    });
-
-    const evidence = await collectProductionStrictStaticEvidence({
-      context: { catalog },
-      signal: new AbortController().signal
-    } as never, decoder);
-
-    expect(evidence).toMatchObject({
-      passed: true,
-      uniqueStaticFrames: 1,
-      decodedStaticFrames: 1,
-      inflatePaths: ["pure"],
-      browserPngDecoderUsed: false,
-      pixelEvidence: "not-claimed-by-readiness-rehearsal",
-      decode: {
-        nativeAttempts: 0,
-        pureAttempts: 1,
-        pureSuccesses: 1,
-        errors: 0,
-        bitmapCloses: 1
-      }
-    });
-    catalog.dispose();
   });
 
   it("rehearses reduced, restored, superseded, sticky, and disposed phases", () => {

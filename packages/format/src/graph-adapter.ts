@@ -5,7 +5,7 @@ import {
   type GraphTransitionDefinition,
   type MotionGraphDefinition,
   type ValidatedMotionGraph
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import { FormatError } from "./errors.js";
 import type {
@@ -69,7 +69,6 @@ function adaptState(
   });
   const base = {
     id: state.id,
-    staticFrameId: state.staticFrame,
     body: graphBody
   };
   if (state.initialUnit === undefined) {

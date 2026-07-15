@@ -160,6 +160,9 @@ export async function startDevCommand(
         ...(arguments_.ffprobePath === undefined
           ? {}
           : { ffprobePath: arguments_.ffprobePath }),
+        ...(arguments_.mediaTimeoutMs === undefined
+          ? {}
+          : { mediaTimeoutMs: arguments_.mediaTimeoutMs }),
         signal: controller.signal
       });
       if (closing || sequence !== requestedSequence || controller.signal.aborted) {
@@ -296,7 +299,7 @@ function createDevPublisher(
       try {
         staged = await stagePublicationFile(
           workspace,
-          "asset.rma",
+          "asset.avl",
           artifact.assetBytes
         );
         await assertPublicationTargetUnchanged(outputPath, expected, "dev output");

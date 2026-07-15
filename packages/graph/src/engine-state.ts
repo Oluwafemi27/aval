@@ -36,6 +36,7 @@ import {
 interface MotionGraphEngineCheckpoint {
   readonly readiness: MotionGraphReadiness;
   readonly phase: MotionGraphSnapshot["phase"];
+  readonly initialUnitPending: boolean;
   readonly requestedState: GraphStateId | null;
   readonly visualState: GraphStateId | null;
   readonly presentation: Readonly<GraphPresentation> | null;
@@ -52,6 +53,7 @@ export class MotionGraphEngineState {
 
   public readiness: MotionGraphReadiness = "unready";
   public phase: MotionGraphSnapshot["phase"] = "unready";
+  public initialUnitPending = false;
   public requestedState: GraphStateId | null = null;
   public visualState: GraphStateId | null = null;
   public presentation: Readonly<GraphPresentation> | null = null;
@@ -67,6 +69,9 @@ export class MotionGraphEngineState {
       : validateMotionGraphDefinition(definition);
     this.#graph = graph;
     this.#indexes = getValidatedGraphIndexes(graph);
+    this.initialUnitPending =
+      this.#indexes.statesById.get(graph.definition.initialState)?.initialUnit !==
+        undefined;
     return graph.definition.initialState;
   }
 
@@ -74,6 +79,7 @@ export class MotionGraphEngineState {
     return Object.freeze({
       readiness: this.readiness,
       phase: this.phase,
+      initialUnitPending: this.initialUnitPending,
       requestedState: this.requestedState,
       visualState: this.visualState,
       prospectiveState: this.routes.prospectiveState(this.visualState),
@@ -98,6 +104,7 @@ export class MotionGraphEngineState {
     return Object.freeze({
       readiness: this.readiness,
       phase: this.phase,
+      initialUnitPending: this.initialUnitPending,
       requestedState: this.requestedState,
       visualState: this.visualState,
       presentation: this.presentation,
@@ -110,6 +117,7 @@ export class MotionGraphEngineState {
   public restore(checkpoint: Readonly<MotionGraphEngineCheckpoint>): void {
     this.readiness = checkpoint.readiness;
     this.phase = checkpoint.phase;
+    this.initialUnitPending = checkpoint.initialUnitPending;
     this.requestedState = checkpoint.requestedState;
     this.visualState = checkpoint.visualState;
     this.presentation = checkpoint.presentation;
@@ -152,11 +160,9 @@ export class MotionGraphEngineState {
   public staticPresentation(
     stateId: GraphStateId
   ): Readonly<GraphPresentation> {
-    const state = this.state(stateId);
     return freezeGraphPresentation({
       kind: "static",
-      state: stateId,
-      staticFrameId: state.staticFrameId
+      state: stateId
     });
   }
 

@@ -92,7 +92,7 @@ jobs:
         with: { subject-path: artifacts/final-release/** }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: rendered-motion-1.0.0-release-${{ inputs.commit }}
+          name: aval-1.0.0-release-${{ inputs.commit }}
           path: artifacts/final-release
           if-no-files-found: error
           include-hidden-files: false
@@ -103,7 +103,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: rendered-motion-1.0.0-finalize-result-${{ github.run_id }}
+          name: aval-1.0.0-finalize-result-${{ github.run_id }}
           path: workflow-results/finalize.json
           if-no-files-found: warn
           include-hidden-files: false

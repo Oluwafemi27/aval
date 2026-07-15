@@ -27,8 +27,7 @@ describe("MotionGraphEngine failed presentation retention", () => {
     expect(failed).toMatchObject({
       presentation: {
         kind: "static",
-        state: "idle",
-        staticFrameId: "idle-static"
+        state: "idle"
       },
       snapshot: {
         readiness: "error",
@@ -145,7 +144,6 @@ function cut(id: string, from: string, to: string) {
 function state(id: string) {
   return {
     id,
-    staticFrameId: `${id}-static`,
     body: {
       unitId: `${id}-body`,
       kind: "loop" as const,

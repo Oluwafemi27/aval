@@ -86,7 +86,7 @@ export function mediaType(path) {
     ".json": "application/json",
     ".jsonl": "application/jsonl",
     ".md": "text/markdown",
-    ".rma": "application/octet-stream",
+    ".avl": "application/octet-stream",
     ".tgz": "application/gzip",
     ".txt": "text/plain",
     ".wasm": "application/wasm"

@@ -8,7 +8,7 @@ import {
   type IntegratedCandidateAttempt,
   type IntegratedCandidateFactory,
   type IntegratedPlayerOptions,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player.js";
 import {
   ManualTimers
@@ -18,19 +18,19 @@ import type {
   RuntimeCanvasResourceHost,
   RuntimeCanvasResourceLease,
   RuntimeCanvasResourcePlan
-} from "./static-resource-plan.js";
+} from "./canvas-resource-plan.js";
 
 describe("IntegratedPlayer construction and resource admission", () => {
   it("rejects an undersized static baseline before constructing its store", () => {
     const bytes = createIntegratedOpaqueTestAsset();
-    const createStaticStore = vi.fn(() => new MinimalStaticStore());
+    const createFallbackStore = vi.fn(() => new MinimalStaticStore());
     const factory = new NeverCandidateFactory();
     let error: unknown;
 
     try {
       new IntegratedPlayer({
         bytes,
-        createStaticStore,
+        createFallbackStore,
         candidateFactory: factory,
         hostMaxRuntimeBytes: bytes.byteLength
       });
@@ -39,7 +39,7 @@ describe("IntegratedPlayer construction and resource admission", () => {
     }
 
     expect(error).toMatchObject({ code: "resource-rejection" });
-    expect(createStaticStore).not.toHaveBeenCalled();
+    expect(createFallbackStore).not.toHaveBeenCalled();
     expect(factory.calls).toEqual([]);
   });
 
@@ -49,24 +49,24 @@ describe("IntegratedPlayer construction and resource admission", () => {
 
     expect(() => new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => ({ dispose } as unknown as IntegratedStaticSurfaceStore),
+      createFallbackStore: () => ({ dispose } as unknown as IntegratedFallbackStore),
       candidateFactory: factory
     })).toThrow("missing installInitial");
     expect(dispose).toHaveBeenCalledOnce();
 
     expect(() => new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => ({
+      createFallbackStore: () => ({
         dispose() {
           throw new Error("injected malformed-store cleanup failure");
         }
-      } as unknown as IntegratedStaticSurfaceStore),
+      } as unknown as IntegratedFallbackStore),
       candidateFactory: factory
     })).toThrow("missing installInitial");
   });
 
   it("snapshots a throwing availability getter before acquiring owned resources", () => {
-    const createStaticStore = vi.fn(() => new MinimalStaticStore());
+    const createFallbackStore = vi.fn(() => new MinimalStaticStore());
     const currentCanvasBacking = vi.fn(() => Object.freeze({
       width: 1,
       height: 1
@@ -97,12 +97,12 @@ describe("IntegratedPlayer construction and resource admission", () => {
 
     expect(() => new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore,
+      createFallbackStore,
       candidateFactory: factory
     })).toThrow("injected post-validation availability failure");
 
     expect(availabilityReads).toBe(5);
-    expect(createStaticStore).not.toHaveBeenCalled();
+    expect(createFallbackStore).not.toHaveBeenCalled();
     expect(currentCanvasBacking).not.toHaveBeenCalled();
     expect(reserveCanvasResources).not.toHaveBeenCalled();
   });
@@ -114,7 +114,7 @@ describe("IntegratedPlayer construction and resource admission", () => {
     let motionPolicyReads = 0;
     const base = {
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: (ownedCatalog: RuntimeAssetCatalog) => {
+      createFallbackStore: (ownedCatalog: RuntimeAssetCatalog) => {
         catalogs.push(ownedCatalog);
         return store;
       },
@@ -156,7 +156,7 @@ describe("IntegratedPlayer construction and resource admission", () => {
   ])("rejects a $name canvas lease as stable admission failure", ({
     createLease
   }) => {
-    const createStaticStore = vi.fn(() => new MinimalStaticStore());
+    const createFallbackStore = vi.fn(() => new MinimalStaticStore());
     const reserveCanvasResources = vi.fn(() => createLease() as never);
     const factory = candidateFactoryWithResourceHost(
       reserveCanvasResources
@@ -166,7 +166,7 @@ describe("IntegratedPlayer construction and resource admission", () => {
     try {
       new IntegratedPlayer({
         bytes: createIntegratedOpaqueTestAsset(),
-        createStaticStore,
+        createFallbackStore,
         candidateFactory: factory
       });
     } catch (caught) {
@@ -176,14 +176,14 @@ describe("IntegratedPlayer construction and resource admission", () => {
     expect(error).toMatchObject({
       code: "resource-rejection",
       failure: {
-        context: { operation: "static-resource-admission" }
+        context: { operation: "canvas-resource-admission" }
       }
     });
     expect(error).not.toHaveProperty(
       "message",
       expect.stringContaining("private lease capability failure")
     );
-    expect(createStaticStore).not.toHaveBeenCalled();
+    expect(createFallbackStore).not.toHaveBeenCalled();
     expect(reserveCanvasResources).toHaveBeenCalledOnce();
   });
 
@@ -201,7 +201,7 @@ describe("IntegratedPlayer construction and resource admission", () => {
     });
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new MinimalStaticStore(),
+      createFallbackStore: () => new MinimalStaticStore(),
       candidateFactory: candidateFactoryWithResourceHost(
         () => lease as RuntimeCanvasResourceLease
       )
@@ -218,7 +218,7 @@ describe("IntegratedPlayer construction and resource admission", () => {
     let player: IntegratedPlayer | null = null;
     player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => new WrongInitialStateStore(),
+      createFallbackStore: () => new WrongInitialStateStore(),
       candidateFactory: new NeverCandidateFactory(),
       timers: new ManualTimers(),
       eventSink: () => {
@@ -235,7 +235,7 @@ describe("IntegratedPlayer construction and resource admission", () => {
   });
 });
 
-class MinimalStaticStore implements IntegratedStaticSurfaceStore {
+class MinimalStaticStore implements IntegratedFallbackStore {
   public disposeCalls = 0;
   #state: string | null = null;
 

@@ -1,12 +1,12 @@
 # Hosting, ranges, CORS, CSP, and integrity
 
-Serve `.rma` as `application/vnd.rendered-motion` (or
+Serve `.avl` as `application/vnd.aval` (or
 `application/octet-stream`). Range startup requires identity-encoded exact
 `206`, `Content-Length`, `Content-Range`, `Accept-Ranges: bytes`, and one stable
 strong `ETag`. Do not dynamically compress partial responses. A standalone
 complete `200` may use browser-supported HTTP compression: the runtime ignores
 encoded length metadata, bounds the decoded stream, and validates the complete
-decoded asset. Compression is usually low-value because RMA media payloads are
+decoded asset. Compression is usually low-value because AVAL media payloads are
 already compressed.
 
 `crossorigin="anonymous"` uses Fetch `credentials: same-origin`: cross-origin

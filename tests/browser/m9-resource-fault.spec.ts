@@ -2,16 +2,16 @@ import { expect, test } from "@playwright/test";
 
 test("short PR resource/fault profile exports terminal counters for every isolated scenario", async ({ page }) => {
   await page.goto("/certification.html");
-  await page.waitForFunction(() => "renderedMotionCertification" in window);
+  await page.waitForFunction(() => "avalCertification" in window);
   const report = await page.evaluate(async () => {
-    const api = (window as unknown as { renderedMotionCertification: {
+    const api = (window as unknown as { avalCertification: {
       ready: Promise<void>;
       runResourceFaultProfile(): Promise<{
         status: string;
         lifecycle: { peakCounters: Record<string, number>; terminalCounters: Record<string, number> };
         network: readonly { status: string; outstandingSettled: boolean; failureCode: string | null }[];
       }>;
-    } }).renderedMotionCertification;
+    } }).avalCertification;
     await api.ready;
     return api.runResourceFaultProfile();
   });

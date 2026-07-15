@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.1",
-  "fixture": "reference-packed.rma",
+  "fixture": "reference-packed.avl",
   "scenarios": [
     {
       "id": "exact-range",
@@ -47,12 +47,12 @@
       "behavior": "Flip one deterministic byte inside the first selected-rendition unit while retaining all HTTP metadata."
     },
     {
-      "id": "corrupt-static",
-      "behavior": "Flip one deterministic byte inside the initial static PNG while retaining all HTTP metadata."
+      "id": "corrupt-bootstrap-unit",
+      "behavior": "Flip one deterministic byte inside the first bootstrap motion unit while retaining all HTTP metadata."
     },
     {
       "id": "nonzero-padding",
-      "behavior": "Change the first normally requested selected-rendition or static alignment-padding byte from zero to one."
+      "behavior": "Change the first normally requested selected-rendition alignment-padding byte from zero to one."
     },
     {
       "id": "valid-external-integrity",

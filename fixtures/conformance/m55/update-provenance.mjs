@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { chmod, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,7 +13,7 @@ import {
 const outputRoot = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(outputRoot, "../../..");
 const sourceRoot = resolve(repositoryRoot, "fixtures/compiler/m55/source");
-const assetPath = resolve(outputRoot, "opaque-all-routes.rma");
+const assetPath = resolve(outputRoot, "opaque-all-routes.avl");
 const reportPath = `${assetPath}.build.json`;
 const projectPath = resolve(sourceRoot, "all-routes.json");
 const generatorPath = resolve(sourceRoot, "generate.mjs");
@@ -66,13 +66,6 @@ const units = frontIndex.unitBlobs.map((blob) => {
   );
   return { ...blob };
 });
-const staticFrames = frontIndex.staticBlobs.map((blob) => {
-  require(
-    sha256(asset.subarray(blob.offset, blob.offset + blob.length)) === blob.sha256,
-    `static blob ${blob.staticFrame} has a digest mismatch`
-  );
-  return { ...blob };
-});
 const strictInspections = frontIndex.manifest.renditions.map(
   (rendition, renditionIndex) => {
     const inspection = inspectAvcAnnexBRendition({
@@ -83,7 +76,8 @@ const strictInspections = frontIndex.manifest.renditions.map(
         averageBitrate: rendition.bitrate.average,
         peakBitrate: rendition.bitrate.peak,
         cpbBufferBits: rendition.bitrate.peak,
-        requireBt709LimitedRange: true
+        requireBt709LimitedRange: true,
+        quantizationPolicy: "fixed-qp26-v0"
       },
       units: frontIndex.manifest.units.map((unit, unitIndex) => ({
         id: unit.id,
@@ -115,22 +109,22 @@ const strictInspections = frontIndex.manifest.renditions.map(
 
 const provenance = {
   provenanceVersion: "0.1",
-  generatedAt: "2026-07-12",
-  generator: "rendered-motion-compiler/0.1",
+  generatedAt: "2026-07-14",
+  generator: "aval-compiler/0.1",
   pipelineLineage: {
-    migration: "rgba-filter-chain-to-direct-bt709-limited-yuv420p-v0",
+    migration: "embedded-posters-to-motion-only-v0",
     previousAssets: [
       {
-        name: "opaque-all-routes.rma",
-        sha256: "28bbd6ca250fff5571ff9ef8a95a69d878e198641a05e8923743a521106f70d5"
+        name: "opaque-all-routes.avl",
+        sha256: "f991621d528aac6ef8fdc854ff7f575174c5c85a71fc64a6db231b8c239013e2"
       }
     ],
-    review: "Intentional encoded-byte migration; source project and PNG frames remain unchanged."
+    review: "Intentional wire migration: embedded static PNGs were removed; the source project, motion units, and PNG source frames remain unchanged."
   },
   compiler: report.compiler,
   toolchain: normalizedToolchain(report.toolchain),
   fixture: {
-    name: "opaque-all-routes.rma",
+    name: "opaque-all-routes.avl",
     coverage: [
       "initial-one-shot",
       "looping-bodies",
@@ -157,11 +151,6 @@ const provenance = {
     frontIndex: frontIndex.frontIndexRange,
     manifestSha256: sha256(serializeCanonicalJson(frontIndex.manifest)),
     units,
-    staticFrames,
-    stateStatics: frontIndex.manifest.states.map(({ id, staticFrame }) => ({
-      state: id,
-      staticFrame
-    })),
     readiness: frontIndex.manifest.readiness,
     strictInspections,
     normalization: report.buildDetails.sources.map((source) => ({
@@ -193,6 +182,7 @@ await writeFile(
   resolve(outputRoot, "provenance.json"),
   `${JSON.stringify(provenance, null, 2)}\n`
 );
+await chmod(assetPath, 0o644);
 await unlink(reportPath);
 
 function normalizedToolchain(toolchain) {

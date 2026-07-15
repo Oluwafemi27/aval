@@ -31,7 +31,8 @@ describe("dev single-flight watcher", () => {
     const session = await startDevCommand({
       command: "dev",
       project: "motion.json",
-      output: "motion.rma",
+      output: "motion.avl",
+      mediaTimeoutMs: 900_000,
       force: false,
       json: false
     }, {
@@ -66,6 +67,7 @@ describe("dev single-flight watcher", () => {
     });
 
     expect(pending).toHaveLength(1);
+    expect(pending[0]!.options.mediaTimeoutMs).toBe(900_000);
     const media = [...listeners.keys()].find((path) => path.endsWith("render.mp4"));
     if (media === undefined) throw new Error("media watcher was not installed");
     listeners.get(media)!();
@@ -94,7 +96,7 @@ describe("dev single-flight watcher", () => {
     expect(maximumConcurrent).toBe(1);
     expect(builds).toEqual([5]);
     expect(failures).toEqual([]);
-    expect((await readFile(join(root, "motion.rma")))[0]).toBe(3);
+    expect((await readFile(join(root, "motion.avl")))[0]).toBe(3);
     expect(session.watchPaths().map((path) => path.split("/").at(-1)).sort()).toEqual([
       "motion.json",
       "render.mp4"
@@ -110,7 +112,7 @@ describe("dev single-flight watcher", () => {
     const session = await startDevCommand({
       command: "dev",
       project: "motion.json",
-      output: "motion.rma",
+      output: "motion.avl",
       force: false,
       json: false
     }, {
@@ -142,7 +144,7 @@ describe("dev single-flight watcher", () => {
     const session = await startDevCommand({
       command: "dev",
       project: "motion.json",
-      output: "motion.rma",
+      output: "motion.avl",
       force: false,
       json: false
     }, {
@@ -214,7 +216,7 @@ interface DeferredCompile {
 }
 
 async function createProject(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "rma-dev-"));
+  const root = await mkdtemp(join(tmpdir(), "aval-dev-"));
   roots.push(root);
   await writeFile(join(root, "render.mp4"), "placeholder");
   await writeFile(join(root, "motion.json"), JSON.stringify({
@@ -279,7 +281,7 @@ function artifact(marker = 4): Readonly<CompileArtifact> {
     }),
     warnings: Object.freeze([]),
     buildDetails: Object.freeze({
-      detailsVersion: "0.1"
+      detailsVersion: "0.2"
     }) as unknown as CompileArtifact["buildDetails"]
   });
 }

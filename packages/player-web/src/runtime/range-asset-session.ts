@@ -6,7 +6,7 @@ import {
   validateCompleteAsset,
   type FormatHeader,
   type ParsedFrontIndex
-} from "@rendered-motion/format";
+} from "@aval/format";
 import type {
   NormalizedRuntimeAssetRequest,
   RuntimeFetchAdapter,

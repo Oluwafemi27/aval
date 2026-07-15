@@ -18,7 +18,7 @@ const response = await fetch(endpoint, {
   headers: {
     accept: "application/vnd.github+json",
     authorization: `Bearer ${token}`,
-    "user-agent": "rendered-motion-release-authority/1.0",
+    "user-agent": "aval-release-authority/1.0",
     "x-github-api-version": "2022-11-28"
   },
   signal: AbortSignal.timeout(20_000)

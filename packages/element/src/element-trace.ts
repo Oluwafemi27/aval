@@ -1,10 +1,10 @@
-import type { RenderedMotionTraceRecord } from "./public-types.js";
+import type { AvalTraceRecord } from "./public-types.js";
 import { nextElementSequence } from "./element-sequence.js";
 
 export const ELEMENT_TRACE_CAPACITY = 512;
 
 export class ElementTrace {
-  readonly #records: Readonly<RenderedMotionTraceRecord>[] = [];
+  readonly #records: Readonly<AvalTraceRecord>[] = [];
   #index = 0;
 
   public record(kind: string, generation: number): void {
@@ -20,7 +20,7 @@ export class ElementTrace {
     if (this.#records.length > ELEMENT_TRACE_CAPACITY) this.#records.shift();
   }
 
-  public snapshot(): readonly Readonly<RenderedMotionTraceRecord>[] {
+  public snapshot(): readonly Readonly<AvalTraceRecord>[] {
     return Object.freeze([...this.#records]);
   }
 }

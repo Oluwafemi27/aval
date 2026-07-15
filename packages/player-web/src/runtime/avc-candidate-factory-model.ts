@@ -1,4 +1,4 @@
-import type { GraphPresentation, MotionGraphSnapshot } from "@rendered-motion/graph";
+import type { GraphPresentation, MotionGraphSnapshot } from "@aval/graph";
 
 import type {
   DecoderWorkerConfigureOptions
@@ -41,7 +41,7 @@ import type {
   WorkerSampleFactory,
   WorkerSampleTransferLease
 } from "./worker-samples.js";
-import type { RuntimeCanvasResourceHost } from "./static-resource-plan.js";
+import type { RuntimeCanvasResourceHost } from "./canvas-resource-plan.js";
 import type { BrowserContextRecoveryEventTarget } from "./browser-context-recovery.js";
 
 export type Awaitable<T> = T | PromiseLike<T>;

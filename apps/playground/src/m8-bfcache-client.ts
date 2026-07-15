@@ -1,7 +1,7 @@
-import { defineRenderedMotionElement } from "@rendered-motion/element";
+import { defineAvalElement } from "@aval/element";
 
-defineRenderedMotionElement();
-const motion = document.createElement("rendered-motion");
+defineAvalElement();
+const motion = document.createElement("aval-player");
 motion.width = 96;
 motion.height = 64;
 motion.src = "/__m8__/asset?fixture=user-states&session=m8-bfcache";

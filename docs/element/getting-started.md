@@ -1,35 +1,34 @@
-# Rendered Motion element: getting started
+# AVAL element: getting started
 
-> `@rendered-motion/element`, `<rendered-motion>`, and `.rma` are prototype
-> names. Pin an exact version once packages are published.
+> Pin an exact version once packages are published.
 
 Install and explicitly register the SSR-safe package root:
 
 ```sh
-npm install @rendered-motion/element
+npm install @aval/element
 ```
 
 ```js
-import { defineRenderedMotionElement } from "@rendered-motion/element";
-defineRenderedMotionElement();
+import { defineAvalElement } from "@aval/element";
+defineAvalElement();
 ```
 
 ```html
-<rendered-motion src="/assets/orbit.rma" width="96" height="96">
+<aval-player src="/assets/orbit.avl" width="96" height="96">
   <img slot="fallback" src="/assets/orbit.png" alt="" width="96" height="96">
-</rendered-motion>
+</aval-player>
 ```
 
-Connection automatically prepares metadata and the current strict static.
-When animation is supported and visible, a direct one-state compile plays its
-authored intro and body loop without application code. Unsupported animation
-remains a successful static result. Network, parser, integrity, or strict
-static failure leaves the author-owned fallback visible.
+Connection automatically prepares metadata. When animation is supported and
+visible, the first revealed internal pixels are a decoded frame and a direct
+one-state compile plays its authored intro and body loop without application
+code. Unsupported or reduced-motion paths leave the author-owned fallback
+visible. Network, parser, integrity, or decode failure does the same.
 
 For a browser-only pinned CDN import, use the explicit side-effect entry:
 
 ```js
-import "https://your-pinned-cdn.example/@rendered-motion/element@VERSION/auto";
+import "https://your-pinned-cdn.example/@aval/element@VERSION/auto";
 ```
 
 Do not use an unpinned URL in production. Call `dispose()` when an element

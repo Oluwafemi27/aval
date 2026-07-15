@@ -156,7 +156,7 @@ describe("IntegratedPlayerContext", () => {
 });
 
 describe("IntegratedPlayer context binding", () => {
-  it("covers and freezes synchronously, then restores with one body-zero candidate", async () => {
+  it("covers and freezes synchronously, then restarts an unfinished intro", async () => {
     const target = new FakeTarget();
     const harness = createHarness({
       contextTarget: target,
@@ -166,7 +166,7 @@ describe("IntegratedPlayer context binding", () => {
 
     const loss = target.loss();
     expect(loss.prevented).toBe(true);
-    expect(harness.staticStore.calls.at(-1)).toBe("cover-current");
+    expect(harness.fallbackStore.calls.at(-1)).toBe("cover-current");
     expect(harness.player.contextSnapshot()).toMatchObject({
       state: "lost",
       lossCount: 1
@@ -181,7 +181,7 @@ describe("IntegratedPlayer context binding", () => {
     expect(harness.factory.draws.map((presentation) => [
       presentation.kind,
       presentation.kind === "static" ? null : presentation.frameIndex
-    ])).toEqual([["intro", 0], ["body", 0]]);
+    ])).toEqual([["intro", 0], ["intro", 0]]);
     expect(harness.player.contextSnapshot()).toMatchObject({
       state: "ready",
       successfulRestorations: 1
@@ -210,7 +210,7 @@ describe("IntegratedPlayer context binding", () => {
       call === "create:opaque-high"
     )).toHaveLength(2);
     expect(harness.factory.draws.at(-1)).toMatchObject({
-      kind: "body",
+      kind: "intro",
       frameIndex: 0
     });
     expect(harness.player.contextSnapshot()?.state).toBe("ready");
@@ -233,7 +233,7 @@ describe("IntegratedPlayer context binding", () => {
     await harness.player.settled();
 
     expect(harness.factory.draws).toEqual([
-      expect.objectContaining({ kind: "body", frameIndex: 0 })
+      expect.objectContaining({ kind: "intro", frameIndex: 0 })
     ]);
     expect(harness.player.contextSnapshot()?.state).toBe("ready");
   });
@@ -269,7 +269,7 @@ describe("IntegratedPlayer context binding", () => {
     expect(harness.factory.activeAttempts).toBe(0);
   });
 
-  it("recovers a loss during initial candidate preparation without intro replay", async () => {
+  it("recovers a loss during initial candidate preparation with the intro intact", async () => {
     const target = new FakeTarget();
     const harness = createHarness({
       contextTarget: target,
@@ -284,7 +284,7 @@ describe("IntegratedPlayer context binding", () => {
     await harness.player.settled();
 
     expect(harness.factory.draws).toEqual([
-      expect.objectContaining({ kind: "body", frameIndex: 0 })
+      expect.objectContaining({ kind: "intro", frameIndex: 0 })
     ]);
     expect(harness.factory.maximumActiveAttempts).toBe(1);
     expect(harness.player.contextSnapshot()?.state).toBe("ready");
@@ -336,7 +336,7 @@ describe("IntegratedPlayer context binding", () => {
     });
   });
 
-  it("keeps static-canvas cover failure fatal and never claims static ready", async () => {
+  it("keeps host-fallback cover failure fatal and never claims static ready", async () => {
     const target = new FakeTarget();
     const harness = createHarness({
       contextTarget: target,

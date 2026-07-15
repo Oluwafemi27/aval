@@ -39,13 +39,11 @@ import {
 import type { RuntimeAssetRequest } from "./model.js";
 import {
   PLAYER_ANIMATION_RECLAIMABLE_CATEGORIES,
-  STATIC_RECLAIMABLE_CATEGORIES,
   captureAssetBytesOptions,
   captureAssetOptions,
   captureOwnedPlayer,
   capturePlayerReclamationCategories,
   captureReclamationHandler,
-  captureStaticReclaimer,
   checkedSum,
   disposedError,
   linkGenerationSignal,
@@ -80,10 +78,6 @@ export interface PlayerWebOwnedPlayer {
   setVisibility?(
     visibility: "hidden"
   ): void | PromiseLike<unknown>;
-}
-
-export interface PlayerWebStaticSurfaceReclaimer {
-  reclaimOldest(): Readonly<{ readonly byteLength: number }> | null;
 }
 
 export interface PlayerWebReclamationParticipant
@@ -122,9 +116,6 @@ export interface PlayerWebRuntimeParticipant {
   ownPlayer(player: PlayerWebOwnedPlayer): () => void;
   registerReclamationParticipant(
     participant: PlayerWebReclamationParticipant
-  ): () => void;
-  registerStaticSurfaceReclaimer(
-    store: PlayerWebStaticSurfaceReclaimer
   ): () => void;
   reserveWithReclamation(
     category: RuntimeByteCategory,
@@ -331,7 +322,7 @@ class PlayerWebRuntimeParticipantImpl implements PlayerWebRuntimeParticipant {
     return session;
   }
 
-  /** Retire player/candidate/GL ownership before statics and asset bytes. */
+  /** Retire player/candidate/GL ownership before asset bytes. */
   public ownPlayer(player: PlayerWebOwnedPlayer): () => void {
     const capabilities = captureOwnedPlayer(player);
     const context = this.#current();
@@ -419,42 +410,6 @@ class PlayerWebRuntimeParticipantImpl implements PlayerWebRuntimeParticipant {
       throw error;
     }
     return release;
-  }
-
-  /** Register deterministic LRU decoded-static eviction under page pressure. */
-  public registerStaticSurfaceReclaimer(
-    store: PlayerWebStaticSurfaceReclaimer
-  ): () => void {
-    const reclaimOldest = captureStaticReclaimer(store);
-    return this.#registerReclamationHandler({
-      reclaim(request) {
-        if (
-          request.reason !== "decoded-static" &&
-          request.reason !== "policy-reduction"
-        ) {
-          return Promise.resolve(Object.freeze({
-            token: request.token,
-            releasedBytes: 0,
-            covered: true
-          }));
-        }
-        let releasedBytes = 0;
-        while (releasedBytes < request.requestedBytes) {
-          const eviction = reclaimOldest();
-          if (eviction === null) break;
-          releasedBytes = checkedSum(
-            releasedBytes,
-            eviction.byteLength,
-            "reclaimed static bytes"
-          );
-        }
-        return Promise.resolve(Object.freeze({
-          token: request.token,
-          releasedBytes,
-          covered: true
-        }));
-      }
-    }, 10, STATIC_RECLAIMABLE_CATEGORIES);
   }
 
   /** Reserve through the shared pressure lane and retire on generation exit. */
@@ -606,13 +561,6 @@ class PlayerWebRuntimeParticipantImpl implements PlayerWebRuntimeParticipant {
     );
     return this.#registerReclamationHandler({
       reclaim(request) {
-        if (request.reason === "decoded-static") {
-          return Promise.resolve(Object.freeze({
-            token: request.token,
-            releasedBytes: 0,
-            covered: true
-          }));
-        }
         let releasedBytes = 0;
         for (const rendition of renditionIds) {
           releasedBytes = checkedSum(

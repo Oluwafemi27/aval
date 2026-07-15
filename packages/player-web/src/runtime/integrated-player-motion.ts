@@ -197,7 +197,7 @@ export class IntegratedPlayerMotion {
     return this.#scheduleTransitions();
   }
 
-  /** Strict-static pressure fallback without mutating the host motion policy. */
+  /** Host fallback for page pressure without mutating the motion policy. */
   public reclaimForResourcePressure(): Promise<boolean> {
     const operation = this.#tail.then(() => this.#enterResourcePressure());
     this.#tail = operation.then(
@@ -364,7 +364,7 @@ export class IntegratedPlayerMotion {
       try {
         await this.#failReduction(error);
       } finally {
-        this.#coordinator.failToStatic("png-failure");
+        this.#coordinator.failToStatic("fallback-failure");
       }
     }
   }

@@ -1,7 +1,9 @@
+import { checkedAdd } from "../checked-integer.js";
 import { FormatError, isFormatError } from "../errors.js";
 import { adler32 } from "./crc32.js";
 import { inflateDeflate } from "./deflate.js";
 import {
+  readOwnedPngLayout,
   readOwnedPngZlib,
   type PngDecodePlan
 } from "./profile.js";
@@ -18,7 +20,12 @@ export interface PngRgbaDecodeResult {
 export function decodePngRgba(plan: PngDecodePlan): PngRgbaDecodeResult {
   try {
     const zlib = readOwnedPngZlib(plan);
-    const deflateEnd = plan.deflateRange.offset + plan.deflateRange.length;
+    const deflateEnd = checkedAdd(
+      plan.deflateRange.offset,
+      plan.deflateRange.length,
+      zlib.byteLength,
+      "PNG DEFLATE range end"
+    );
     const filtered = inflateDeflate({
       deflate: zlib.subarray(plan.deflateRange.offset, deflateEnd),
       expectedOutputLength: plan.expectedFilteredBytes
@@ -52,8 +59,7 @@ export function decodePngRgbaFromInflated(
     }
     const rgba = unfilterPngRgba({
       filtered,
-      width: plan.width,
-      height: plan.height
+      layout: readOwnedPngLayout(plan)
     });
     if (rgba.byteLength !== plan.expectedRgbaBytes) {
       deflateFail("decoded RGBA length does not match the decode plan");

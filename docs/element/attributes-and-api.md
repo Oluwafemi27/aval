@@ -21,9 +21,13 @@ Properties validate synchronously and never mutate on invalid input. Invalid
 HTML attribute text falls back to the documented default and emits a nonfatal,
 normalized `error` event. Source strings are capped at 4,096 UTF-16 code
 units, interaction IDs at 256, state names use the format identifier grammar,
-and size hints are integers from 1 through 16,384. The element has no external
-image URL API: initial and per-state pixels come from verified asset statics,
-with the author-owned fallback slot below them.
+and size hints are positive safe integers. They are not silently clamped;
+actual canvas, browser, and device limits can instead produce an explicit
+capability/resource failure. The element has no external
+image URL API. On the supported path, the first visible internal pixels are a
+decoded motion frame. The optional author-owned fallback slot is separate from
+the `.avl` and remains visible during preparation, reduced motion, and
+unsupported/error paths.
 
 Core methods are `prepare`, `setState`, `send`, `readyFor`, `pause`, `resume`,
 `getDiagnostics`, and `dispose`. Caller abort signals and `timeoutMs` bound only

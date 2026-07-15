@@ -1,6 +1,6 @@
 import {
   FuzzCandidateFactory,
-  FuzzStaticStore
+  FuzzFallbackStore
 } from "./integrated-player-fuzz-fixture.js";
 import {
   fuzzInvariant,
@@ -11,80 +11,17 @@ import {
   computePresentationGeometry,
   PRESENTATION_FIT_MODES
 } from "./presentation-geometry.js";
-import { BrowserStaticSurfaceDecoder } from "./strict-static-decoder.js";
-
-export interface FuzzStrictStaticActionResult {
-  readonly selected: "native" | "pure";
-  readonly abortObserved: boolean;
-}
-
-export async function runFuzzStrictStaticAction(
-  player: IntegratedPlayer,
-  path: "native" | "pure"
-): Promise<Readonly<FuzzStrictStaticActionResult>> {
-  const descriptor = player.catalog.manifest.staticFrames[0];
-  if (descriptor === undefined) {
-    throw new Error("fuzz asset has no strict static descriptor");
-  }
-  const bitmapCloses = { value: 0 };
-  const decoder = new BrowserStaticSurfaceDecoder({
-    ...(path === "pure" ? { nativeInflater: null } : {}),
-    createBitmap: async (_rgba, width, height) => ({
-      width,
-      height,
-      close() {
-        bitmapCloses.value += 1;
-      }
-    } as ImageBitmap)
-  });
-  const aborted = new AbortController();
-  aborted.abort(new DOMException("seeded static abort", "AbortError"));
-  let abortObserved = false;
-  try {
-    await decoder.decode(
-      player.catalog.copyStaticPng(descriptor.id),
-      {
-        signal: aborted.signal,
-        expectedWidth: descriptor.width,
-        expectedHeight: descriptor.height
-      }
-    );
-  } catch (error) {
-    abortObserved = error instanceof DOMException && error.name === "AbortError";
-  }
-  const surface = await decoder.decode(
-    player.catalog.copyStaticPng(descriptor.id),
-    {
-      signal: new AbortController().signal,
-      expectedWidth: descriptor.width,
-      expectedHeight: descriptor.height
-    }
-  );
-  const selected = surface.inflatePath;
-  surface.close();
-  const snapshot = decoder.snapshot();
-  if (
-    snapshot.errors !== 0 ||
-    snapshot.bitmapCloses !== 1 ||
-    bitmapCloses.value !== 1 ||
-    snapshot.peakPngCopyBytes <= 0 ||
-    snapshot.peakZlibBytes <= 0 ||
-    snapshot.peakFilteredBytes <= 0 ||
-    snapshot.peakRgbaBytes <= 0
-  ) {
-    throw new Error("strict static fuzz probe did not clean up exactly");
-  }
-  return Object.freeze({ selected, abortObserved });
-}
-
 export async function exerciseFuzzMotionPolicyActions(options: {
   readonly player: IntegratedPlayer;
   readonly factory: FuzzCandidateFactory;
-  readonly store: FuzzStaticStore;
+  readonly store: FuzzFallbackStore;
   readonly recorder: FuzzRecorder;
   readonly expectedRendition: string;
 }): Promise<void> {
   const introDraws = countIntroDraws(options.recorder);
+  const introPending = [...options.player.getTrace()].reverse().find(
+    (record) => record.graph !== null
+  )?.graph?.snapshot.initialUnitPending ?? false;
 
   await options.player.setHostReducedMotion(true);
   fuzzInvariant(
@@ -94,7 +31,7 @@ export async function exerciseFuzzMotionPolicyActions(options: {
       options.factory.activeAttempts === 0 &&
       options.recorder.actualPlane === "static",
     options.recorder,
-    "host reduction did not commit the strict static plane"
+    "host reduction did not commit the fallback state"
   );
   options.recorder.push("action:host-reduce");
 
@@ -119,11 +56,22 @@ export async function exerciseFuzzMotionPolicyActions(options: {
   const restoring = options.player.setMotionPolicy("full");
   await Promise.all([reducing, restoring]);
   assertAnimatedPolicyState(options, "superseded reduction");
-  fuzzInvariant(
-    countIntroDraws(options.recorder) === introDraws,
-    options.recorder,
-    "motion re-entry replayed the authored intro"
-  );
+  const introStillPending = [...options.player.getTrace()].reverse().find(
+    (record) => record.graph !== null
+  )?.graph?.snapshot.initialUnitPending ?? false;
+  if (!introPending) {
+    fuzzInvariant(
+      countIntroDraws(options.recorder) === introDraws,
+      options.recorder,
+      "motion re-entry replayed the completed authored intro"
+    );
+  } else if (introStillPending) {
+    fuzzInvariant(
+      countIntroDraws(options.recorder) > introDraws,
+      options.recorder,
+      "motion re-entry skipped the unfinished authored intro"
+    );
+  }
   fuzzInvariant(
     options.store.maximumActivePresentations === 1,
     options.recorder,
@@ -148,27 +96,48 @@ export function exerciseFuzzResizeAction(
   ]!;
   const maxBackingWidth = random() < 0.5 ? 257 : 2_048;
   const maxBackingHeight = random() < 0.5 ? 263 : 2_048;
-  const geometry = computePresentationGeometry({
-    canvasWidth: canvas.width,
-    canvasHeight: canvas.height,
-    pixelAspectNumerator: canvas.pixelAspect[0],
-    pixelAspectDenominator: canvas.pixelAspect[1],
-    fit,
-    cssWidth,
-    cssHeight,
-    devicePixelRatio,
-    maxBackingWidth,
-    maxBackingHeight,
-    maxBackingBytes: 8 * 1024 * 1024
-  });
+  const maxBackingBytes = 8 * 1024 * 1024;
+  const desiredWidth = Math.ceil(cssWidth * devicePixelRatio);
+  const desiredHeight = Math.ceil(cssHeight * devicePixelRatio);
+  const shouldReject = desiredWidth > maxBackingWidth ||
+    desiredHeight > maxBackingHeight ||
+    desiredWidth * desiredHeight * 4 > maxBackingBytes;
+  let geometry: ReturnType<typeof computePresentationGeometry>;
+  try {
+    geometry = computePresentationGeometry({
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      pixelAspectNumerator: canvas.pixelAspect[0],
+      pixelAspectDenominator: canvas.pixelAspect[1],
+      fit,
+      cssWidth,
+      cssHeight,
+      devicePixelRatio,
+      maxBackingWidth,
+      maxBackingHeight,
+      maxBackingBytes
+    });
+  } catch (error) {
+    fuzzInvariant(
+      shouldReject &&
+        error instanceof RangeError &&
+        sameSemanticSnapshot(before, player.snapshot()),
+      recorder,
+      "resize rejection changed semantic state or lacked an explicit range error"
+    );
+    recorder.push(
+      `action:resize-rejected:${fit}:${String(cssWidth)}x${String(cssHeight)}@${String(devicePixelRatio)}`
+    );
+    return;
+  }
   fuzzInvariant(
-    geometry.desiredBacking.width === Math.ceil(cssWidth * devicePixelRatio) &&
-      geometry.desiredBacking.height === Math.ceil(cssHeight * devicePixelRatio) &&
-      geometry.backing.width <= maxBackingWidth &&
-      geometry.backing.height <= maxBackingHeight &&
+    !shouldReject &&
+      geometry.desiredBacking.width === desiredWidth &&
+      geometry.desiredBacking.height === desiredHeight &&
+      geometry.backing.width === desiredWidth &&
+      geometry.backing.height === desiredHeight &&
       geometry.byteTerms.totalBackingBytes ===
-        geometry.backing.width * geometry.backing.height * 4 * 2 &&
-      geometry.planes.animated === geometry.planes.static &&
+        geometry.backing.width * geometry.backing.height * 4 &&
       sameSemanticSnapshot(before, player.snapshot()),
     recorder,
     "resize/DPR arithmetic changed semantic graph or split plane geometry"

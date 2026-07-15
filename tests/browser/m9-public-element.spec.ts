@@ -4,9 +4,9 @@ test("public-path harness exercises user states, promises, events, and terminal 
   await page.goto("/certification.html");
   await ready(page);
   const report = await page.evaluate(async () => {
-    const api = (window as unknown as { renderedMotionCertification: {
+    const api = (window as unknown as { avalCertification: {
       runPublicHarness(options: Record<string, number>): Promise<Record<string, unknown>>;
-    } }).renderedMotionCertification;
+    } }).avalCertification;
     return api.runPublicHarness({
       stateTransitions: 8,
       rapidInputs: 32,
@@ -68,10 +68,10 @@ test("public-path harness exercises user states, promises, events, and terminal 
 
 async function ready(page: import("@playwright/test").Page): Promise<void> {
   await page.waitForFunction(() => {
-    const api = (window as unknown as { renderedMotionCertification?: { ready: Promise<void> } }).renderedMotionCertification;
+    const api = (window as unknown as { avalCertification?: { ready: Promise<void> } }).avalCertification;
     return api !== undefined;
   });
   await page.evaluate(async () => {
-    await (window as unknown as { renderedMotionCertification: { ready: Promise<void> } }).renderedMotionCertification.ready;
+    await (window as unknown as { avalCertification: { ready: Promise<void> } }).avalCertification.ready;
   });
 }

@@ -53,17 +53,31 @@ describe("canonical RGBA PNG", () => {
     ));
   });
 
-  it("rejects dimensions and RGBA length before allocation", () => {
-    expect(() => encodeCanonicalRgbaPng({
+  it("accepts dimensions above 512 and rejects mismatched RGBA length", () => {
+    const wide = new Uint8Array(513 * 4).fill(0xa5);
+    expect(encodeCanonicalRgbaPng({
       width: 513,
       height: 1,
-      rgba: new Uint8Array()
-    })).toThrow(CompilerError);
+      rgba: wide
+    })).not.toHaveLength(0);
     expect(() => encodeCanonicalRgbaPng({
       width: 2,
       height: 2,
       rgba: new Uint8Array(15)
     })).toThrow(CompilerError);
+  });
+
+  it("emits and validates a PNG above the former 2 MiB ceiling", () => {
+    const width = 513;
+    const height = 1_024;
+    const rgba = new Uint8Array(width * height * 4).fill(0x7f);
+    const png = encodeCanonicalRgbaPng({ width, height, rgba });
+    expect(png.byteLength).toBeGreaterThan(2 * 1024 * 1024);
+    expect(inspectCanonicalRgbaPng({
+      png,
+      expectedWidth: width,
+      expectedHeight: height
+    })).toMatchObject({ width, height, rgbaBytes: rgba.byteLength });
   });
 
   it("uses stable stored DEFLATE blocks across the 65,535-byte boundary", () => {

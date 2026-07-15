@@ -1,8 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { deriveAvcRenditionGeometry } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometry } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -18,31 +14,7 @@ const geometry = deriveAvcRenditionGeometry({
   codedWidth: 16,
   codedHeight: 16
 });
-const MALFORMED_CONTRACTS_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../../fixtures/conformance/m6/malformed/contracts.json"
-);
-
 describe("histogram alpha quality", () => {
-  it("executes the checked malformed alpha-quality contract", async () => {
-    const contracts = JSON.parse(
-      await readFile(MALFORMED_CONTRACTS_PATH, "utf8")
-    );
-    const hostile = contracts.cases.find(
-      (entry: any) => entry.id === "packed-alpha-quality-over-limit"
-    );
-    const accumulator = createAlphaQualityAccumulator({
-      rendition: "packed",
-      geometry
-    });
-    expect(() => accumulator.includeFrame({
-      unit: "body",
-      frameIndex: 0,
-      expectedAlpha: Uint8Array.from(hostile.expectedAlpha),
-      decodedRgba: decodedAlpha(hostile.decodedAlpha)
-    })).toThrow(expect.objectContaining(hostile.expected));
-  });
-
   it("accepts exact MAE and p99 thresholds and reports normalized statistics", () => {
     const accumulator = createAlphaQualityAccumulator({
       rendition: "packed",
@@ -84,6 +56,8 @@ describe("histogram alpha quality", () => {
     })).toThrow(expect.objectContaining({
       code: "ALPHA_QUALITY_REJECTED",
       statistic: "mae",
+      value: 3 / 255,
+      limit: 2 / 255,
       phase: "quality",
       rendition: "packed",
       unit: "body",
@@ -136,6 +110,20 @@ describe("histogram alpha quality", () => {
       frameIndex: 7,
       p99AbsoluteError: 1 / 255
     });
+  });
+
+  it("accepts quality frame indexes beyond the former unit ceiling", () => {
+    const accumulator = createAlphaQualityAccumulator({
+      rendition: "packed",
+      geometry
+    });
+    accumulator.includeFrame({
+      unit: "body",
+      frameIndex: 900,
+      expectedAlpha: Uint8Array.of(0, 0, 0, 0),
+      decodedRgba: decodedAlpha([0, 0, 0, 0])
+    });
+    expect(accumulator.finish().worstFrame.frameIndex).toBe(900);
   });
 
   it("does not mutate inputs and rejects geometry, length, order, and cancellation", () => {

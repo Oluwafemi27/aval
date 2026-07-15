@@ -4,7 +4,7 @@ State names are asset data, not a runtime enum. The same API can drive
 `idle`/`engaged`, `loading`/`success`/`error`, or any other validated graph.
 
 ```js
-const motion = document.querySelector("rendered-motion");
+const motion = document.querySelector("aval-player");
 await motion.prepare();
 console.log(motion.stateNames, motion.eventNames, motion.inputBindings);
 await motion.setState("success");
@@ -14,7 +14,7 @@ motion.send("retry.requested");
 Declarative state is latest-wins and may be set before metadata:
 
 ```html
-<rendered-motion src="status.rma" state="loading"></rendered-motion>
+<aval-player src="status.avl" state="loading"></aval-player>
 ```
 
 Automatic input never guesses a destination. It routes only the manifest's

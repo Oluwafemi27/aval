@@ -67,7 +67,7 @@ const RECORDS: readonly AccessUnitRecord[] = Object.freeze([
 ]);
 
 const GOLDEN_HEX =
-  "524d4149200000000200000000000000" +
+  "41564c49200000000200000000000000" +
   "8000000000000000040000000000000000000100000000000000000000000000" +
   "8400000000000000050000000000000000000000010000000000000000000000";
 
@@ -178,17 +178,15 @@ describe("version-0.1 access-unit index", () => {
     )).toEqual(allKey);
   });
 
-  it("rejects zero, oversized, and lower-budget sample lengths", () => {
+  it("rejects zero and lower-budget sample lengths without a product ceiling", () => {
     const zero = encodeAccessUnitIndex(RECORDS, AVC_MANIFEST);
     writeUint32LE(zero, 16 + 8, 0);
     expectFormatError(() => parseAccessUnitIndex(zero, AVC_MANIFEST), "INDEX_INVALID");
 
-    const oversized = encodeAccessUnitIndex(RECORDS, AVC_MANIFEST);
-    writeUint32LE(oversized, 16 + 8, 2 * 1024 * 1024 + 1);
-    expectFormatError(
-      () => parseAccessUnitIndex(oversized, AVC_MANIFEST),
-      "BUDGET_EXCEEDED"
-    );
+    const formerlyOversized = encodeAccessUnitIndex(RECORDS, AVC_MANIFEST);
+    writeUint32LE(formerlyOversized, 16 + 8, 2 * 1024 * 1024 + 1);
+    expect(parseAccessUnitIndex(formerlyOversized, AVC_MANIFEST)[0]?.payloadLength)
+      .toBe(2 * 1024 * 1024 + 1);
 
     const lowered = encodeAccessUnitIndex(RECORDS, AVC_MANIFEST);
     expectFormatError(
@@ -200,7 +198,7 @@ describe("version-0.1 access-unit index", () => {
     );
   });
 
-  it("rejects unsafe and over-file-budget payload offsets", () => {
+  it("rejects unsafe and caller-over-budget payload offsets", () => {
     const unsafe = encodeAccessUnitIndex(RECORDS, AVC_MANIFEST);
     writeUint64LE(unsafe, 16, BigInt(Number.MAX_SAFE_INTEGER) + 1n);
     expectFormatError(
@@ -208,10 +206,14 @@ describe("version-0.1 access-unit index", () => {
       "INTEGER_UNSAFE"
     );
 
-    const overBudget = encodeAccessUnitIndex(RECORDS, AVC_MANIFEST);
-    writeUint64LE(overBudget, 16, 32 * 1024 * 1024 + 1);
+    const overFormerBudget = encodeAccessUnitIndex(RECORDS, AVC_MANIFEST);
+    writeUint64LE(overFormerBudget, 16, 32 * 1024 * 1024 + 1);
+    expect(parseAccessUnitIndex(overFormerBudget, AVC_MANIFEST)[0]?.payloadOffset)
+      .toBe(32 * 1024 * 1024 + 1);
     expectFormatError(
-      () => parseAccessUnitIndex(overBudget, AVC_MANIFEST),
+      () => parseAccessUnitIndex(overFormerBudget, AVC_MANIFEST, {
+        budgets: { maxFileBytes: 32 * 1024 * 1024 }
+      }),
       "BUDGET_EXCEEDED"
     );
   });
@@ -266,6 +268,38 @@ describe("version-0.1 access-unit index", () => {
       AVC_MANIFEST
     )).toEqual(allKey);
   });
+
+  it("round-trips an index above the former 4 MiB scale", () => {
+    const recordCount = 131_073;
+    const manifest = {
+      renditions: [{ id: "avc", profile: "avc-annexb-opaque-v0" }],
+      units: [{
+        id: "body",
+        frameCount: recordCount,
+        samples: [{
+          rendition: "avc",
+          sampleStart: 0,
+          sampleCount: recordCount,
+          sha256: "0".repeat(64)
+        }]
+      }]
+    } as unknown as CompiledManifestV01;
+    const records = Array.from({ length: recordCount }, (_, frameIndex) => ({
+      payloadOffset: 8_000_000 + frameIndex,
+      payloadLength: 1,
+      unitIndex: 0,
+      renditionIndex: 0,
+      key: frameIndex === 0,
+      frameIndex
+    }));
+
+    const bytes = encodeAccessUnitIndex(records, manifest);
+    const parsed = parseAccessUnitIndex(bytes, manifest);
+
+    expect(bytes.byteLength).toBeGreaterThan(4 * 1024 * 1024);
+    expect(parsed).toHaveLength(recordCount);
+    expect(parsed.at(-1)?.frameIndex).toBe(recordCount - 1);
+  }, 20_000);
 
   it("honors record/index budgets before allocating record results", () => {
     const bytes = encodeAccessUnitIndex(RECORDS, AVC_MANIFEST);

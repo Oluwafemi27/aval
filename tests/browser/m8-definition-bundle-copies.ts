@@ -12,9 +12,9 @@ export interface IndependentElementBundle {
 
 const ELEMENT_ENTRY = fileURLToPath(new URL("../../packages/element/src/index.ts", import.meta.url));
 const SOURCE_ALIASES = Object.freeze([
-  alias("@rendered-motion/player-web", "../../packages/player-web/src/index.ts"),
-  alias("@rendered-motion/format", "../../packages/format/src/index.ts"),
-  alias("@rendered-motion/graph", "../../packages/graph/src/index.ts")
+  alias("@aval/player-web", "../../packages/player-web/src/index.ts"),
+  alias("@aval/format", "../../packages/format/src/index.ts"),
+  alias("@aval/graph", "../../packages/graph/src/index.ts")
 ]);
 
 /** Build two isolated single-file ESM copies without writing artifacts to disk. */

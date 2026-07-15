@@ -1,19 +1,17 @@
 import { dirname } from "node:path";
+import { Writable } from "node:stream";
 
 import { CompilerError } from "../diagnostics.js";
 import {
   DEFAULT_PROBE_TIMEOUT_MS,
   MAX_PROCESS_STDERR_BYTES,
-  MAX_SOURCE_DIMENSION,
-  MAX_SOURCE_DURATION_SECONDS,
-  MAX_SOURCE_FRAMES,
   type MediaProbe,
   type MediaProbeFrame,
   type RationalV01
 } from "../model.js";
 import { runBoundedProcess } from "../process-runner.js";
 
-const PROBE_OUTPUT_LIMIT = 4 * 1024 * 1024;
+const MAX_PROBE_RECORD_CHARACTERS = 64 * 1024;
 const ALLOWED_FORMATS = new Set([
   "mov,mp4,m4a,3gp,3g2,mj2",
   "image2",
@@ -33,20 +31,22 @@ export async function probeMedia(
   timeoutMs?: number
 ): Promise<Readonly<MediaProbe>> {
   const invocation = createProbeMediaInvocation(inputPath);
-  const result = await runBoundedProcess({
+  const collector = createCompactProbeCollector(inputPath);
+  await runBoundedProcess({
     executable,
     arguments: invocation.arguments,
     cwd: invocation.cwd,
     limits: {
       timeoutMs: probeTimeout(timeoutMs),
-      maxStdoutBytes: PROBE_OUTPUT_LIMIT,
+      maxStdoutBytes: Number.MAX_SAFE_INTEGER,
       maxStderrBytes: MAX_PROCESS_STDERR_BYTES
     },
+    stdoutSink: collector.sink,
     privateWorkingDirectory: true,
     ...(signal === undefined ? {} : { signal })
   });
-  return parseProbeJson(
-    new TextDecoder().decode(result.stdout),
+  return parseProbeData(
+    collector.result(),
     inputPath,
     { sourceKind: "video" }
   );
@@ -67,20 +67,22 @@ export async function probePngSequence(
     frameRate,
     frameCount
   );
-  const result = await runBoundedProcess({
+  const collector = createCompactProbeCollector(pattern);
+  await runBoundedProcess({
     executable,
     arguments: invocation.arguments,
     cwd: invocation.cwd,
     limits: {
       timeoutMs: probeTimeout(timeoutMs),
-      maxStdoutBytes: PROBE_OUTPUT_LIMIT,
+      maxStdoutBytes: Number.MAX_SAFE_INTEGER,
       maxStderrBytes: MAX_PROCESS_STDERR_BYTES
     },
+    stdoutSink: collector.sink,
     privateWorkingDirectory: true,
     ...(signal === undefined ? {} : { signal })
   });
-  return parseProbeJson(
-    new TextDecoder().decode(result.stdout),
+  return parseProbeData(
+    collector.result(),
     pattern,
     { sourceKind: "png-sequence" }
   );
@@ -98,7 +100,7 @@ export function createProbeMediaInvocation(
   return Object.freeze({
     arguments: Object.freeze(probeArguments(
       ["-f", "mov"],
-      ["-read_intervals", `%+${String(MAX_SOURCE_DURATION_SECONDS + 1)}`],
+      [],
       inputPath
     )),
     cwd: dirname(inputPath)
@@ -125,7 +127,7 @@ export function createProbePngSequenceInvocation(
   }
   if (
     frameCount !== undefined &&
-    (!Number.isSafeInteger(frameCount) || frameCount < 1 || frameCount > MAX_SOURCE_FRAMES)
+    (!Number.isSafeInteger(frameCount) || frameCount < 1)
   ) {
     throw new CompilerError("INPUT_INVALID", "PNG probe frame count is invalid");
   }
@@ -152,17 +154,14 @@ function probeArguments(
 ): string[] {
   return [
     "-v", "error",
-    "-max_alloc", String(64 * 1024 * 1024),
     "-protocol_whitelist", "file,pipe",
-    "-analyzeduration", "10000000",
-    "-probesize", String(32 * 1024 * 1024),
     "-threads", "1",
     ...inputArguments,
     "-select_streams", "v",
     ...intervalArguments,
     "-show_entries",
     "stream=index,width,height,pix_fmt,avg_frame_rate,r_frame_rate,time_base,nb_frames,duration,field_order,sample_aspect_ratio:stream_side_data=rotation:format=format_name,duration:frame=stream_index,best_effort_timestamp,duration",
-    "-of", "json",
+    "-of", "compact=p=1:nk=0:escape=none",
     inputPath
   ];
 }
@@ -171,12 +170,11 @@ export function probeTimeout(timeoutMs: number | undefined): number {
   const value = timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
   if (
     !Number.isSafeInteger(value) ||
-    value < 1 ||
-    value > DEFAULT_PROBE_TIMEOUT_MS
+    value < 1
   ) {
     throw new CompilerError(
       "INPUT_INVALID",
-      `Probe timeout must be an integer from 1 to ${String(DEFAULT_PROBE_TIMEOUT_MS)} ms`
+      "Probe timeout must be a positive safe integer"
     );
   }
   return value;
@@ -196,17 +194,18 @@ export function parseProbeJson(
       cause: error
     });
   }
+  return parseProbeData(parsed, inputPath, options);
+}
+
+function parseProbeData(
+  parsed: ProbeJson,
+  inputPath: string,
+  options: { readonly sourceKind?: "video" | "png-sequence" }
+): Readonly<MediaProbe> {
   const stream = exactlyOne(parsed.streams, "video stream", inputPath);
   const width = positiveInteger(stream.width, "stream.width", inputPath);
   const height = positiveInteger(stream.height, "stream.height", inputPath);
   validateScanGeometry(stream, inputPath, options.sourceKind ?? "video");
-  if (width > MAX_SOURCE_DIMENSION || height > MAX_SOURCE_DIMENSION) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      `Source dimensions ${String(width)}×${String(height)} exceed ${String(MAX_SOURCE_DIMENSION)}×${String(MAX_SOURCE_DIMENSION)}`,
-      { path: inputPath }
-    );
-  }
   const pixelFormat = stringValue(stream.pix_fmt, "stream.pix_fmt", inputPath);
   const frameRate = parseRational(
     stringValue(stream.avg_frame_rate, "stream.avg_frame_rate", inputPath),
@@ -234,13 +233,6 @@ export function parseProbeJson(
     throw new CompilerError("INPUT_INVALID", "Source contains no decoded video frames", {
       path: inputPath
     });
-  }
-  if (sourceFrames.length > MAX_SOURCE_FRAMES) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      `Source exceeds ${String(MAX_SOURCE_FRAMES)} frames`,
-      { path: inputPath }
-    );
   }
   const frames: MediaProbeFrame[] = sourceFrames.map((frame, index) => {
     const timestamp = signedSafeInteger(
@@ -285,30 +277,9 @@ export function parseProbeJson(
     BigInt(frames.at(-1)!.timestampTicks) -
     BigInt(frames[0]!.timestampTicks) +
     BigInt(frames.at(-1)!.durationTicks);
-  if (
-    exactDurationTicks * BigInt(timeBase.numerator) >
-    BigInt(MAX_SOURCE_DURATION_SECONDS) * BigInt(timeBase.denominator)
-  ) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      `Source duration exceeds ${String(MAX_SOURCE_DURATION_SECONDS)} seconds`,
-      { path: inputPath }
-    );
-  }
-
   const variableFrameRate =
     !sameRational(frameRate, nominalFrameRate) ||
     !hasExactCfrGrid(frames, frameRate, timeBase);
-  if (
-    typeof durationText === "string" &&
-    decimalSecondsExceed(durationText, MAX_SOURCE_DURATION_SECONDS)
-  ) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      `Source duration exceeds ${String(MAX_SOURCE_DURATION_SECONDS)} seconds`,
-      { path: inputPath }
-    );
-  }
   const durationMicros = typeof durationText === "string"
     ? decimalSecondsToMicros(durationText)
     : rationalTicksToMicros(exactDurationTicks, timeBase);
@@ -329,6 +300,136 @@ export function parseProbeJson(
     variableFrameRate,
     frames: Object.freeze(frames)
   });
+}
+
+function createCompactProbeCollector(inputPath: string): Readonly<{
+  readonly sink: Writable;
+  readonly result: () => ProbeJson;
+}> {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const frames: Record<string, unknown>[] = [];
+  const streams: Record<string, unknown>[] = [];
+  const sideData: Record<string, unknown>[] = [];
+  let format: Record<string, unknown> | undefined;
+  let pending = "";
+  let finished = false;
+
+  const acceptText = (text: string, final: boolean): void => {
+    pending += text;
+    while (true) {
+      const newline = pending.indexOf("\n");
+      if (newline < 0) break;
+      const line = pending.slice(0, newline).replace(/\r$/u, "");
+      pending = pending.slice(newline + 1);
+      if (line !== "") acceptLine(line);
+    }
+    if (pending.length > MAX_PROBE_RECORD_CHARACTERS) {
+      throw new CompilerError(
+        "FFMPEG_FAILED",
+        "FFprobe emitted an oversized metadata record",
+        { path: inputPath }
+      );
+    }
+    if (final && pending !== "") {
+      acceptLine(pending.replace(/\r$/u, ""));
+      pending = "";
+    }
+  };
+  const acceptLine = (line: string): void => {
+    if (line.length > MAX_PROBE_RECORD_CHARACTERS) {
+      throw new CompilerError(
+        "FFMPEG_FAILED",
+        "FFprobe emitted an oversized metadata record",
+        { path: inputPath }
+      );
+    }
+    const fields = line.split("|");
+    const section = fields.shift();
+    const record: Record<string, unknown> = Object.create(null) as Record<
+      string,
+      unknown
+    >;
+    for (const field of fields) {
+      if (field === "") continue;
+      const separator = field.indexOf("=");
+      if (separator < 1) malformedCompactProbe(inputPath);
+      const key = field.slice(0, separator);
+      const value = field.slice(separator + 1);
+      if (Object.prototype.hasOwnProperty.call(record, key)) {
+        malformedCompactProbe(inputPath);
+      }
+      if (value === "N/A") continue;
+      record[key] = section === "stream" &&
+        (key === "index" || key === "width" || key === "height")
+        ? compactUnsignedInteger(value, inputPath)
+        : value;
+    }
+    if (section === "frame") frames.push(record);
+    else if (section === "stream") streams.push(record);
+    else if (section === "side_data") sideData.push(record);
+    else if (section === "format" && format === undefined) format = record;
+    else malformedCompactProbe(inputPath);
+  };
+  const sink = new Writable({
+    write(chunk: Buffer, _encoding, callback): void {
+      try {
+        acceptText(decoder.decode(chunk, { stream: true }), false);
+        callback();
+      } catch (error) {
+        callback(probeCollectorError(error, inputPath));
+      }
+    },
+    final(callback): void {
+      try {
+        acceptText(decoder.decode(), true);
+        finished = true;
+        callback();
+      } catch (error) {
+        callback(probeCollectorError(error, inputPath));
+      }
+    }
+  });
+  const result = (): ProbeJson => {
+    if (!finished) {
+      throw new CompilerError("IO_FAILED", "FFprobe metadata stream is incomplete");
+    }
+    const normalizedStreams = streams.map((stream) => Object.freeze({
+      ...stream,
+      ...(sideData.length === 0
+        ? {}
+        : { side_data_list: Object.freeze([...sideData]) })
+    }));
+    return Object.freeze({
+      frames: Object.freeze(frames),
+      streams: Object.freeze(normalizedStreams),
+      ...(format === undefined ? {} : { format: Object.freeze(format) })
+    });
+  };
+  return Object.freeze({ sink, result });
+}
+
+function compactUnsignedInteger(value: string, inputPath: string): number {
+  if (!/^\d+$/u.test(value)) malformedCompactProbe(inputPath);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) malformedCompactProbe(inputPath);
+  return parsed;
+}
+
+function malformedCompactProbe(inputPath: string): never {
+  throw new CompilerError("FFMPEG_FAILED", "FFprobe returned malformed metadata", {
+    path: inputPath
+  });
+}
+
+function probeCollectorError(error: unknown, inputPath: string): Error {
+  if (error instanceof CompilerError) return error;
+  return new CompilerError(
+    error instanceof RangeError ? "SOURCE_LIMIT" : "FFMPEG_FAILED",
+    error instanceof RangeError
+      ? "Could not retain streamed FFprobe frame timing records"
+      : "FFprobe metadata parsing failed",
+    { path: inputPath, cause: error }
+  );
 }
 
 function validateScanGeometry(
@@ -420,11 +521,6 @@ export function decimalSecondsToMicros(value: string): number {
     throw new CompilerError("SOURCE_LIMIT", "Timestamp exceeds safe microseconds");
   }
   return Number(rounded);
-}
-
-function decimalSecondsExceed(value: string, maximumSeconds: number): boolean {
-  const { numerator, scale } = parseDecimalSeconds(value);
-  return numerator > BigInt(maximumSeconds) * scale;
 }
 
 function parseDecimalSeconds(value: string): {

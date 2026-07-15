@@ -1,4 +1,4 @@
-export const RENDERED_MOTION_SHADOW_STYLE = `
+export const AVAL_SHADOW_STYLE = `
 :host{display:inline-block;position:relative;overflow:hidden;box-sizing:border-box;contain:layout paint;aspect-ratio:auto;inline-size:auto;block-size:auto}
 :host([hidden]){display:none!important}
 slot{display:block;box-sizing:border-box}

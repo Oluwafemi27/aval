@@ -1,4 +1,4 @@
-import { renderedMotionAbortError } from "./errors.js";
+import { avalAbortError } from "./errors.js";
 
 export const MAX_PUBLIC_PREPARE_TIMEOUT_MS = 30_000;
 
@@ -7,7 +7,7 @@ export function waitForPublicOperation<T>(
   options: Readonly<{ signal?: AbortSignal; timeoutMs?: number }> = {}
 ): Promise<T> {
   if (options.signal?.aborted === true) {
-    return Promise.reject(options.signal.reason ?? renderedMotionAbortError());
+    return Promise.reject(options.signal.reason ?? avalAbortError());
   }
   if (
     options.timeoutMs !== undefined &&
@@ -35,12 +35,12 @@ export function waitForPublicOperation<T>(
       callback();
     };
     const abort = (): void => settle(() => reject(
-      options.signal?.reason ?? renderedMotionAbortError()
+      options.signal?.reason ?? avalAbortError()
     ));
     options.signal?.addEventListener("abort", abort, { once: true });
     if (options.timeoutMs !== undefined) {
       timer = setTimeout(() => settle(() => {
-        const error = new Error("rendered-motion prepare wait timed out");
+        const error = new Error("aval-player prepare wait timed out");
         error.name = "TimeoutError";
         reject(error);
       }), options.timeoutMs);

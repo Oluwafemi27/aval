@@ -18,7 +18,6 @@ import {
   type FrameSamplingLayout
 } from "./frame-renderer-validation.js";
 import {
-  MAX_PRESENTATION_BACKING_DIMENSION,
   rasterizePresentationRect,
   type PresentationGeometry
 } from "./presentation-geometry.js";
@@ -116,6 +115,11 @@ export class BrowserFrameBackend implements FrameRendererBackend {
         this.#canvas.width = checkedLayout.logicalWidth;
         this.#assertUsable();
         this.#canvas.height = checkedLayout.logicalHeight;
+        this.#assertUsable();
+        this.#assertExactBacking(
+          checkedLayout.logicalWidth,
+          checkedLayout.logicalHeight
+        );
       } else {
         validatePresentationMapping(
           this.#presentation,
@@ -125,6 +129,11 @@ export class BrowserFrameBackend implements FrameRendererBackend {
         this.#canvas.width = this.#presentation.backingWidth;
         this.#assertUsable();
         this.#canvas.height = this.#presentation.backingHeight;
+        this.#assertUsable();
+        this.#assertExactBacking(
+          this.#presentation.backingWidth,
+          this.#presentation.backingHeight
+        );
       }
       this.#assertUsable();
       this.#codedWidth = checkedLayout.geometry.codedWidth;
@@ -219,6 +228,14 @@ export class BrowserFrameBackend implements FrameRendererBackend {
     this.#assertUsable();
     const mapping = clonePresentationMapping(geometry);
     this.#assertUsable();
+    if (
+      mapping.backingWidth > this.limits.maxTextureSize ||
+      mapping.backingHeight > this.limits.maxTextureSize
+    ) {
+      throw new RendererUnavailableError(
+        "presentation backing exceeds WebGL MAX_TEXTURE_SIZE"
+      );
+    }
     if (this.#logicalWidth > 0) {
       validatePresentationMapping(
         mapping,
@@ -237,6 +254,7 @@ export class BrowserFrameBackend implements FrameRendererBackend {
       this.#assertUsable();
       this.#canvas.height = mapping.backingHeight;
       this.#assertUsable();
+      this.#assertExactBacking(mapping.backingWidth, mapping.backingHeight);
       if (this.#allocated && last !== null) this.draw(last.kind, last.index);
     } catch (error) {
       this.#presentation = previous;
@@ -360,6 +378,14 @@ export class BrowserFrameBackend implements FrameRendererBackend {
     this.#deleteResources();
   }
 
+  #assertExactBacking(width: number, height: number): void {
+    if (this.#canvas.width !== width || this.#canvas.height !== height) {
+      throw new RendererUnavailableError(
+        "browser did not allocate the exact frame backing"
+      );
+    }
+  }
+
   #textureFor(kind: FrameTextureKind): WebGLTexture {
     return requireGlObject(
       kind === "resident" ? this.#residentTexture : this.#streamingTexture,
@@ -466,8 +492,7 @@ function validatePresentationMapping(
   ] as const) {
     if (
       !Number.isSafeInteger(value) ||
-      value < 1 ||
-      value > MAX_PRESENTATION_BACKING_DIMENSION
+      value < 1
     ) {
       throw new RangeError(`browser presentation ${label} is invalid`);
     }

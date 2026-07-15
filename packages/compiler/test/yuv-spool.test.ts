@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { deriveAvcRenditionGeometry } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometry } from "@aval/format";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -94,6 +94,28 @@ describe("bounded packed YUV unit spool", () => {
     })).rejects.toMatchObject({ code: "CANCELLED" });
   });
 
+  it("writes a unit beyond the former 900-frame spool ceiling", async () => {
+    const root = await temporaryRoot();
+    const geometry = deriveAvcRenditionGeometry({
+      profile: "avc-annexb-opaque-v0",
+      canvasWidth: 1,
+      canvasHeight: 1,
+      colorRect: [0, 0, 1, 1],
+      codedWidth: 16,
+      codedHeight: 16
+    });
+    const source = Uint8Array.of(0, 0, 0, 255);
+    const spool = await writeYuvUnitSpool({
+      geometry,
+      frameRate: { numerator: 30, denominator: 1 },
+      frames: Array.from({ length: 901 }, () => source),
+      temporaryRoot: root
+    });
+    expect(spool.frameCount).toBe(901);
+    expect((await readFile(spool.input.path)).byteLength).toBe(901 * 384);
+    await spool.cleanup();
+  });
+
   it("maps scratch filesystem failures without exposing host paths", async () => {
     const geometry = deriveAvcRenditionGeometry({
       profile: "avc-annexb-opaque-v0",
@@ -125,7 +147,7 @@ describe("bounded packed YUV unit spool", () => {
 });
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "rma-yuv-spool-test-"));
+  const root = await mkdtemp(join(tmpdir(), "aval-yuv-spool-test-"));
   roots.push(root);
   return root;
 }

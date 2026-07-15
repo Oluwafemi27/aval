@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rendered-motion.dev/schemas/fixture-provenance.schema.json",
-  "title": "Rendered Motion fixture provenance",
+  "$id": "https://aval.dev/schemas/fixture-provenance.schema.json",
+  "title": "AVAL fixture provenance",
   "type": "object",
   "required": ["provenanceVersion"],
   "properties": {

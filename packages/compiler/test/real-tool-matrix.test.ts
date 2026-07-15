@@ -22,7 +22,7 @@ import {
   type AvcRenditionInspectionInput,
   type CompiledManifestInputV01,
   type CompiledManifestV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -59,7 +59,7 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
   let cfrAssetPromise: Promise<Readonly<CompileResult>> | undefined;
 
   beforeAll(async () => {
-    root = await mkdtemp(join(tmpdir(), "rma-real-tool-matrix-"));
+    root = await mkdtemp(join(tmpdir(), "aval-real-tool-matrix-"));
     tools = await discoverFfmpeg();
 
     const cfrFrames = join(root, "cfr-frames");
@@ -83,7 +83,7 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
         185, 182, 170, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70
       ]
     );
-    projectPath = join(root, "matrix.rma-project.json");
+    projectPath = join(root, "matrix.avl-project.json");
     await writeFile(projectPath, JSON.stringify(matrixProject(), null, 2));
   }, 60_000);
 
@@ -105,7 +105,6 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
     expect(front.manifest.states).toEqual([{
       id: "default",
       bodyUnit: "body.default",
-      staticFrame: "static.00",
       initialUnit: "intro.default"
     }]);
     expect(front.manifest.units).toEqual(expect.arrayContaining([
@@ -139,7 +138,7 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
     expect(normalized.duplicatedSourceFrames.length).toBeGreaterThan(0);
     expect(normalized.sourceFrameByOutputFrame.length).toBeGreaterThan(2);
 
-    const outputPath = join(root, "normalize-hold.rma");
+    const outputPath = join(root, "normalize-hold.avl");
     const result = await compileDirectInput({
       inputPath: vfrVideo,
       outputPath,
@@ -168,7 +167,7 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
   }, 60_000);
 
   it("preserves locked, reversible, finish, and cut metadata in one compiled graph", async () => {
-    const outputPath = join(root, "matrix-project.rma");
+    const outputPath = join(root, "matrix-project.avl");
     const result = await compileProjectFile({
       projectPath,
       outputPath,
@@ -441,11 +440,6 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
       }
       expect(concatBytes(accessUnits)).toEqual(expected);
     }
-    for (const blob of front.staticBlobs) {
-      expect(new Uint8Array(await readFile(
-        join(outputDirectory, `${blob.staticFrame}.png`)
-      ))).toEqual(bytes.slice(blob.offset, blob.offset + blob.length));
-    }
     const unpackedManifest = parseStrictJson(manifestBytes) as unknown as
       CompiledManifestV01;
     const accessUnits = await Promise.all(front.records.map(async (record) => {
@@ -463,16 +457,9 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
         )))
       };
     }));
-    const staticPayloads = await Promise.all(front.staticBlobs.map(async (blob) => ({
-      staticFrame: blob.staticFrame,
-      bytes: new Uint8Array(await readFile(
-        join(outputDirectory, `${blob.staticFrame}.png`)
-      ))
-    })));
     expect(writeCanonicalAsset({
       manifest: writerManifest(unpackedManifest),
-      accessUnits,
-      staticPayloads
+      accessUnits
     })).toEqual(bytes);
     const unpackReport = parseStrictJson(new Uint8Array(await readFile(
       join(outputDirectory, "unpack-report.json")
@@ -484,7 +471,7 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
   function cfrAsset(): Promise<Readonly<CompileResult>> {
     cfrAssetPromise ??= compileDirectInput({
       inputPath: cfrVideo,
-      outputPath: join(root, "cfr-intro.rma"),
+      outputPath: join(root, "cfr-intro.avl"),
       loop: [3, 11],
       ffmpegPath: tools.executable,
       ffprobePath: tools.ffprobeExecutable
@@ -496,7 +483,7 @@ describe.skipIf(!HAS_TOOLCHAIN)("real FFmpeg compiler verification matrix", () =
 function writerManifest(
   manifest: CompiledManifestV01
 ): CompiledManifestInputV01 {
-  const { units, staticFrames, ...rest } = manifest;
+  const { units, ...rest } = manifest;
   return {
     ...rest,
     units: units.map((unit) => {
@@ -505,13 +492,7 @@ function writerManifest(
         ...fields,
         samples: samples.map(({ rendition, sha256 }) => ({ rendition, sha256 }))
       };
-    }),
-    staticFrames: staticFrames.map(({ id, width, height, sha256 }) => ({
-      id,
-      width,
-      height,
-      sha256
-    }))
+    })
   } as CompiledManifestInputV01;
 }
 
@@ -544,8 +525,9 @@ function realAvcInspectionInput(bytes: Uint8Array): AvcRenditionInspectionInput 
       frameRate: front.manifest.frameRate,
       averageBitrate: rendition.bitrate.average,
       peakBitrate: rendition.bitrate.peak,
-      cpbBufferBits: rendition.bitrate.peak,
-      requireBt709LimitedRange: true
+    cpbBufferBits: rendition.bitrate.peak,
+    quantizationPolicy: "fixed-qp26-v0",
+    requireBt709LimitedRange: true
     },
     units: front.manifest.units.map((unit, unitIndex) => ({
       id: unit.id,

@@ -19,7 +19,7 @@ rational timestamps, generation cancellation, request watchdogs, and explicit
 frame ownership. Supported Chromium decoded the checked path and reversible
 fixtures with no boundary configure, reset, or flush.
 
-The prototype `.rma` suffix and `@rendered-motion/*` scope remain private
+The prototype `.avl` suffix and `@aval/*` scope remain private
 descriptive labels, not a registered public format or product name.
 
 ## Captured Environment
@@ -62,9 +62,9 @@ checked in.
 
 | Fixture | Bytes | Whole-file SHA-256 | Coverage |
 | --- | ---: | --- | --- |
-| `opaque-loop.rma` | 5,833 | `dcda9b3afbd9e56c5aec4c71b24208bec94bef98d6046656ba837a4bc322ca49` | Two-frame loop and generated static fallback |
-| `opaque-path.rma` | 11,769 | `edec42aad4ed140404caf895093fc3a986fbfdfaaf28f720cb47e918bf1308e0` | Intro, 1,001 body occurrences, locked bridge, target body, two statics |
-| `opaque-reversible.rma` | 17,513 | `642e5d60a461f3f0d0e53be9c1a238a3f5dfdad23f4db19eb2c12a94a6f13e8a` | Reversible forward unit, exact inverse metadata, finish, cut, three statics |
+| `opaque-loop.avl` | 5,833 | `dcda9b3afbd9e56c5aec4c71b24208bec94bef98d6046656ba837a4bc322ca49` | Two-frame loop and generated static fallback |
+| `opaque-path.avl` | 11,769 | `edec42aad4ed140404caf895093fc3a986fbfdfaaf28f720cb47e918bf1308e0` | Intro, 1,001 body occurrences, locked bridge, target body, two statics |
+| `opaque-reversible.avl` | 17,513 | `642e5d60a461f3f0d0e53be9c1a238a3f5dfdad23f4db19eb2c12a94a6f13e8a` | Reversible forward unit, exact inverse metadata, finish, cut, three statics |
 
 Each of the three projects was compiled from its original tree, from a
 semantically reordered relocated tree, and again after deleting the output in
@@ -132,9 +132,9 @@ npm run build           graph, format, compiler, player, and playground passed
 npm run test:browser    10 Chromium tests passed
 npm audit --audit-level=high
                         0 vulnerabilities
-npm pack --dry-run -w @rendered-motion/format
+npm pack --dry-run -w @aval/format
                         74 files inspected; no stale AVC helper
-npm pack --dry-run -w @rendered-motion/compiler
+npm pack --dry-run -w @aval/compiler
                         280 files inspected; CLI present; no stale report writer
 git diff --check        passed
 ```

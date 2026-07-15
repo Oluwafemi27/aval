@@ -4,7 +4,7 @@ import {
   type GraphPresentation,
   type MotionGraphResult,
   type MotionGraphSnapshot
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { BrowserAvcCandidateHub } from "./browser-avc-candidate-hub.js";
 import { BrowserAvcPlaybackSession } from "./browser-avc-playback-session.js";
@@ -433,7 +433,7 @@ export function presentationFrameIdentity(
 ): string {
   switch (presentation.kind) {
     case "static":
-      return `static:${presentation.state}:${presentation.staticFrameId}`;
+      return `static:${presentation.state}`;
     case "intro":
     case "body":
       return `${presentation.kind}:${presentation.state}:${presentation.unitId}:${String(presentation.frameIndex)}`;

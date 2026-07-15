@@ -4,13 +4,13 @@ Use the custom tag for reflected configuration and a typed ref for methods,
 object targets, and custom events. No React wrapper is required.
 
 The runnable example at `examples/react-ref` pins its React, TypeScript, and
-Vite versions. Once the prototype packages are available locally, install the
+Vite versions. Once the workspace packages are available locally, install the
 exact element release alongside the example dependencies, then typecheck and
 build it:
 
 ```sh
 cd examples/react-ref
-npm install @rendered-motion/element@1.0.0
+npm install @aval/element@1.0.0
 npm run typecheck
 npm run build
 ```
@@ -22,9 +22,9 @@ already available from a public registry.
 ```tsx
 import { useEffect, useRef } from "react";
 import {
-  defineRenderedMotionElement,
-  type RenderedMotionElement
-} from "@rendered-motion/element";
+  defineAvalElement,
+  type AvalElement
+} from "@aval/element";
 
 export function StatusMotion({
   state,
@@ -33,9 +33,9 @@ export function StatusMotion({
   state: string;
   onVisualState?: (state: string | null) => void;
 }) {
-  const ref = useRef<RenderedMotionElement>(null);
+  const ref = useRef<AvalElement>(null);
   useEffect(() => {
-    defineRenderedMotionElement();
+    defineAvalElement();
     const node = ref.current;
     if (!node) return;
     const listener = () => onVisualState?.(node.visualState);
@@ -43,9 +43,9 @@ export function StatusMotion({
     return () => node.removeEventListener("visualstatechange", listener);
   }, [onVisualState]);
   return (
-    <rendered-motion ref={ref} src="/status.rma" state={state}>
+    <aval-player ref={ref} src="/status.avl" state={state}>
       <span slot="fallback" aria-hidden="true">{state}</span>
-    </rendered-motion>
+    </aval-player>
   );
 }
 ```
@@ -68,20 +68,20 @@ closed public attribute contract:
 
 ```ts
 import type {
-  RenderedMotionElement,
-  RenderedMotionElementAttributes
-} from "@rendered-motion/element";
+  AvalElement,
+  AvalElementAttributes
+} from "@aval/element";
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
-type RenderedMotionReactProps = DetailedHTMLProps<
-  HTMLAttributes<RenderedMotionElement>,
-  RenderedMotionElement
-> & RenderedMotionElementAttributes;
+type AvalReactProps = DetailedHTMLProps<
+  HTMLAttributes<AvalElement>,
+  AvalElement
+> & AvalElementAttributes;
 
 declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      "rendered-motion": RenderedMotionReactProps;
+      "aval-player": AvalReactProps;
     }
   }
 }

@@ -1,6 +1,6 @@
 import { join, relative, sep } from "node:path";
 
-import type { CanvasV01, RationalV01 } from "@rendered-motion/format";
+import type { CanvasV01, RationalV01 } from "@aval/format";
 
 import { CompilerError } from "../diagnostics.js";
 import {
@@ -72,8 +72,6 @@ export type SourceNormalizationReport =
       readonly duplicatedSourceFrames: readonly number[];
       readonly droppedSourceFrames: readonly number[];
     };
-
-const MAX_AGGREGATE_SOURCE_FILE_BYTES = 1024 * 1024 * 1024;
 
 export async function prepareProjectSources(input: {
   readonly root: string;
@@ -183,8 +181,7 @@ async function prepareVideoSource(
     sourceFrameByOutputFrame: nativeFrames,
     alphaReferences: references.map((frame) => Object.freeze({
       source: source.id,
-      frame,
-      role: "unit" as const
+      frame
     })),
     executable: input.ffmpeg,
     ...(input.mediaTimeoutMs === undefined
@@ -315,8 +312,7 @@ async function preparePngSource(
     sourceFrameByOutputFrame: references,
     alphaReferences: references.map((frame) => Object.freeze({
       source: source.id,
-      frame,
-      role: "unit" as const
+      frame
     })),
     executable: input.ffmpeg,
     ...(input.mediaTimeoutMs === undefined
@@ -375,20 +371,20 @@ export async function fingerprintSourceInputs(
   for (const file of files) {
     const fingerprint = await fingerprintRegularFile(
       file,
-      MAX_AGGREGATE_SOURCE_FILE_BYTES,
+      Number.MAX_SAFE_INTEGER,
       "source input",
       signal
     );
-    aggregateBytes += fingerprint.identity.size;
     if (
-      !Number.isSafeInteger(aggregateBytes) ||
-      aggregateBytes > MAX_AGGREGATE_SOURCE_FILE_BYTES
+      aggregateBytes >
+      Number.MAX_SAFE_INTEGER - fingerprint.identity.size
     ) {
       throw new CompilerError(
         "SOURCE_LIMIT",
-        "Aggregate source-file bytes exceed 1 GiB"
+        "Aggregate source-file bytes exceed safe representation"
       );
     }
+    aggregateBytes += fingerprint.identity.size;
     results.push(Object.freeze({
       path: relative(root, file).split(sep).join("/"),
       bytes: fingerprint.identity.size,
@@ -522,7 +518,8 @@ function validateSourceGeometry(
   if (
     probe.width < canvas.width ||
     probe.height < canvas.height ||
-    probe.width * canvas.height !== probe.height * canvas.width
+    BigInt(probe.width) * BigInt(canvas.height) !==
+      BigInt(probe.height) * BigInt(canvas.width)
   ) {
     throw new CompilerError(
       "SOURCE_LIMIT",

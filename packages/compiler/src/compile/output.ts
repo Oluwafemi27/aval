@@ -52,7 +52,7 @@ export async function writeAssetAtomic(
   let installed: RegularFileIdentity | undefined;
   try {
     throwIfAborted(signal);
-    staged = await stagePublicationFile(workspace, "asset.rma", bytes);
+    staged = await stagePublicationFile(workspace, "asset.avl", bytes);
     throwIfAborted(signal);
     await assertPublicationTargetUnchanged(path, expected, "asset");
     installed = await installStagedFile(path, staged, "asset");
@@ -332,5 +332,5 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
 }
 
 export function ffmpegGenerator(): string {
-  return "rendered-motion-compiler/0.1";
+  return "aval-compiler/0.1";
 }

@@ -1,8 +1,8 @@
-import { validateCompleteAsset } from "@rendered-motion/format";
+import { validateCompleteAsset } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Vite exposes the checked binary as a data URL in tests.
-import fixtureDataUrl from "../../../../fixtures/conformance/m7/reference-packed.rma?url&inline";
+import fixtureDataUrl from "../../../../fixtures/conformance/m7/reference-packed.avl?url&inline";
 // @ts-expect-error Vite exposes the checked provenance as source text.
 import provenanceText from "../../../../fixtures/conformance/m7/reference-packed.provenance.json?raw";
 // @ts-expect-error Vite exposes the checked scenario catalog as source text.
@@ -46,33 +46,25 @@ describe("M7 checked sparse-loader fixture", () => {
     expect(findAbsolutePaths(provenance)).toEqual([]);
   });
 
-  it("reproduces the exact current-static, all-static, and rendition plans", () => {
+  it("reproduces the exact bootstrap, rendition, and all-payload plans", () => {
     const bytes = decodeDataUrl(fixtureDataUrl);
     const provenance = JSON.parse(provenanceText);
     const frontIndex = validateCompleteAsset({ bytes }).frontIndex;
-    const initialState = frontIndex.manifest.states.find(
-      ({ id }) => id === frontIndex.manifest.initialState
-    );
-    if (initialState === undefined) throw new Error("initial state is missing");
-
-    expect(requestRanges(planBlobStorageRanges({
-      frontIndex,
-      requested: [{
-        kind: "static",
-        staticFrame: initialState.staticFrame
-      }]
-    }))).toEqual(provenance.expectedRangePlans.currentStatic);
-
-    const allStatics = frontIndex.staticBlobs.map<RuntimeBlobSelection>(
-      ({ staticFrame }) => ({ kind: "static", staticFrame })
+    const rendition = provenance.selectedRendition.id as string;
+    const bootstrapUnits = provenance.bootstrapUnits.map(
+      (unit: string): RuntimeBlobSelection => ({
+        kind: "unit",
+        rendition,
+        unit
+      })
     );
     expect(requestRanges(planBlobStorageRanges({
       frontIndex,
-      requested: allStatics
-    }))).toEqual(provenance.expectedRangePlans.allStatics);
+      requested: bootstrapUnits
+    }))).toEqual(provenance.expectedRangePlans.bootstrapUnits);
 
     const selectedUnits = frontIndex.unitBlobs
-      .filter(({ rendition }) => rendition === provenance.selectedRendition.id)
+      .filter((blob) => blob.rendition === rendition)
       .map<RuntimeBlobSelection>(({ rendition, unit }) => ({
         kind: "unit",
         rendition,
@@ -86,6 +78,14 @@ describe("M7 checked sparse-loader fixture", () => {
       .toEqual(provenance.expectedRangePlans.selectedRendition);
     expect(selectedPlan.totalStorageBytes)
       .toBe(provenance.selectedRendition.storageBytes);
+
+    const allPayload = frontIndex.unitBlobs.map<RuntimeBlobSelection>(
+      ({ rendition, unit }) => ({ kind: "unit", rendition, unit })
+    );
+    expect(requestRanges(planBlobStorageRanges({
+      frontIndex,
+      requested: allPayload
+    }))).toEqual(provenance.expectedRangePlans.allPayload);
     expect(Object.isFrozen(selectedPlan)).toBe(true);
     expect(Object.isFrozen(selectedPlan.requests)).toBe(true);
   });
@@ -94,7 +94,7 @@ describe("M7 checked sparse-loader fixture", () => {
     const scenarios = JSON.parse(scenariosText);
     expect(scenarios).toMatchObject({
       schemaVersion: "0.1",
-      fixture: "reference-packed.rma"
+      fixture: "reference-packed.avl"
     });
     expect(scenarios.scenarios).toHaveLength(15);
     expect(new Set(scenarios.scenarios.map(({ id }: { id: string }) => id)).size)
@@ -111,7 +111,7 @@ describe("M7 checked sparse-loader fixture", () => {
       "compressed-body",
       "stalled-body",
       "corrupt-unit",
-      "corrupt-static",
+      "corrupt-bootstrap-unit",
       "nonzero-padding",
       "valid-external-integrity",
       "invalid-external-integrity"

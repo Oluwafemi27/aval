@@ -27,7 +27,7 @@ const HEADER: FormatHeader = {
 };
 
 const GOLDEN_HEX =
-  "524d41460d0a1a0a" +
+  "41564c460d0a1a0a" +
   "00000100" +
   "40000000" +
   "00000000" +
@@ -107,14 +107,19 @@ describe("version-0.1 header codec", () => {
     }
   });
 
-  it("rejects unsafe and over-budget uint64 fields after bigint decoding", () => {
+  it("rejects unsafe uint64 fields but accepts files above the former ceiling", () => {
     const unsafe = encodeHeader(HEADER);
     writeUint64LE(unsafe, 24, BigInt(Number.MAX_SAFE_INTEGER) + 1n);
     expectFormatError(() => parseHeader(unsafe), "INTEGER_UNSAFE");
 
-    const overBudget = encodeHeader(HEADER);
-    writeUint64LE(overBudget, 24, 32 * 1024 * 1024 + 1);
-    expectFormatError(() => parseHeader(overBudget), "BUDGET_EXCEEDED");
+    const large = { ...HEADER, declaredFileLength: 40 * 1024 * 1024 };
+    expect(parseHeader(encodeHeader(large))).toEqual(large);
+    expectFormatError(
+      () => parseHeader(encodeHeader(large), {
+        budgets: { maxFileBytes: 32 * 1024 * 1024 }
+      }),
+      "BUDGET_EXCEEDED"
+    );
   });
 
   it("enforces canonical offsets, index shape, count, and containment", () => {
@@ -134,10 +139,19 @@ describe("version-0.1 header codec", () => {
     writeUint64LE(outsideFile, 24, 119);
     expectFormatError(() => parseHeader(outsideFile), "HEADER_INVALID");
 
-    const tooManyRecords = encodeHeader(HEADER);
-    writeUint64LE(tooManyRecords, 56, 16 + 32 * 3_601);
-    writeUint64LE(tooManyRecords, 24, 200_000);
-    expectFormatError(() => parseHeader(tooManyRecords), "BUDGET_EXCEEDED");
+    const formerRecordLimit = {
+      ...HEADER,
+      indexLength: 16 + 32 * 3_601,
+      declaredFileLength: 200_000
+    };
+    expect(parseHeader(encodeHeader(formerRecordLimit))).toEqual(formerRecordLimit);
+
+    const outsideUint32 = {
+      ...HEADER,
+      indexLength: 16 + 32 * 0x1_0000_0000,
+      declaredFileLength: 72 + 16 + 32 * 0x1_0000_0000
+    };
+    expectFormatError(() => encodeHeader(outsideUint32), "BUDGET_EXCEEDED");
   });
 
   it("honors lower-only active budgets", () => {

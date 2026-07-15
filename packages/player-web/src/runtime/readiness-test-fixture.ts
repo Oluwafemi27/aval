@@ -1,7 +1,7 @@
 import {
   adaptManifestToMotionGraph,
   type CompiledManifestV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import {
   calculateReadinessMetrics,
@@ -222,27 +222,19 @@ function manifestFixture(): Readonly<CompiledManifestV01> {
         samples: Object.freeze([sample(rendition, 10, 6)])
       })
     ]),
-    staticFrames: Object.freeze([
-      staticFrame("finite-static", 1_000),
-      staticFrame("held-static", 1_040),
-      staticFrame("idle-static", 1_080)
-    ]),
     initialState: "idle",
     states: Object.freeze([
       Object.freeze({
         id: "finite",
-        bodyUnit: "body-finite",
-        staticFrame: "finite-static"
+        bodyUnit: "body-finite"
       }),
       Object.freeze({
         id: "held",
-        bodyUnit: "body-held",
-        staticFrame: "held-static"
+        bodyUnit: "body-held"
       }),
       Object.freeze({
         id: "idle",
-        bodyUnit: "body-idle",
-        staticFrame: "idle-static"
+        bodyUnit: "body-idle"
       })
     ]),
     edges: Object.freeze([
@@ -330,10 +322,6 @@ function manifestFixture(): Readonly<CompiledManifestV01> {
       ]),
       immediateEdges: Object.freeze(["edge-cut", "edge-locked"])
     }),
-    fallback: Object.freeze({
-      unsupported: "per-state-static",
-      reducedMotion: "per-state-static"
-    }),
     limits: Object.freeze({
       maxCompiledBytes: 64 * 1024,
       maxRuntimeBytes: 1024 * 1024,
@@ -367,15 +355,4 @@ function body(
 
 function sample(rendition: string, sampleStart: number, sampleCount: number) {
   return Object.freeze({ rendition, sampleStart, sampleCount, sha256: DIGEST });
-}
-
-function staticFrame(id: string, offset: number) {
-  return Object.freeze({
-    id,
-    offset,
-    length: 33,
-    width: 64,
-    height: 64,
-    sha256: DIGEST
-  });
 }

@@ -1,27 +1,27 @@
 import {
-  isCompatibleRenderedMotionConstructor,
-  markRenderedMotionConstructor
+  isCompatibleAvalConstructor,
+  markAvalConstructor
 } from "./definition-marker.js";
-import { RenderedMotionEnvironmentError } from "./errors.js";
-import { createRenderedMotionElementClass } from "./rendered-motion-element.js";
+import { AvalEnvironmentError } from "./errors.js";
+import { createAvalElementClass } from "./aval-element.js";
 import {
-  RENDERED_MOTION_TAG_NAME,
-  type RenderedMotionElementConstructor
+  AVAL_TAG_NAME,
+  type AvalElementConstructor
 } from "./public-types.js";
 
-export function defineRenderedMotionElement(): RenderedMotionElementConstructor {
+export function defineAvalElement(): AvalElementConstructor {
   const environment = captureBrowserEnvironment();
-  const existing = environment.registry.get(RENDERED_MOTION_TAG_NAME);
+  const existing = environment.registry.get(AVAL_TAG_NAME);
   if (existing !== undefined) return requireCompatible(existing);
-  const constructor = createRenderedMotionElementClass(environment.HTMLElement);
-  markRenderedMotionConstructor(constructor);
+  const constructor = createAvalElementClass(environment.HTMLElement);
+  markAvalConstructor(constructor);
   try {
-    environment.registry.define(RENDERED_MOTION_TAG_NAME, constructor);
+    environment.registry.define(AVAL_TAG_NAME, constructor);
   } catch {
-    const raced = environment.registry.get(RENDERED_MOTION_TAG_NAME);
+    const raced = environment.registry.get(AVAL_TAG_NAME);
     if (raced !== undefined) return requireCompatible(raced);
-    throw new RenderedMotionEnvironmentError(
-      "rendered-motion could not be registered"
+    throw new AvalEnvironmentError(
+      "aval-player could not be registered"
     );
   }
   return constructor;
@@ -29,13 +29,13 @@ export function defineRenderedMotionElement(): RenderedMotionElementConstructor 
 
 function requireCompatible(
   constructor: CustomElementConstructor
-): RenderedMotionElementConstructor {
-  if (!isCompatibleRenderedMotionConstructor(constructor)) {
-    throw new RenderedMotionEnvironmentError(
-      "rendered-motion is already defined by incompatible code"
+): AvalElementConstructor {
+  if (!isCompatibleAvalConstructor(constructor)) {
+    throw new AvalEnvironmentError(
+      "aval-player is already defined by incompatible code"
     );
   }
-  return constructor as RenderedMotionElementConstructor;
+  return constructor as AvalElementConstructor;
 }
 
 function captureBrowserEnvironment(): Readonly<{
@@ -54,7 +54,7 @@ function captureBrowserEnvironment(): Readonly<{
     typeof registry.get !== "function" ||
     typeof registry.define !== "function"
   ) {
-    throw new RenderedMotionEnvironmentError();
+    throw new AvalEnvironmentError();
   }
   return Object.freeze({ registry, HTMLElement: HTMLElementConstructor });
 }

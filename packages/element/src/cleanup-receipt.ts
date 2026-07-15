@@ -5,9 +5,9 @@ import type {
   PlayerWebPageRuntime,
   RuntimeAssetSession,
   RuntimeParticipantId
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
-import type { RenderedMotionCleanupReceipt } from "./public-types.js";
+import type { AvalCleanupReceipt } from "./public-types.js";
 
 export async function settleCleanupOperation(
   operation: () => void | PromiseLike<unknown> | null | undefined,
@@ -28,7 +28,7 @@ export function captureCleanupReceipt(input: Readonly<{
   composition: Readonly<BrowserAvcCandidateComposition> | null;
   player: IntegratedPlayer | null;
   operationFailureCount: number;
-}>): Readonly<RenderedMotionCleanupReceipt> {
+}>): Readonly<AvalCleanupReceipt> {
   let snapshotFailureCount = 0;
   const read = <Value>(operation: () => Value): Value | null => {
     try { return operation(); } catch {

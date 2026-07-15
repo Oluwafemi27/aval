@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { FormatError } from "../src/errors.js";
 import {
+  avcCodecForLevel,
   deriveAvcRenditionGeometry,
   inspectAvcAnnexBEncoderCandidateRendition,
   inspectAvcAnnexBRendition
@@ -40,6 +41,32 @@ describe("AVC Annex B Constrained Baseline inspector", () => {
     ]);
     expect(Object.isFrozen(inspection)).toBe(true);
     expect(Object.isFrozen(inspection.units[0]?.frames)).toBe(true);
+  });
+
+  it("accepts a known authored AVC level and derives its codec string", () => {
+    const inspection = inspectAvcAnnexBRendition(
+      validInspectionInput({ spsOptions: { levelIdc: 40 } })
+    );
+
+    expect(inspection.parameterSet.levelIdc).toBe(40);
+    expect(avcCodecForLevel(inspection.parameterSet.levelIdc)).toBe(
+      "avc1.42E028"
+    );
+  });
+
+  it("rejects a pathological aspect ratio that exceeds the level dimension rule", () => {
+    const input = validInspectionInput({
+      spsOptions: {
+        levelIdc: 62,
+        widthInMacroblocks: 1_056,
+        heightInMacroblocks: 1
+      }
+    });
+    input.profile.averageBitrate = 1_000_000;
+    input.profile.peakBitrate = 2_000_000;
+    input.profile.cpbBufferBits = 2_000_000;
+
+    expectProfileError(() => inspectAvcAnnexBRendition(input));
   });
 
   it("requires E0 strictly while the named encoder candidate accepts only C0/E0", () => {
@@ -152,7 +179,7 @@ describe("AVC Annex B Constrained Baseline inspector", () => {
     ["wrong profile", { profileIdc: 77 }],
     ["missing constraints", { compatibility: 0x00 }],
     ["reserved constraints", { compatibility: 0xc1 }],
-    ["wrong level", { levelIdc: 31 }],
+    ["unknown level", { levelIdc: 33 }],
     ["too many references", { maxNumRefFrames: 2 }],
     ["reordering", { maxNumReorderFrames: 1 }],
     ["undersized DPB", { maxDecFrameBuffering: 0 }],
@@ -193,7 +220,7 @@ describe("AVC Annex B Constrained Baseline inspector", () => {
     expectProfileError(() => inspectAvcAnnexBRendition(perSecond));
 
     const dpb = validInspectionInput({
-      spsOptions: { maxDecFrameBuffering: 5 }
+      spsOptions: { maxDecFrameBuffering: 17 }
     });
     expectProfileError(() => inspectAvcAnnexBRendition(dpb));
 
@@ -283,6 +310,36 @@ describe("AVC Annex B Constrained Baseline inspector", () => {
         }
       ]
     });
+    expectProfileError(() => inspectAvcAnnexBRendition(input));
+  });
+
+  it("versions frozen-v0 and bounded-v1 quantization without relaxing PPS identity", () => {
+    const accepted = quantizedInput("bounded-qp-v1", 10, [-36, 15]);
+    expect(() => inspectAvcAnnexBRendition(accepted)).not.toThrow();
+
+    const frozenV0 = quantizedInput("fixed-qp26-v0", 1, [0]);
+    expectProfileError(() => inspectAvcAnnexBRendition(frozenV0));
+
+    const changed = quantizedInput("bounded-qp-v1", 10, [0]);
+    const changedSps = makeSps({ compatibility: 0xe0, bt709Limited: true });
+    changed.units.push({
+      id: "hover",
+      accessUnits: [makeAccessUnit({
+        idr: true,
+        frameNum: 0,
+        aud: makeAud(0),
+        sps: changedSps,
+        pps: makePps({ picInitQpMinus26: 11 })
+      })]
+    });
+    expectProfileError(() => inspectAvcAnnexBRendition(changed));
+  });
+
+  it.each([
+    ["underflow", -26, -1],
+    ["overflow", 25, 1]
+  ] as const)("rejects bounded-v1 final slice QP %s", (_label, initial, delta) => {
+    const input = quantizedInput("bounded-qp-v1", initial, [delta]);
     expectProfileError(() => inspectAvcAnnexBRendition(input));
   });
 
@@ -503,6 +560,35 @@ describe("AVC Annex B Constrained Baseline inspector", () => {
     }
   });
 });
+
+function quantizedInput(
+  quantizationPolicy: "fixed-qp26-v0" | "bounded-qp-v1",
+  picInitQpMinus26: number,
+  sliceQpDeltas: readonly number[]
+): ReturnType<typeof validInspectionInput> {
+  const sps = makeSps({ compatibility: 0xe0, bt709Limited: true });
+  const pps = makePps({ picInitQpMinus26 });
+  return validInspectionInput({
+    quantizationPolicy,
+    units: [{
+      id: "idle",
+      accessUnits: sliceQpDeltas.map((sliceQpDelta, frameIndex) =>
+        makeAccessUnit({
+          idr: frameIndex === 0,
+          frameNum: frameIndex,
+          aud: makeAud(frameIndex === 0 ? 0 : 1),
+          ...(frameIndex === 0 ? { sps, pps } : {}),
+          slices: [makeSlice({
+            idr: frameIndex === 0,
+            frameNum: frameIndex,
+            sliceType: frameIndex === 0 ? "I" : "P",
+            sliceQpDelta
+          })]
+        })
+      )
+    }]
+  });
+}
 
 function expectProfileError(callback: () => unknown): void {
   expect(callback).toThrowError(FormatError);

@@ -92,6 +92,23 @@ export class ElementGenerationFactory {
         motionPolicy: captured.configuration.motion,
         hostReducedMotion: captured.desired.hostReducedMotion ?? false,
         initialVisibility: captured.desired.effectivelyVisible ? "visible" : "hidden",
+        initialPresentation: captured.desired.positiveBox
+          ? Object.freeze({
+              cssWidth: captured.desired.box.width,
+              cssHeight: captured.desired.box.height,
+              devicePixelRatio: captured.desired.dpr,
+              ...(captured.configuration.fit === null
+                ? {}
+                : { fit: captured.configuration.fit })
+            })
+          : Object.freeze({
+              cssWidth: 1,
+              cssHeight: 1,
+              devicePixelRatio: 1,
+              ...(captured.configuration.fit === null
+                ? {}
+                : { fit: captured.configuration.fit })
+            }),
         ...(this.#factory === undefined ? {} : { factory: this.#factory }),
         host: publication
       });

@@ -4,11 +4,11 @@
   "wireFormatVersion": "0.1",
   "projectSchemaVersion": "0.2",
   "publicPackages": [
-    "@rendered-motion/graph",
-    "@rendered-motion/format",
-    "@rendered-motion/player-web",
-    "@rendered-motion/element",
-    "@rendered-motion/compiler"
+    "@aval/graph",
+    "@aval/format",
+    "@aval/player-web",
+    "@aval/element",
+    "@aval/compiler"
   ],
   "registry": { "url": "https://registry.npmjs.org/" },
   "toolchain": {
@@ -76,12 +76,12 @@
     "text/plain",
     "video/mp4",
     "video/quicktime",
-    "application/vnd.rendered-motion.frame-ledger+json"
+    "application/vnd.aval.frame-ledger+json"
   ],
   "displayCaptureQualification": {
     "qualifiedScanoutProviders": {},
     "extractors": {
-      "rma-display-extractor": "1.0.0"
+      "aval-display-extractor": "1.0.0"
     },
     "operatorRoles": ["qualified-display-capture-operator"],
     "reviewerIds": ["independent-display-reviewer-a", "independent-display-reviewer-b"]

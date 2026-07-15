@@ -3,7 +3,7 @@ import type {
   ElementOwnershipLedger
 } from "./element-ownership-ledger.js";
 import { retryHostInstallationCleanup } from "./element-host-installation-error.js";
-import type { RenderedMotionMotion } from "./public-types.js";
+import type { AvalMotion } from "./public-types.js";
 import { nextElementSequence } from "./element-sequence.js";
 import { subscribeDocumentVisibility } from "./document-visibility-broker.js";
 import { subscribeDpr } from "./dpr-broker.js";
@@ -41,7 +41,7 @@ export class ElementRealmAutomation {
   readonly #onUnsupported: () => void;
   #root: Node | null = null;
   #document: Document | null = null;
-  #motion: RenderedMotionMotion = "auto";
+  #motion: AvalMotion = "auto";
   #motionOwner: BrokerOwner<{
     supported: boolean;
     current: boolean | null;
@@ -93,7 +93,7 @@ export class ElementRealmAutomation {
     return change;
   }
 
-  public configureMotion(value: RenderedMotionMotion): boolean {
+  public configureMotion(value: AvalMotion): boolean {
     this.#motion = value;
     const token = this.#motionToken = nextElementSequence(
       this.#motionToken,

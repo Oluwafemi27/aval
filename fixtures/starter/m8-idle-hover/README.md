@@ -1,4 +1,4 @@
-# Rendered Motion idle/hover starter
+# AVAL idle/hover starter
 
 The state names (`idle` and `engaged`) and event names
 (`control.engage` and `control.release`) are ordinary author data. The

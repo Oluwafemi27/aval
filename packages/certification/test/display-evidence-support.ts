@@ -6,14 +6,14 @@ export const TEST_DISPLAY_PATTERN_DIGEST = "d".repeat(64);
 export const TEST_DISPLAY_PATTERN = validateDisplayPattern({
   bitWidth: 16,
   calibrationPatchIds: ["black", "white", "red", "green", "blue"],
-  markerKind: "rendered-motion-display",
+  markerKind: "aval-display",
   markerVersion: "1.0",
   modulus: 65_535,
   parity: "xor-fold-v1"
 });
 export const TEST_CAPTURE_PROVENANCE: DisplayCaptureProvenance = Object.freeze({
   rawCaptureDigest: "e".repeat(64),
-  extractor: Object.freeze({ tool: "rma-display-extractor", version: "1.0.0" }),
+  extractor: Object.freeze({ tool: "aval-display-extractor", version: "1.0.0" }),
   operatorRole: "qualified-display-capture-operator",
   reviewerIds: Object.freeze(["display-reviewer-1", "display-reviewer-2"])
 });

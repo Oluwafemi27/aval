@@ -1,6 +1,6 @@
 import type { ElementAssetGeneration } from "./asset-generation.js";
 import type { ElementDesiredSnapshot } from "./element-desired-state.js";
-import { RenderedMotionNotReadyError, renderedMotionAbortError } from "./errors.js";
+import { AvalNotReadyError, avalAbortError } from "./errors.js";
 
 /** Captures one invocation token; lane settlement can never migrate it. */
 export async function capturePreparedSource(input: Readonly<{
@@ -12,14 +12,14 @@ export async function capturePreparedSource(input: Readonly<{
   await input.settled;
   const snapshot = input.current();
   if (snapshot.sourceToken !== input.invocationSourceToken) {
-    throw renderedMotionAbortError("prepare source was superseded");
+    throw avalAbortError("prepare source was superseded");
   }
   if (snapshot.configuration?.src === "") {
-    throw new RenderedMotionNotReadyError("rendered-motion src is empty");
+    throw new AvalNotReadyError("aval-player src is empty");
   }
   const asset = input.active();
   if (asset === null || snapshot.terminal || !snapshot.connected) {
-    throw new RenderedMotionNotReadyError();
+    throw new AvalNotReadyError();
   }
   return asset;
 }

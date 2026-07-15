@@ -18,13 +18,9 @@ import type {
   PlayerWebOpenAssetBytesOptions,
   PlayerWebOpenAssetOptions,
   PlayerWebOwnedPlayer,
-  PlayerWebReclamationParticipant,
-  PlayerWebStaticSurfaceReclaimer
+  PlayerWebReclamationParticipant
 } from "./player-web-page-runtime.js";
 
-export const STATIC_RECLAIMABLE_CATEGORIES = Object.freeze([
-  "decoded-static-cache"
-] as const satisfies readonly RuntimeByteCategory[]);
 export const PLAYER_ANIMATION_RECLAIMABLE_CATEGORIES = Object.freeze([
   "worker-transfer",
   "decoder-output",
@@ -38,11 +34,7 @@ const DECLARABLE_RECLAIMABLE_CATEGORIES: ReadonlySet<RuntimeByteCategory> =
     "quarantine",
     "blob-assembly",
     "verified-unit",
-    ...PLAYER_ANIMATION_RECLAIMABLE_CATEGORIES,
-    "png-copy",
-    "png-zlib",
-    "png-scratch",
-    ...STATIC_RECLAIMABLE_CATEGORIES
+    ...PLAYER_ANIMATION_RECLAIMABLE_CATEGORIES
   ]);
 
 export type CapturedReclamationHandler = (
@@ -67,9 +59,6 @@ export function captureAssetOptions(
       : { maximumFileBytes: captured.maximumFileBytes }),
     ...(captured.timers === undefined ? {} : { timers: captured.timers }),
     ...(captured.format === undefined ? {} : { format: captured.format }),
-    ...(captured.validateStaticPng === undefined
-      ? {}
-      : { validateStaticPng: captured.validateStaticPng }),
     ...(captured.allocate === undefined ? {} : { allocate: captured.allocate })
   };
 }
@@ -90,9 +79,6 @@ export function captureAssetBytesOptions(
       ? {}
       : { maximumFileBytes: captured.maximumFileBytes }),
     ...(captured.format === undefined ? {} : { format: captured.format }),
-    ...(captured.validateStaticPng === undefined
-      ? {}
-      : { validateStaticPng: captured.validateStaticPng }),
     ...(captured.allocate === undefined ? {} : { allocate: captured.allocate })
   };
 }
@@ -159,16 +145,15 @@ interface CapturedPageAssetOptions {
   readonly digestAdapter: OpenRuntimeAssetOptions["digestAdapter"];
   readonly maximumFileBytes: OpenRuntimeAssetOptions["maximumFileBytes"];
   readonly format: OpenRuntimeAssetOptions["format"];
-  readonly validateStaticPng: OpenRuntimeAssetOptions["validateStaticPng"];
   readonly allocate: OpenRuntimeAssetOptions["allocate"];
 }
 
 const PAGE_ASSET_OPTION_FIELDS = new Set([
   "fetcher", "timers", "digestAdapter", "maximumFileBytes", "format",
-  "validateStaticPng", "allocate"
+  "allocate"
 ]);
 const PAGE_ASSET_BYTES_OPTION_FIELDS = new Set([
-  "digestAdapter", "maximumFileBytes", "format", "validateStaticPng", "allocate"
+  "digestAdapter", "maximumFileBytes", "format", "allocate"
 ]);
 
 function capturePageAssetOptions(
@@ -201,8 +186,6 @@ function capturePageAssetOptions(
       maximumFileBytes: Reflect.get(value, "maximumFileBytes") as
         OpenRuntimeAssetOptions["maximumFileBytes"],
       format: Reflect.get(value, "format") as OpenRuntimeAssetOptions["format"],
-      validateStaticPng: Reflect.get(value, "validateStaticPng") as
-        OpenRuntimeAssetOptions["validateStaticPng"],
       allocate: Reflect.get(value, "allocate") as
         OpenRuntimeAssetOptions["allocate"]
     });
@@ -263,34 +246,6 @@ export function captureOwnedPlayer(value: PlayerWebOwnedPlayer): Readonly<{
       void | PromiseLike<void>,
     reclaim
   });
-}
-
-export function captureStaticReclaimer(
-  value: PlayerWebStaticSurfaceReclaimer
-): () => Readonly<{ readonly byteLength: number }> | null {
-  if (value === null || typeof value !== "object") {
-    throw new TypeError("static surface reclaimer must be an object");
-  }
-  const reclaim = value.reclaimOldest;
-  if (typeof reclaim !== "function") {
-    throw new TypeError("static surface reclaim capability is unavailable");
-  }
-  return () => {
-    const result = Reflect.apply(reclaim, value, []) as
-      Readonly<{ readonly byteLength: number }> | null;
-    if (result === null) return null;
-    if (typeof result !== "object") {
-      throw new TypeError("static surface eviction result is invalid");
-    }
-    let byteLength: unknown;
-    try { byteLength = Reflect.get(result, "byteLength"); } catch {
-      throw new TypeError("static surface eviction byte length is inaccessible");
-    }
-    if (!Number.isSafeInteger(byteLength) || (byteLength as number) < 1) {
-      throw new TypeError("static surface eviction byte length is invalid");
-    }
-    return Object.freeze({ byteLength: byteLength as number });
-  };
 }
 
 export function captureReclamationHandler(

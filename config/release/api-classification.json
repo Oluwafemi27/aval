@@ -3,10 +3,10 @@
   "defaultClassification": "stable",
   "allowed": ["stable", "experimental", "deprecated", "internal"],
   "packages": {
-    "@rendered-motion/graph": { "experimental": [], "deprecated": [] },
-    "@rendered-motion/format": { "experimental": [], "deprecated": [] },
-    "@rendered-motion/compiler": { "experimental": [], "deprecated": [] },
-    "@rendered-motion/player-web": { "experimental": [], "deprecated": [] },
-    "@rendered-motion/element": { "experimental": [], "deprecated": [] }
+    "@aval/graph": { "experimental": [], "deprecated": [] },
+    "@aval/format": { "experimental": [], "deprecated": [] },
+    "@aval/compiler": { "experimental": [], "deprecated": [] },
+    "@aval/player-web": { "experimental": [], "deprecated": [] },
+    "@aval/element": { "experimental": [], "deprecated": [] }
   }
 }

@@ -1,15 +1,15 @@
 {
   "provenanceVersion": "0.1",
   "formatVersion": "0.1",
-  "generatedAt": "2026-07-12",
+  "generatedAt": "2026-07-14",
   "license": "CC0-1.0 generated fixture sources",
   "generatedBy": {
     "path": "fixtures/conformance/m8/update-provenance.mjs",
-    "bytes": 10054,
-    "sha256": "6907f1db4eb9808f8627b0f11c6f0c460503e7268d6c654587d634a456906d3d"
+    "bytes": 10044,
+    "sha256": "d5b50f1f551a4aa765621c74ee3e6c03b2da1524899f8c3de717770054ac42e3"
   },
   "regeneration": {
-    "build": "npm run build -w @rendered-motion/compiler",
+    "build": "npm run build -w @aval/compiler",
     "check": "node fixtures/conformance/m8/update-provenance.mjs --check"
   },
   "sourceFrames": {
@@ -229,25 +229,25 @@
     }
   },
   "toolchain": {
-    "ffmpegVersion": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
-    "ffmpegExecutableSha256": "329fa7360b28a067a0cd7281474bb18cd868932d5173646a674466bcb56d6e93",
-    "ffmpegVersionOutputSha256": "98f2da65e4b3e39aa6ac74848582be422751d8f52176cf810eceb94bbcaa78d1",
-    "ffmpegConfigurationSha256": "8470f6e5d1c91c01f1228e91aa8827bea05a7e8a39c8dedefdb778716bdc1aec",
-    "ffmpegEncodersOutputSha256": "38b11441f5ffe17fd32539030ba9290b81e730878bb0cffe1af5084e2b7b8879",
-    "ffmpegCalibrationSha256": "2187478d0b9baaa2e44dc458abcdcbc7c9242c360bb233cff2d5229004a6911c",
-    "ffprobeVersion": "ffprobe version 8.1.2 Copyright (c) 2007-2026 the FFmpeg developers",
-    "ffprobeExecutableSha256": "841ab2259a55e5c5e44c5851890867d48750ff1e7cfa92b5fbed91445a493128",
-    "ffprobeVersionOutputSha256": "8316221740e891c1f9d08d30a9a45059af9f1ec96741423eee3ae0c7721d9cec"
+    "ffmpegVersion": "ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers",
+    "ffmpegExecutableSha256": "48cc76fa936aec61e6459da4366ad8d99da34e4a7f98be66ff5a9130d8ab366f",
+    "ffmpegVersionOutputSha256": "b08f6794c8a16655b3c6f9d1bd3cdc8cfab7a9cf6db15276b35b2f8344d1674c",
+    "ffmpegConfigurationSha256": "b809566072f4ad92e517aaebc0a2701151e03e74a619be39a7196a37f7dc34d4",
+    "ffmpegEncodersOutputSha256": "e76ee773e9049d67796e3b5992b5374e9969ab3b80f14af260b295adc41bbdc2",
+    "ffmpegCalibrationSha256": "f577b998c399559aadef24d2d4d4a1934b1713d54b1d1a187eafb17715f17f47",
+    "ffprobeVersion": "ffprobe version 7.1.1 Copyright (c) 2007-2025 the FFmpeg developers",
+    "ffprobeExecutableSha256": "28c9fe73413260e2ea4eba2e7ab58f80dcc2e81c5f6f85477bc74c17904b9865",
+    "ffprobeVersionOutputSha256": "cdc08e833a8f4c33af29aaa8a0a880915edc8d5d72c291c52838573e2125c249"
   },
   "fixtures": [
     {
       "role": "one-state-partial-loop",
-      "path": "fixtures/conformance/m8/one-state-partial-loop.rma",
-      "bytes": 10568,
-      "sha256": "812b7d2af2557a20d86ad2c1d01e24a97cfcab495d7b350fdbd194ca8ac3b880",
-      "externalIntegrity": "sha256-gSt9KvJVeiDYatLB0B4kqXz8q0ldezUP29GUyorDuIA=",
-      "manifestSha256": "6112c59a0254664616082ec3ac590cc803cdafe43e83a1e0ffae986fa140851a",
-      "indexSha256": "14e477a11025d42207a0e1728ff35713271dd975e58cb833eac5bac7d750461f",
+      "path": "fixtures/conformance/m8/one-state-partial-loop.avl",
+      "bytes": 5446,
+      "sha256": "b75fede4bd9ef1925edd28c06727f23332e44dc8ff0243835c9b031ae30c29ff",
+      "externalIntegrity": "sha256-t1/t5L2e8ZJe3SjAZyfyMzLkTcj/AkODXJsDGuMMKf8=",
+      "manifestSha256": "55e123528757d49826ac1a021e9cedf6cbebd60388f79af523ed0c14c3b13ffe",
+      "indexSha256": "a50a79944f2e41e8991cdfa3e99ccfc7c934f0cd616960a425c311c0b03d3b06",
       "states": [
         "default"
       ],
@@ -269,12 +269,12 @@
     },
     {
       "role": "user-states-all-routes-alpha",
-      "path": "fixtures/conformance/m8/user-states-all-routes-alpha.rma",
-      "bytes": 38128,
-      "sha256": "8e0110e8d22268f47dcd98d65d31e10df0e23221f38b3661f3d54d198f7f47a8",
-      "externalIntegrity": "sha256-jgEQ6NIiaPR9zZjWXTHhDfDiMiHzizZh89VNGY9/R6g=",
-      "manifestSha256": "f6b6e5197bdd1070cc56c7b02661ba7c6932e9787f447b55867f2e934b9d5035",
-      "indexSha256": "ec23e83211d9e9699a2d8e4e9d3df656be8388aaba0c5a2f8e03302799b403cb",
+      "path": "fixtures/conformance/m8/user-states-all-routes-alpha.avl",
+      "bytes": 22495,
+      "sha256": "2c7454cfb73a0f2f85d97c0f45aa848e8550a9068b6ea07d8a50970a49ab54cf",
+      "externalIntegrity": "sha256-LHRUz7c6Dy+F2XwPRaqEjoVQqQaLbqB9ilCXCkmrVM8=",
+      "manifestSha256": "ceb8c6083d10602fe3f329fc82186746df12bd3aa47ea5f4eb1a87727d957ced",
+      "indexSha256": "386485320185a391af744e68b6c9d71accb7a78849a7a2a99d4948e0c8c845a7",
       "states": [
         "done",
         "hover",

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
 
-import type { AvcRenditionGeometry } from "@rendered-motion/format";
+import type { AvcRenditionGeometry } from "@aval/format";
 
 import { throwIfAborted } from "../cancellation.js";
 import { CompilerError } from "../diagnostics.js";
@@ -20,7 +20,6 @@ import {
 import { runBoundedProcess } from "../process-runner.js";
 import { packRgbaToPlanarYuv420 } from "./packed-yuv420.js";
 
-const MAX_SPOOL_BYTES = 2 * 1024 * 1024 * 1024;
 const DISK_HEADROOM_BYTES = 64 * 1024 * 1024;
 
 export interface ExpectedRgbaSpool {
@@ -110,7 +109,7 @@ export async function materializeScaledYuvUnitSpool(
   });
   let frameOffset = 0;
   let emittedFrames = 0;
-  const frame = new Uint8Array(visibleFrameBytes);
+  const frame = allocateBytes(visibleFrameBytes, "scaled RGBA frame");
   const sink = new Writable({
     highWaterMark: Math.min(visibleFrameBytes * 2, 32 * 1024 * 1024),
     write(chunk: Buffer, _encoding, callback): void {
@@ -207,12 +206,15 @@ export async function readExpectedRgbaFrame(
       cause: error
     });
   });
-  const bytes = new Uint8Array(spool.expectedRgba.frameBytes);
+  const bytes = allocateBytes(
+    spool.expectedRgba.frameBytes,
+    "expected RGBA frame"
+  );
   try {
     await readAll(
       handle,
       bytes,
-      frameIndex * spool.expectedRgba.frameBytes,
+      checkedProduct(frameIndex, spool.expectedRgba.frameBytes),
       signal
     );
   } finally {
@@ -249,18 +251,16 @@ async function createSpoolWriter(input: {
     4
   );
   const hasQualityScratch =
-    input.geometry.profile === "avc-annexb-packed-alpha-v0";
+    input.geometry.profile === "avc-annexb-packed-alpha-v0" ||
+    input.geometry.profile === "avc-annexb-packed-alpha-v1";
   const yuvBytes = checkedProduct(frameBytes, input.frameCount);
   const expectedRgbaBytes = hasQualityScratch
     ? checkedProduct(expectedRgbaFrameBytes, input.frameCount)
     : 0;
   const totalBytes = checkedSum(yuvBytes, expectedRgbaBytes);
-  if (totalBytes > MAX_SPOOL_BYTES) {
-    throw new CompilerError("SOURCE_LIMIT", "YUV unit scratch exceeds 2 GiB");
-  }
   const root = input.temporaryRoot ?? tmpdir();
   await requireDisk(root, totalBytes);
-  const directory = await createScratchDirectory(root, "rma-yuv-");
+  const directory = await createScratchDirectory(root, "aval-yuv-");
   const yuvPath = join(directory, "unit.yuv");
   const expectedRgbaPath = hasQualityScratch
     ? join(directory, "expected.rgba")
@@ -340,10 +340,10 @@ async function createSpoolWriter(input: {
 }
 
 function validateFrameCount(frameCount: number): void {
-  if (!Number.isSafeInteger(frameCount) || frameCount < 1 || frameCount > 900) {
+  if (!Number.isSafeInteger(frameCount) || frameCount < 1) {
     throw new CompilerError(
       "FRAME_RANGE_INVALID",
-      "YUV unit spool requires 1 to 900 frames"
+      "YUV unit spool requires a positive safe frame count"
     );
   }
 }
@@ -352,7 +352,7 @@ function extractAlpha(rgba: Uint8Array, pixelCount: number): Uint8Array {
   if (rgba.byteLength !== pixelCount * 4) {
     throw new CompilerError("INPUT_INVALID", "Visible RGBA frame size is invalid");
   }
-  const alpha = new Uint8Array(pixelCount);
+  const alpha = allocateBytes(pixelCount, "expected alpha frame");
   for (let pixel = 0; pixel < pixelCount; pixel += 1) {
     alpha[pixel] = rgba[pixel * 4 + 3]!;
   }
@@ -406,8 +406,8 @@ async function requireDisk(root: string, bytes: number): Promise<void> {
       cause: error
     });
   }
-  const available = filesystem.bavail * filesystem.bsize;
-  if (available < bytes + DISK_HEADROOM_BYTES) {
+  const available = BigInt(filesystem.bavail) * BigInt(filesystem.bsize);
+  if (available < BigInt(bytes) + BigInt(DISK_HEADROOM_BYTES)) {
     throw new CompilerError(
       "SOURCE_LIMIT",
       "Insufficient temporary disk space for YUV unit scratch"
@@ -458,4 +458,16 @@ function checkedSum(left: number, right: number): number {
     throw new CompilerError("SOURCE_LIMIT", "YUV scratch sum exceeds safe range");
   }
   return result;
+}
+
+function allocateBytes(length: number, operation: string): Uint8Array {
+  try {
+    return new Uint8Array(length);
+  } catch (error) {
+    throw new CompilerError(
+      "SOURCE_LIMIT",
+      `Could not allocate ${String(length)} bytes for ${operation}`,
+      { cause: error }
+    );
+  }
 }

@@ -7,13 +7,13 @@ import { buildFreshPublicDistributions } from "../release/fresh-public-build.mjs
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const port = requirePlaywrightPort(process.env.RMA_PLAYWRIGHT_PORT ?? "4173");
+const port = requirePlaywrightPort(process.env.AVL_PLAYWRIGHT_PORT ?? "4173");
 
 await buildFreshPublicDistributions(root);
 runBuild();
 
 const preview = spawn(npm, [
-  "run", "preview:production", "-w", "@rendered-motion/playground", "--",
+  "run", "preview:production", "-w", "@aval/playground", "--",
   "--port", port, "--strictPort"
 ], {
   cwd: root,
@@ -35,15 +35,15 @@ await new Promise((resolveExit, reject) => {
 
 function runBuild() {
   const result = spawnSync(npm, [
-    "run", "build:production", "-w", "@rendered-motion/playground"
+    "run", "build:production", "-w", "@aval/playground"
   ], { cwd: root, stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } });
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) throw new Error("production playground build failed");
 }
 
 function requirePlaywrightPort(value) {
-  if (!/^(?:[1-9][0-9]{0,4})$/u.test(value)) throw new Error("RMA_PLAYWRIGHT_PORT is invalid");
+  if (!/^(?:[1-9][0-9]{0,4})$/u.test(value)) throw new Error("AVL_PLAYWRIGHT_PORT is invalid");
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed > 65_534) throw new Error("RMA_PLAYWRIGHT_PORT cannot reserve its cross-origin pair");
+  if (!Number.isSafeInteger(parsed) || parsed > 65_534) throw new Error("AVL_PLAYWRIGHT_PORT cannot reserve its cross-origin pair");
   return String(parsed);
 }

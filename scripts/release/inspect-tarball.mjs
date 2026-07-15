@@ -143,16 +143,16 @@ function validatePackageContents(entries, manifest, label) {
     }
     if (relative.startsWith("dist/") && !/\.(?:js|d\.ts)$/u.test(relative)) throw new Error(`${label} contains an unreviewed distribution file type: ${relative}`);
     const executable = (entry.mode & 0o111) !== 0;
-    const allowedExecutable = manifest.name === "@rendered-motion/compiler" && relative === "dist/cli.js";
+    const allowedExecutable = manifest.name === "@aval/compiler" && relative === "dist/cli.js";
     if (executable !== allowedExecutable) throw new Error(`${label} has an unexpected executable mode: ${relative}`);
   }
   for (const required of ["package/package.json", "package/README.md", "package/LICENSE", "package/THIRD_PARTY_NOTICES.md", "package/dist/index.js", "package/dist/index.d.ts"]) {
     if (!filePaths.has(required)) throw new Error(`${label} is missing ${required.slice("package/".length)}`);
   }
   const specialEntry = {
-    "@rendered-motion/compiler": "package/dist/cli.js",
-    "@rendered-motion/player-web": "package/dist/decoder-worker/entry.js",
-    "@rendered-motion/element": "package/dist/auto.js"
+    "@aval/compiler": "package/dist/cli.js",
+    "@aval/player-web": "package/dist/decoder-worker/entry.js",
+    "@aval/element": "package/dist/auto.js"
   }[manifest.name];
   if (specialEntry !== undefined && !filePaths.has(specialEntry)) throw new Error(`${label} is missing ${specialEntry.slice("package/".length)}`);
   validateTargets(manifest.exports, "exports", filePaths, manifest.name);

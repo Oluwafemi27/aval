@@ -1,15 +1,15 @@
 import { useEffect, useRef } from "react";
 import {
-  defineRenderedMotionElement,
-  type RenderedMotionElement,
-  type RenderedMotionErrorDetail,
-  type RenderedMotionVisualStateChangeDetail
-} from "@rendered-motion/element";
+  defineAvalElement,
+  type AvalElement,
+  type AvalErrorDetail,
+  type AvalVisualStateChangeDetail
+} from "@aval/element";
 
 export interface StatusMotionProps {
   readonly state: string;
   readonly src: string;
-  readonly onError?: (failure: Readonly<RenderedMotionErrorDetail>) => void;
+  readonly onError?: (failure: Readonly<AvalErrorDetail>) => void;
   readonly onVisualState?: (state: string | null) => void;
 }
 
@@ -19,18 +19,18 @@ export function StatusMotion({
   onError,
   onVisualState
 }: StatusMotionProps) {
-  const motion = useRef<RenderedMotionElement>(null);
+  const motion = useRef<AvalElement>(null);
 
   useEffect(() => {
-    defineRenderedMotionElement();
+    defineAvalElement();
     const element = motion.current;
     if (element === null) return;
 
-    const handleError = (event: CustomEvent<Readonly<RenderedMotionErrorDetail>>) => {
+    const handleError = (event: CustomEvent<Readonly<AvalErrorDetail>>) => {
       onError?.(event.detail);
     };
     const handleVisualState = (
-      event: CustomEvent<Readonly<RenderedMotionVisualStateChangeDetail>>
+      event: CustomEvent<Readonly<AvalVisualStateChangeDetail>>
     ) => {
       onVisualState?.(event.detail.to);
     };
@@ -43,7 +43,7 @@ export function StatusMotion({
   }, [onError, onVisualState]);
 
   return (
-    <rendered-motion
+    <aval-player
       ref={motion}
       src={src}
       state={state}
@@ -54,6 +54,6 @@ export function StatusMotion({
       <span slot="fallback" className="motion-fallback" aria-hidden="true">
         {state}
       </span>
-    </rendered-motion>
+    </aval-player>
   );
 }

@@ -1,0 +1,112 @@
+import "@aval/element/auto";
+
+const motion = document.querySelector("#grass-rabbit");
+const stateLabel = document.querySelector("#rabbit-state");
+const interactionHotspot = document.querySelector(".interaction-hotspot");
+const prefersReducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const renderedReadiness = new Set([
+  "visualReady",
+  "interactiveReady",
+  "staticReady"
+]);
+
+function revealMotionWhenRendered() {
+  if (!motion || !renderedReadiness.has(motion.readiness)) return;
+
+  motion.removeEventListener("readinesschange", revealMotionWhenRendered);
+  requestAnimationFrame(() => {
+    motion.dataset.rendered = "";
+    interactionHotspot?.classList.add("is-rendered");
+  });
+}
+
+motion?.addEventListener("readinesschange", revealMotionWhenRendered);
+revealMotionWhenRendered();
+
+function setStateLabel(state) {
+  if (!stateLabel || typeof state !== "string") return;
+  if (stateLabel.textContent?.trim() === state) return;
+
+  if (!stateLabel.hasAttribute("data-visible") || prefersReducedMotion) {
+    stateLabel.textContent = state;
+    stateLabel.style.width = "max-content";
+    return;
+  }
+
+  const currentWidth = stateLabel.getBoundingClientRect().width;
+  stateLabel.style.width = "max-content";
+  stateLabel.textContent = state;
+  const nextWidth = stateLabel.getBoundingClientRect().width;
+
+  stateLabel.style.width = `${currentWidth}px`;
+  stateLabel.getBoundingClientRect();
+  stateLabel.style.width = `${nextWidth}px`;
+}
+
+function currentPresentation() {
+  if (!motion) return null;
+  const trace = motion.getDiagnostics({ trace: true }).runtimeTrace ?? [];
+  return trace.at(-1)?.graph?.presentation ?? null;
+}
+
+function trackInitialPresentation() {
+  const presentation = currentPresentation();
+  if (presentation?.kind === "intro") {
+    setStateLabel("intro");
+    requestAnimationFrame(trackInitialPresentation);
+    return;
+  }
+
+  setStateLabel(presentation?.state ?? motion?.visualState);
+}
+
+motion?.addEventListener("readinesschange", () => {
+  if (motion.readiness === "interactiveReady") {
+    requestAnimationFrame(trackInitialPresentation);
+  } else if (motion.readiness === "staticReady") {
+    setStateLabel(motion.visualState);
+  }
+});
+motion?.addEventListener("visualstatechange", (event) => {
+  setStateLabel(event.detail.to);
+});
+
+motion?.addEventListener("error", (event) => {
+  console.error("Grass rabbit runtime failure", event.detail.failure);
+});
+
+function revealStateBadge() {
+  if (stateLabel) stateLabel.dataset.visible = "";
+}
+
+function dismissInteractionHotspot() {
+  if (!interactionHotspot) {
+    revealStateBadge();
+    return;
+  }
+
+  const hotspotIsVisible = getComputedStyle(interactionHotspot).display !== "none";
+  if (hotspotIsVisible && !prefersReducedMotion) {
+    const revealAfterFade = (event) => {
+      if (event.target !== interactionHotspot || event.propertyName !== "opacity") return;
+      interactionHotspot.removeEventListener("transitionend", revealAfterFade);
+      revealStateBadge();
+    };
+    interactionHotspot.addEventListener("transitionend", revealAfterFade);
+  } else {
+    revealStateBadge();
+  }
+
+  interactionHotspot.classList.add("is-dismissed");
+}
+
+function armInteractionHotspot() {
+  motion?.addEventListener("pointerenter", dismissInteractionHotspot, { once: true });
+}
+
+if (motion?.matches(":hover")) {
+  motion.addEventListener("pointerleave", armInteractionHotspot, { once: true });
+} else {
+  armInteractionHotspot();
+}

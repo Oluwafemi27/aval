@@ -1,6 +1,6 @@
 {
   "provenanceVersion": "0.1",
-  "generatedAt": "2026-07-12",
+  "generatedAt": "2026-07-14",
   "fixture": "m6-web-packed-alpha",
   "license": {
     "path": "fixtures/compiler/m6/source/ASSET-LICENSE.md",
@@ -9,24 +9,19 @@
   },
   "generator": {
     "path": "fixtures/compiler/m6/source/generate.mjs",
-    "bytes": 18566,
-    "sha256": "8b2d9bf103c7f55e484c55d484b4ab313080aaa68b2ac541bed29693068eaf99"
+    "bytes": 1286,
+    "sha256": "8dee7395d02d043e6a2f059f73b431c28873163570113d73e3a10347560e63ac"
   },
   "generatorModules": [
     {
       "path": "fixtures/compiler/m6/source/frame-fixtures.mjs",
       "bytes": 2472,
       "sha256": "787035e0cebc92cb1cc5fdedddd150926efaa0f244e11d700a0d99fb31d30c5e"
-    },
-    {
-      "path": "fixtures/compiler/m6/source/png-fixture-helpers.mjs",
-      "bytes": 12608,
-      "sha256": "a1d1315dd956bec7a78ff84b6b9dc15a58b1f857a9d9d4d1aba8c8f92f3d346d"
     }
   ],
   "runtime": {
-    "node": "v25.8.1",
-    "zlib": "1.2.12",
+    "node": "v22.20.0",
+    "zlib": "1.3.1-470d3a2",
     "platform": "darwin",
     "architecture": "arm64"
   },

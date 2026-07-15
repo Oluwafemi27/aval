@@ -1,6 +1,9 @@
-import type { CanvasV01 } from "@rendered-motion/format";
+import type { CanvasV01 } from "@aval/format";
 
-import type { FrameRendererBackend } from "./frame-renderer.js";
+import {
+  RendererUnavailableError,
+  type FrameRendererBackend
+} from "./frame-renderer.js";
 import type { FrameTextureKind, FrameTextureLayout } from "./frame-renderer.js";
 import {
   BrowserFrameBackend,
@@ -14,7 +17,6 @@ import {
 import {
   capturePresentationPlaneOptions
 } from "./browser-presentation-options.js";
-import { BrowserStaticCanvasPlane } from "./static-surfaces.js";
 import {
   assertResourceReservations,
   canvasBackingAllocationBytes,
@@ -31,7 +33,11 @@ import type {
   RuntimeCanvasResourceHost,
   RuntimeCanvasResourceLease,
   RuntimeCanvasResourcePlan
-} from "./static-resource-plan.js";
+} from "./canvas-resource-plan.js";
+import {
+  checkedByteNumber,
+  checkedByteProduct
+} from "./checked-runtime-bytes.js";
 import type { BrowserContextRecoveryEventTarget } from "./browser-context-recovery.js";
 import {
   OwnedCanvasContextEventTarget,
@@ -55,12 +61,12 @@ export type {
 
 export interface BrowserPresentationPlanesOptions {
   readonly animatedCanvas: HTMLCanvasElement;
-  readonly staticCanvas: HTMLCanvasElement;
   readonly canvas: Readonly<CanvasV01>;
   readonly maxBackingWidth?: number;
   readonly maxBackingHeight?: number;
   readonly maxBackingBytes: number;
-  readonly setStaticVisible: (visible: boolean) => void;
+  /** Exact host box/DPR used for the first backing allocation, when known. */
+  readonly initialPresentation?: Readonly<BrowserPresentationResizeInput>;
   readonly onClamp?: (
     geometry: Readonly<PresentationGeometry>
   ) => void;
@@ -91,12 +97,9 @@ export interface BrowserPresentationPlanesSnapshot {
   readonly geometry: Readonly<PresentationGeometry> | null;
 }
 
-/** One browser owner applies the exact same fit/DPR mapping to both planes. */
+/** Browser owner for the single animated presentation canvas. */
 export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
-  public readonly staticPlane: BrowserStaticCanvasPlane;
-
   readonly #animatedCanvas: HTMLCanvasElement;
-  readonly #staticCanvas: HTMLCanvasElement;
   readonly #canvas: Readonly<CanvasV01>;
   readonly #maxBackingWidth: number;
   readonly #maxBackingHeight: number;
@@ -136,7 +139,6 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
       );
     }
     this.#animatedCanvas = captured.animatedCanvas;
-    this.#staticCanvas = captured.staticCanvas;
     this.#canvas = captured.canvas;
     this.#maxBackingWidth = captured.maxBackingWidth;
     this.#maxBackingHeight = captured.maxBackingHeight;
@@ -160,37 +162,24 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
       throw error;
     }
     // Release the browser's implicit 300x150 stores before computing the first
-    // owned allocation. No M6 backing exists before its dimension/byte clamp.
+    // owned allocation. No M6 backing exists before exact admission succeeds.
     try {
       captured.animatedCanvas.width = 0;
       captured.animatedCanvas.height = 0;
-      captured.staticCanvas.width = 0;
-      captured.staticCanvas.height = 0;
     } catch (error) {
       resetCanvasBacking(captured.animatedCanvas);
-      resetCanvasBacking(captured.staticCanvas);
       safelyRollbackBackingTransition(initialTransition);
       safelyReleaseBackingResources(captured.backingResources);
       throw error;
     }
-    let staticPlane: BrowserStaticCanvasPlane;
     try {
-      staticPlane = new BrowserStaticCanvasPlane(
-        captured.staticCanvas,
-        captured.setStaticVisible
-      );
-    } catch (error) {
-      resetCanvasBacking(captured.animatedCanvas);
-      resetCanvasBacking(captured.staticCanvas);
-      safelyRollbackBackingTransition(initialTransition);
-      safelyReleaseBackingResources(captured.backingResources);
-      throw error;
-    }
-    this.staticPlane = staticPlane;
-    try {
-      staticPlane.setPresentationGeometry(initial);
       captured.animatedCanvas.width = initial.backing.width;
       captured.animatedCanvas.height = initial.backing.height;
+      assertExactCanvasBacking(
+        captured.animatedCanvas,
+        initial.backing,
+        "animated presentation"
+      );
       this.#geometry = initial;
       if (initial.clampReasons.length > 0) {
         try {
@@ -200,28 +189,20 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
         }
         // The observational host may still mutate either captured canvas
         // without throwing. Reassert the committed initial backing after it
-        // returns so constructor success cannot expose a split mapping.
+        // returns.
         captured.animatedCanvas.width = initial.backing.width;
         captured.animatedCanvas.height = initial.backing.height;
-        captured.staticCanvas.width = initial.backing.width;
-        captured.staticCanvas.height = initial.backing.height;
       }
       initialTransition?.commit();
     } catch (error) {
-      try {
-        staticPlane.dispose();
-      } catch {
-        // Constructor rollback continues through both canvas stores.
-      }
       resetCanvasBacking(captured.animatedCanvas);
-      resetCanvasBacking(captured.staticCanvas);
       safelyRollbackBackingTransition(initialTransition);
       safelyReleaseBackingResources(captured.backingResources);
       throw error;
     }
   }
 
-  /** Admit the initial two-plane backing before either canvas is mutated. */
+  /** Admit the initial backing before the canvas is mutated. */
   public static async create(
     options: Readonly<BrowserPresentationPlanesOptions>
   ): Promise<BrowserPresentationPlanes> {
@@ -233,8 +214,7 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
     const initial = initialPresentationGeometry(captured);
     const allocationBytes = canvasBackingAllocationBytes(initial);
     const transition = await resources.beginTransition(Object.freeze({
-      animatedAllocationBytes: allocationBytes,
-      staticAllocationBytes: allocationBytes
+      animatedAllocationBytes: allocationBytes
     }));
     const primed = createPrimedBackingResources(
       resources,
@@ -288,6 +268,17 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
     }
     let backend: AttachedPresentationBackend | null = null;
     try {
+      if (
+        this.#geometry !== null &&
+        (
+          this.#geometry.backing.width > validated.limits.maxTextureSize ||
+          this.#geometry.backing.height > validated.limits.maxTextureSize
+        )
+      ) {
+        throw new RendererUnavailableError(
+          "presentation backing exceeds WebGL MAX_TEXTURE_SIZE"
+        );
+      }
       const attached = new AttachedPresentationBackend(
         validated,
         () => {
@@ -343,11 +334,14 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
       const reservation = createPresentationResourceReservation(plan);
       this.#assertActiveWithTerminalReset();
       const current = this.currentCanvasBacking();
-      const currentRawBytes = current.width * current.height * 4 * 2;
-      if (
-        !Number.isSafeInteger(currentRawBytes) ||
-        currentRawBytes > reservation.maximumRawBackingBytes
-      ) {
+      const currentRawBytes = checkedByteNumber(
+        checkedByteProduct(
+          [current.width, current.height, 4],
+          "current presentation backing bytes"
+        ),
+        "current presentation backing bytes"
+      );
+      if (currentRawBytes > reservation.maximumRawBackingBytes) {
         throw new RangeError(
           "current presentation backing exceeds the resource plan"
         );
@@ -396,7 +390,6 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
     const previous = this.#geometry;
     const backingTransition = this.#beginBackingTransition(geometry);
     let animatedChanged: boolean;
-    let staticChanged: boolean;
     try {
       backingTransition?.assertActive?.();
       animatedChanged = backend?.setPresentationGeometry(geometry) ??
@@ -414,7 +407,11 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
         this.#animatedCanvas.height = geometry.backing.height;
         this.#assertActiveWithTerminalReset();
       }
-      staticChanged = this.staticPlane.setPresentationGeometry(geometry);
+      assertExactCanvasBacking(
+        this.#animatedCanvas,
+        geometry.backing,
+        "animated presentation"
+      );
       this.#assertActiveWithTerminalReset();
       backingTransition?.commit();
     } catch (error) {
@@ -424,8 +421,7 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
         this.#assertActive();
       }
       if (previous === null) {
-        // There is no committed mapping to restore transactionally. Retire
-        // both planes rather than leave a partially mutated first mapping.
+        // There is no committed mapping to restore transactionally.
         safelyRollbackBackingTransition(backingTransition);
         this.dispose();
       } else {
@@ -448,27 +444,15 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
           safelyRollbackBackingTransition(backingTransition);
           this.#assertActive();
         }
-        try {
-          this.staticPlane.setPresentationGeometry(previous);
-        } catch {
-          rollbackFailed = true;
-        }
-        if (this.#disposed) {
-          this.#resetDisposedBackings();
-          safelyRollbackBackingTransition(backingTransition);
-          this.#assertActive();
-        }
         safelyRollbackBackingTransition(backingTransition);
         if (rollbackFailed) {
-          // A live owner whose rollback failed is no longer coherent. Dispose
-          // both planes so later candidate work fails closed instead of using
-          // mismatched mappings/backings.
+          // A live owner whose rollback failed is no longer coherent.
           this.dispose();
         }
       }
       throw error;
     }
-    if (!staticChanged && !animatedChanged) {
+    if (!animatedChanged) {
       this.#equivalentResizeCount = increment(
         this.#equivalentResizeCount,
         "equivalent presentation resize count"
@@ -495,7 +479,7 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
     }
   }
 
-  /** Await page-pressure cleanup before a backing growth mutates either plane. */
+  /** Await page-pressure cleanup before backing growth mutates the canvas. */
   public async resizeWithAdmission(
     input: Readonly<BrowserPresentationResizeInput>
   ): Promise<Readonly<PresentationGeometry>> {
@@ -595,8 +579,7 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
       );
     }
     const transition = resources.beginTransition(Object.freeze({
-      animatedAllocationBytes: allocationBytes,
-      staticAllocationBytes: allocationBytes
+      animatedAllocationBytes: allocationBytes
     }));
     if (isPromiseLike(transition)) {
       void Promise.resolve(transition).then(
@@ -617,8 +600,7 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
     if (resources === null) return null;
     const allocationBytes = canvasBackingAllocationBytes(geometry);
     return Promise.resolve(resources.beginTransition(Object.freeze({
-      animatedAllocationBytes: allocationBytes,
-      staticAllocationBytes: allocationBytes
+      animatedAllocationBytes: allocationBytes
     })));
   }
 
@@ -644,6 +626,14 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
       }
     } catch {
       restored = false;
+    }
+    if (restored) {
+      try {
+        restored = this.#animatedCanvas.width === backing.width &&
+          this.#animatedCanvas.height === backing.height;
+      } catch {
+        restored = false;
+      }
     }
     return restored;
   }
@@ -680,7 +670,6 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
 
   #resetDisposedBackings(): void {
     resetCanvasBacking(this.#animatedCanvas);
-    resetCanvasBacking(this.#staticCanvas);
   }
   public snapshot(): Readonly<BrowserPresentationPlanesSnapshot> {
     return Object.freeze({
@@ -701,7 +690,13 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
           liveResourceTotal(
             reservation,
             this.#geometry?.byteTerms.bytesPerPlane ??
-              this.#canvas.width * this.#canvas.height * 4
+              checkedByteNumber(
+                checkedByteProduct(
+                  [this.#canvas.width, this.#canvas.height, 4],
+                  "logical presentation plane bytes"
+                ),
+                "logical presentation plane bytes"
+              )
           )
         )
       ),
@@ -721,12 +716,7 @@ export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
     try {
       backend?.dispose();
     } catch {
-      // Terminal cleanup continues through every independently owned plane.
-    }
-    try {
-      this.staticPlane.dispose();
-    } catch {
-      // The owner is terminal and its accounting is already cleared.
+      // Terminal cleanup continues through canvas/accounting release.
     }
     this.#resetDisposedBackings();
     safelyReleaseBackingResources(this.#backingResources);
@@ -873,6 +863,16 @@ function resetCanvasBacking(canvas: HTMLCanvasElement): void {
     canvas.height = 0;
   } catch {
     // Best-effort constructor/terminal rollback has no remaining owner.
+  }
+}
+
+function assertExactCanvasBacking(
+  canvas: HTMLCanvasElement,
+  backing: Readonly<RuntimeCanvasBackingSize>,
+  label: string
+): void {
+  if (canvas.width !== backing.width || canvas.height !== backing.height) {
+    throw new RangeError(`${label} backing allocation was not exact`);
   }
 }
 

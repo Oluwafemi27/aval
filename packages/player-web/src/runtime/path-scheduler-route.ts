@@ -1,7 +1,7 @@
 import type {
   GraphBodyDefinition,
   GraphEdgeDefinition
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { ScheduledPathRoute } from "./path-sequence.js";
 import {

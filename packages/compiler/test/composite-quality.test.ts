@@ -1,4 +1,4 @@
-import { deriveAvcRenditionGeometry } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometry } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -95,6 +95,23 @@ describe("report-only composite quality", () => {
       meanAbsoluteError: 1 / 6 / 255,
       p99AbsoluteError: 1 / 255
     });
+  });
+
+  it("accepts report frame indexes beyond the former unit ceiling", () => {
+    const quality = createCompositeQualityAccumulator({
+      rendition: "packed",
+      geometry
+    });
+    quality.includeFrame({
+      unit: "body",
+      frameIndex: 900,
+      expectedRgba: new Uint8Array(8),
+      decodedRgba: decodedFrame({
+        color: [[0, 0, 0], [0, 0, 0]],
+        alpha: [0, 0]
+      })
+    });
+    expect(quality.finish().frameCount).toBe(1);
   });
 
   it("rejects duplicate, malformed, opaque, and cancelled inputs", () => {

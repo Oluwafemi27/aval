@@ -44,6 +44,15 @@ describe("bounded RFC 1951 inflater", () => {
     })).toEqual(source);
   });
 
+  it("inflates output above the former 2 MiB ceiling", () => {
+    const source = new Uint8Array(2 * 1024 * 1024 + 1).fill(0x5a);
+    const raw = new Uint8Array(deflateRawSync(source, { level: 0 }));
+    expect(inflateDeflate({
+      deflate: raw,
+      expectedOutputLength: source.byteLength
+    })).toEqual(source);
+  });
+
   it("rejects invalid stored complements and output overruns", () => {
     const valid = Uint8Array.of(1, 3, 0, 0xfc, 0xff, 1, 2, 3);
     expect(inflateDeflate({ deflate: valid, expectedOutputLength: 3 }))
@@ -160,6 +169,9 @@ describe("bounded RFC 1951 inflater", () => {
       expectedOutputLength: source.length + 1
     }));
     expect(calculateDeflateWorkLimit(10, 20)).toBe(32 * 30 + 4_096);
+    expectDeflateError(() =>
+      calculateDeflateWorkLimit(Number.MAX_SAFE_INTEGER, 1)
+    );
     expectDeflateError(() => inflateDeflateWithLimit({
       deflate: raw,
       expectedOutputLength: source.length

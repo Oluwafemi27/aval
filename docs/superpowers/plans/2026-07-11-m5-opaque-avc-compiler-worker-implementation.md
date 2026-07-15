@@ -61,7 +61,7 @@ format → player-web
 all libraries → playground
 ```
 
-Give `@rendered-motion/compiler` a provisional private `rma` bin entry. Add
+Give `@aval/compiler` a provisional private `avl` bin entry. Add
 compile-only declaration tests proving that format's AVC exports have no
 Node/DOM/WebCodecs types, compiler public types have no DOM/WebCodecs types,
 and the worker source has no `Window` or Node ambient types. Preserve format's
@@ -71,9 +71,9 @@ Gate:
 
 ```text
 npm run typecheck
-npm run build -w @rendered-motion/format
-npm run build -w @rendered-motion/compiler
-npm run build -w @rendered-motion/player-web
+npm run build -w @aval/format
+npm run build -w @aval/compiler
+npm run build -w @aval/player-web
 ```
 
 ### 2. Freeze errors, options, budgets, and checked primitives
@@ -523,8 +523,8 @@ Add:
 
 ```text
 fixtures/compiler/m5/source/
-fixtures/conformance/m5/opaque-loop.rma
-fixtures/conformance/m5/opaque-path.rma
+fixtures/conformance/m5/opaque-loop.avl
+fixtures/conformance/m5/opaque-path.avl
 fixtures/conformance/m5/provenance.json
 fixtures/conformance/m5/README.md
 packages/compiler/test/tool-backed.test.ts
@@ -556,8 +556,8 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @rendered-motion/format
-npm pack --dry-run -w @rendered-motion/compiler
+npm pack --dry-run -w @aval/format
+npm pack --dry-run -w @aval/compiler
 git diff --check
 ```
 

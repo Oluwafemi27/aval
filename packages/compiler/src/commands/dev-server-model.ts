@@ -1,4 +1,4 @@
-import { FORMAT_DEFAULT_BUDGETS } from "@rendered-motion/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
 
 export interface DevServerBuild {
   readonly generation: number;
@@ -25,7 +25,6 @@ export interface DevServerReport {
   readonly alpha: "opaque" | "packed";
   readonly continuityPassed: number;
   readonly continuityCuts: number;
-  readonly strictStatics: number;
   readonly alphaAuditedFrames: number;
 }
 
@@ -75,7 +74,6 @@ function normalizeReport(value: Readonly<DevServerReport>): Readonly<DevServerRe
     alpha: value.alpha === "packed" ? "packed" : "opaque",
     continuityPassed: integer(value.continuityPassed),
     continuityCuts: integer(value.continuityCuts),
-    strictStatics: integer(value.strictStatics),
     alphaAuditedFrames: integer(value.alphaAuditedFrames)
   });
 }

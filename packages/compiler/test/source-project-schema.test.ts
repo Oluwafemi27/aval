@@ -76,12 +76,24 @@ describe("source project schema", () => {
     expect(Object.isFrozen(parsed.units)).toBe(true);
   });
 
-  it("accepts an explicit poster selector", () => {
+  it("rejects the removed poster selector", () => {
     const value = project();
     value.states[0].poster = { source: "source", frame: 3 };
-    expect(validateSourceProject(value).states[0]?.poster).toEqual({
-      source: "source",
-      frame: 3
+    expect(() => validateSourceProject(value)).toThrow(CompilerError);
+  });
+
+  it("accepts exact legacy geometry and ranges above former media ceilings", () => {
+    const value = project();
+    value.canvas.width = 1_024;
+    value.canvas.height = 576;
+    value.renditions[0].codedWidth = 1_024;
+    value.renditions[0].codedHeight = 576;
+    value.units[0].range = [0, 1_801];
+
+    expect(validateSourceProject(value)).toMatchObject({
+      canvas: { width: 1_024, height: 576 },
+      renditions: [{ width: 1_024, height: 576 }],
+      units: [{ range: [0, 1_801] }]
     });
   });
 

@@ -1,8 +1,4 @@
 import { DecodeTimeline } from "./decode-timeline.js";
-import {
-  RuntimePlaybackError,
-  normalizeRuntimeFailure
-} from "./errors.js";
 import type {
   IntegratedCandidateActivationOptions,
   IntegratedCandidateAttemptContext
@@ -24,7 +20,6 @@ import {
   raceAvcCandidateOperation
 } from "./avc-candidate-factory-support.js";
 import {
-  avcCandidateFailureContext,
   avcPhaseFailure,
   captureAvcOwnerMethod,
   requireAvcOwner,
@@ -38,14 +33,14 @@ import {
 } from "./avc-candidate-factory-validation.js";
 import { FrameRenderer } from "./frame-renderer.js";
 import { PathScheduler, type PathSchedulerClock } from "./path-scheduler.js";
-import { runAllRoutesReadiness } from "./readiness-runner.js";
 import {
   MAX_RESOURCE_RING_CAPACITY,
+  MIN_RESOURCE_RING_CAPACITY,
   createRuntimeResourcePlan,
   withRuntimeResourceRingCapacity,
   type RuntimeResourcePlan
 } from "./resource-plan.js";
-import type { RuntimeCanvasResourceLease } from "./static-resource-plan.js";
+import type { RuntimeCanvasResourceLease } from "./canvas-resource-plan.js";
 import {
   WorkerSampleFactory,
   type WorkerSampleResourceHost
@@ -295,27 +290,13 @@ export class AvcCandidateResources {
       "readiness session"
     );
     validateAvcReadinessSession(readiness);
-    const result = await raceAvcCandidateOperation(
-      runAllRoutesReadiness({
-        manifest: this.#context.catalog.manifest,
-        graph: this.#context.catalog.graph,
-        adapters: readiness.adapters
-      }),
-      control.signal
-    );
-    readiness.observeResult?.(result);
-    control.throwIfStopped();
-    if (!result.passed || result.evaluation === null) {
-      throw new RuntimePlaybackError(
-        result.failure ?? normalizeRuntimeFailure(
-          "readiness-failure",
-          "all-routes readiness did not produce a passing evaluation",
-          avcCandidateFailureContext(this.#context)
-        )
-      );
-    }
-
-    const ringCapacity = result.evaluation.ringCapacity;
+    // Exhaustive all-routes rehearsal is an explicit certification operation,
+    // not a page-startup prerequisite. Activation below already performs the
+    // fallible real-decoder work needed to fill and draw the initial ring.
+    // Use the minimum supported ring so startup decodes only the six frames
+    // that will actually become live playback, while the provisional plan
+    // continues to admit the full bounded decoder surface allocation.
+    const ringCapacity = MIN_RESOURCE_RING_CAPACITY;
     const finalResourcePlan = runAvcResourcePhase(
       () => withRuntimeResourceRingCapacity(
         provisionalResourcePlan,

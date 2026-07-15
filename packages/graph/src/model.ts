@@ -24,7 +24,6 @@ export interface GraphInitialUnitDefinition {
 
 export interface GraphStateDefinition {
   readonly id: GraphStateId;
-  readonly staticFrameId: string;
   readonly body: GraphBodyDefinition;
   readonly initialUnit?: GraphInitialUnitDefinition;
 }
@@ -114,7 +113,6 @@ export type GraphPresentation =
   | {
       readonly kind: "static";
       readonly state: GraphStateId;
-      readonly staticFrameId: string;
     }
   | {
       readonly kind: "intro";
@@ -205,6 +203,8 @@ export type MotionGraphEffect =
 export interface MotionGraphSnapshot {
   readonly readiness: MotionGraphReadiness;
   readonly phase: MotionGraphPhase;
+  /** Whether the authored initial unit remains eligible before the initial body. */
+  readonly initialUnitPending: boolean;
   readonly requestedState: GraphStateId | null;
   readonly visualState: GraphStateId | null;
   readonly prospectiveState: GraphStateId | null;

@@ -2,7 +2,7 @@ import {
   FormatError,
   validateCompleteAsset,
   type ValidatedAssetLayout
-} from "@rendered-motion/format";
+} from "@aval/format";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -45,7 +45,7 @@ describe("bounded complete-asset fetch", () => {
 
     expect(fetcher.calls).toHaveLength(1);
     expect(fetcher.calls[0]).toMatchObject({
-      url: "https://cdn.example.test/motion.rma",
+      url: "https://cdn.example.test/motion.avl",
       init: {
         method: "GET",
         credentials: "same-origin",
@@ -60,7 +60,7 @@ describe("bounded complete-asset fetch", () => {
     expect(result.identity).toEqual({
       mode: "full",
       generation: 4,
-      finalUrl: "https://cdn.example.test/motion.rma",
+      finalUrl: "https://cdn.example.test/motion.avl",
       declaredTotalBytes: asset.byteLength,
       strongEntityTag: '"full-v1"'
     });
@@ -99,7 +99,7 @@ describe("bounded complete-asset fetch", () => {
     const asset = createOpaqueTestAsset();
     const pinned = parseStrongEntityTag('"range-v1"')!;
     for (const responseOptions of [
-      { url: "https://other.example.test/motion.rma", etag: '"range-v1"' },
+      { url: "https://other.example.test/motion.avl", etag: '"range-v1"' },
       { etag: '"range-v2"' },
       { etag: null },
       { etag: 'W/"range-v1"' }
@@ -115,7 +115,7 @@ describe("bounded complete-asset fetch", () => {
         isGenerationCurrent: () => true,
         timers: new PassiveTimerHost(),
         pinnedEntity: {
-          finalUrl: "https://cdn.example.test/motion.rma",
+          finalUrl: "https://cdn.example.test/motion.avl",
           strongEntityTag: pinned
         }
       })).rejects.toMatchObject({ code: "entity-changed" });
@@ -181,7 +181,7 @@ describe("bounded complete-asset fetch", () => {
 
     await expect(fetchFullAsset({
       request: normalizeRuntimeAssetRequest({
-        url: "https://cdn.example.test/motion.rma"
+        url: "https://cdn.example.test/motion.avl"
       }, { maximumFileBytes: asset.byteLength - 1 }),
       fetcher: scriptedFetch([
         response(200, 1, reader, { contentEncoding: "gzip" })
@@ -330,7 +330,7 @@ describe("bounded complete-asset fetch", () => {
       request: request(),
       fetcher: {
         fetch: async () => {
-          throw new Error("https://secret.example.test/private.rma");
+          throw new Error("https://secret.example.test/private.avl");
         }
       },
       resources: new CountingResources(),
@@ -395,7 +395,7 @@ describe("bounded complete-asset fetch", () => {
     const requestController = new AbortController();
     const remove = vi.spyOn(requestController.signal, "removeEventListener");
     const normalized = normalizeRuntimeAssetRequest({
-      url: "https://cdn.example.test/motion.rma",
+      url: "https://cdn.example.test/motion.avl",
       signal: requestController.signal
     });
     const hostileSessionSignal = {
@@ -427,7 +427,7 @@ describe("bounded complete-asset fetch", () => {
     );
     await expect(fetchFullAsset({
       request: normalizeRuntimeAssetRequest({
-        url: "https://cdn.example.test/motion.rma",
+        url: "https://cdn.example.test/motion.avl",
         signal: timerController.signal
       }),
       fetcher: scriptedFetch([]),
@@ -456,7 +456,7 @@ describe("bounded complete-asset fetch", () => {
 
 function request(integrity?: string, timeoutMs?: number) {
   return normalizeRuntimeAssetRequest({
-    url: "https://cdn.example.test/motion.rma",
+    url: "https://cdn.example.test/motion.avl",
     ...(integrity === undefined ? {} : { integrity }),
     ...(timeoutMs === undefined ? {} : { timeoutMs })
   });
@@ -484,7 +484,7 @@ function response(
   return {
     status,
     type: "cors",
-    url: options.url ?? "https://cdn.example.test/motion.rma",
+    url: options.url ?? "https://cdn.example.test/motion.avl",
     headers: { get: (name) => values[name.toLowerCase()] ?? null },
     body: { getReader: () => reader }
   };

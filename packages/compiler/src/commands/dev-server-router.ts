@@ -71,7 +71,7 @@ export function createDevServerRequestHandler(options: DevServerRouterOptions): 
         ? writeError(response, method, 404, "no-valid-build")
         : writeText(response, method, "application/json; charset=utf-8", JSON.stringify(current));
     }
-    if (relativePath !== "asset.rma") return writeError(response, method, 404, "not-found");
+    if (relativePath !== "asset.avl") return writeError(response, method, 404, "not-found");
     const published = options.current();
     if (published === null) return writeError(response, method, 404, "no-valid-build");
     await servePublishedAsset({

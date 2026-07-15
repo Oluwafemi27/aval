@@ -52,7 +52,7 @@ function fail(message: string, offset?: number): never {
 function assertMagic(sample: Uint8Array): void {
   for (let index = 0; index < REFERENCE_FRAME_MAGIC.length; index += 1) {
     if (sample[index] !== REFERENCE_FRAME_MAGIC[index]) {
-      fail("reference frame magic must be RMRF", index);
+      fail("reference frame magic must be AVRF", index);
     }
   }
 }
@@ -110,7 +110,15 @@ export function encodeReferenceFrame(input: ReferenceFrameInput): Uint8Array {
       FORMAT_DEFAULT_BUDGETS.maxSampleBytes,
       "reference sample length"
     );
-    const sample = new Uint8Array(sampleLength);
+    let sample: Uint8Array;
+    try {
+      sample = new Uint8Array(sampleLength);
+    } catch {
+      throw new FormatError(
+        "REFERENCE_FRAME_INVALID",
+        `reference frame allocation of ${String(sampleLength)} bytes failed`
+      );
+    }
     sample.set(REFERENCE_FRAME_MAGIC, 0);
     writeUint8(sample, 4, 0, "REFERENCE_FRAME_INVALID", "reference major version");
     writeUint8(sample, 5, 1, "REFERENCE_FRAME_INVALID", "reference minor version");

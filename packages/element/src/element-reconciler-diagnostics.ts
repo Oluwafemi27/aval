@@ -7,11 +7,11 @@ import type { ElementOwnershipLedger } from "./element-ownership-ledger.js";
 import type { ElementReconcilerMetrics } from "./element-reconciler-metrics.js";
 import type { ElementTrace } from "./element-trace.js";
 import type {
-  RenderedMotionCleanupReceipt,
-  RenderedMotionDiagnostics,
-  RenderedMotionDiagnosticsCounters,
-  RenderedMotionElementOwnershipSnapshot,
-  RenderedMotionTerminalCleanupProof
+  AvalCleanupReceipt,
+  AvalDiagnostics,
+  AvalDiagnosticsCounters,
+  AvalElementOwnershipSnapshot,
+  AvalTerminalCleanupProof
 } from "./public-types.js";
 
 export interface ElementReconcilerDiagnosticInput {
@@ -24,10 +24,10 @@ export interface ElementReconcilerDiagnosticInput {
   readonly motionGeneration: number;
   readonly visibilityGeneration: number;
   readonly resizeGeneration: number;
-  readonly counters: Readonly<RenderedMotionDiagnosticsCounters>;
-  readonly cleanup: Readonly<RenderedMotionCleanupReceipt> | null;
-  readonly ownership: Readonly<RenderedMotionElementOwnershipSnapshot>;
-  readonly terminalCleanup: Readonly<RenderedMotionTerminalCleanupProof> | null;
+  readonly counters: Readonly<AvalDiagnosticsCounters>;
+  readonly cleanup: Readonly<AvalCleanupReceipt> | null;
+  readonly ownership: Readonly<AvalElementOwnershipSnapshot>;
+  readonly terminalCleanup: Readonly<AvalTerminalCleanupProof> | null;
   readonly runtime: Readonly<BrowserRuntimePlayerSnapshot> | null;
   readonly trace: ElementTrace;
 }
@@ -35,7 +35,7 @@ export interface ElementReconcilerDiagnosticInput {
 export function createReconcilerDiagnostics(
   input: Readonly<ElementReconcilerDiagnosticInput>,
   includeTrace: boolean
-): Readonly<RenderedMotionDiagnostics> {
+): Readonly<AvalDiagnostics> {
   const desired = input.desired;
   const state = input.publicState;
   const configuration = desired.configuration ?? DEFAULT_CONFIGURATION;
@@ -106,8 +106,8 @@ export class ElementReconcilerDiagnosticsView {
     connected: boolean;
     finalDisposed: boolean;
     sourceGeneration: number;
-    cleanup: Readonly<RenderedMotionCleanupReceipt> | null;
-    terminalCleanup: Readonly<RenderedMotionTerminalCleanupProof> | null;
+    cleanup: Readonly<AvalCleanupReceipt> | null;
+    terminalCleanup: Readonly<AvalTerminalCleanupProof> | null;
     runtime: Readonly<BrowserRuntimePlayerSnapshot> | null;
   }>;
   readonly #trace: ElementTrace;
@@ -121,8 +121,8 @@ export class ElementReconcilerDiagnosticsView {
       connected: boolean;
       finalDisposed: boolean;
       sourceGeneration: number;
-      cleanup: Readonly<RenderedMotionCleanupReceipt> | null;
-      terminalCleanup: Readonly<RenderedMotionTerminalCleanupProof> | null;
+      cleanup: Readonly<AvalCleanupReceipt> | null;
+      terminalCleanup: Readonly<AvalTerminalCleanupProof> | null;
       runtime: Readonly<BrowserRuntimePlayerSnapshot> | null;
     }>;
     trace: ElementTrace;
@@ -135,7 +135,7 @@ export class ElementReconcilerDiagnosticsView {
     this.#trace = input.trace;
   }
 
-  public get(options: Readonly<{ trace?: boolean }> = {}): Readonly<RenderedMotionDiagnostics> {
+  public get(options: Readonly<{ trace?: boolean }> = {}): Readonly<AvalDiagnostics> {
     if (
       options === null || typeof options !== "object" ||
       Object.keys(options).some((key) => key !== "trace") ||

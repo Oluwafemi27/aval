@@ -1,6 +1,6 @@
-import { defineRenderedMotionElement } from "@rendered-motion/element";
+import { defineAvalElement } from "@aval/element";
 
-defineRenderedMotionElement();
+defineAvalElement();
 
 const motion = document.querySelector("#motion");
 const pause = document.querySelector("#pause");

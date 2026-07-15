@@ -23,7 +23,6 @@ import { PageDecoderLeases } from "./page-decoder-leases.js";
 import type { PlayerResourceAdmission } from "./player-resource-admission.js";
 import {
   PlayerResourceAccount,
-  refreshPlayerAutomaticReclaimablePublication,
   reclassifyPlayerResourceLease,
   setPlayerResourceLeaseReclaimable,
   snapshotPlayerResourceCategories
@@ -32,16 +31,6 @@ import {
   createRuntimeResourceCategoryPlan
 } from "./resource-category-plan.js";
 import type { RuntimeResourceAllocationSnapshot } from "./resource-plan.js";
-import type {
-  StaticSurfaceStoreResourceHost,
-  StaticSurfaceStoreResourceLease,
-  StaticSurfaceStoreSurfaceRole
-} from "./static-surface-store-resources.js";
-import type {
-  BrowserStaticDecoderResourceCategory,
-  BrowserStaticDecoderResourceHost,
-  BrowserStaticDecoderResourceLease
-} from "./strict-static-decoder.js";
 import type {
   VerifiedBlobPersistentLease,
   VerifiedBlobResourceCategory,
@@ -140,7 +129,7 @@ export function createPlayerBlobAssemblyResourceHost(
   });
 }
 
-/** Persistent verified bytes remain split between unit and static ownership. */
+/** Persistent verified unit bytes remain independently reclaimable. */
 export function createPlayerVerifiedBlobResourceHost(
   account: PlayerResourceAccount,
   admission?: Readonly<PlayerResourceAdmission>
@@ -218,167 +207,6 @@ function createPromotableFullLease(
       if (released) return;
       released = true;
       byteLease.release();
-    }
-  });
-}
-
-/** Account one decoded surface under its exact current/incoming/cache role. */
-export function createPlayerStaticSurfaceResourceHost(
-  account: PlayerResourceAccount,
-  admission?: Readonly<PlayerResourceAdmission>
-): StaticSurfaceStoreResourceHost {
-  const touch = captureAccountTouch(account);
-  const refreshReclaimable = captureStaticReclaimableRefresh(account);
-  if (admission !== undefined) {
-    const reserve = captureAdmissionReserve(admission);
-    return Object.freeze({
-      async reserveDecodedSurface(input: Readonly<{
-        staticFrame: string;
-        byteLength: number;
-        role: "incoming";
-      }>): Promise<StaticSurfaceStoreResourceLease> {
-        validateStaticSurfaceReservation(input);
-        return createStaticSurfaceResourceLease(
-          account,
-          await reserve("incoming-static-surface", input.byteLength),
-          refreshReclaimable
-        );
-      },
-      nextTouchSequence(): number {
-        return touch().lastTouchSequence;
-      }
-    });
-  }
-  const reserve = captureAccountReserve(account);
-  return Object.freeze({
-    reserveDecodedSurface(input: Readonly<{
-      staticFrame: string;
-      byteLength: number;
-      role: "incoming";
-    }>): StaticSurfaceStoreResourceLease {
-      validateStaticSurfaceReservation(input);
-      return createStaticSurfaceResourceLease(
-        account,
-        reserve("incoming-static-surface", input.byteLength),
-        refreshReclaimable
-      );
-    },
-    nextTouchSequence(): number {
-      return touch().lastTouchSequence;
-    }
-  });
-}
-
-function validateStaticSurfaceReservation(input: Readonly<{
-  readonly staticFrame: string;
-  readonly byteLength: number;
-  readonly role: "incoming";
-}>): void {
-  if (input === null || typeof input !== "object") {
-    throw new TypeError("decoded static surface reservation is malformed");
-  }
-  if (
-    typeof input.staticFrame !== "string" ||
-    input.staticFrame.length < 1 ||
-    input.role !== "incoming"
-  ) {
-    throw new TypeError("decoded static surface reservation is invalid");
-  }
-}
-
-function createStaticSurfaceResourceLease(
-  account: PlayerResourceAccount,
-  byteLease: RuntimeByteLease,
-  refreshReclaimable: () => void
-): StaticSurfaceStoreResourceLease {
-  let role: StaticSurfaceStoreSurfaceRole = "incoming";
-  let released = false;
-  return Object.freeze({
-    setRole(nextRole: StaticSurfaceStoreSurfaceRole): void {
-      if (released) {
-        throw new Error("static surface resource lease is released");
-      }
-      const category = staticSurfaceRoleCategory(nextRole);
-      if (nextRole === role) return;
-      reclassifyPlayerResourceLease(account, byteLease, category);
-      role = nextRole;
-      refreshReclaimable();
-    },
-    release(): void {
-      if (released) return;
-      released = true;
-      byteLease.release();
-      refreshReclaimable();
-    }
-  });
-}
-
-function captureStaticReclaimableRefresh(
-  account: PlayerResourceAccount
-): () => void {
-  const update = account.updateStatus;
-  if (typeof update !== "function") {
-    throw new TypeError("player resource account status capability is missing");
-  }
-  return (): void => {
-    try {
-      if (refreshPlayerAutomaticReclaimablePublication(account)) return;
-      const bytes = snapshotPlayerResourceCategories(account).find(
-        ({ category }) => category === "decoded-static-cache"
-      )?.bytes ?? 0;
-      Reflect.apply(update, account, [{
-        reclaimable: bytes === 0
-          ? Object.freeze([])
-          : Object.freeze([Object.freeze({
-              category: "decoded-static-cache" as const,
-              bytes
-            })])
-      }]);
-    } catch (error) {
-      const snapshot = account.snapshot();
-      if (snapshot.disposed || snapshot.participant === null) return;
-      throw error;
-    }
-  };
-}
-
-/** Bind strict PNG copy/zlib/scratch lifetimes to their actual decoder owner. */
-export function createPlayerStaticDecoderResourceHost(
-  account: PlayerResourceAccount,
-  admission?: Readonly<PlayerResourceAdmission>
-): BrowserStaticDecoderResourceHost {
-  if (admission !== undefined) {
-    const reserve = captureAdmissionReserve(admission);
-    return Object.freeze({
-      reserve(
-        category: BrowserStaticDecoderResourceCategory,
-        byteLength: number
-      ): Promise<BrowserStaticDecoderResourceLease> {
-        if (
-          category !== "png-copy" &&
-          category !== "png-zlib" &&
-          category !== "png-scratch"
-        ) {
-          throw new TypeError("static decoder resource category is invalid");
-        }
-        return reserve(category, byteLength);
-      }
-    });
-  }
-  const reserve = captureAccountReserve(account);
-  return Object.freeze({
-    reserve(
-      category: BrowserStaticDecoderResourceCategory,
-      byteLength: number
-    ): BrowserStaticDecoderResourceLease {
-      if (
-        category !== "png-copy" &&
-        category !== "png-zlib" &&
-        category !== "png-scratch"
-      ) {
-        throw new TypeError("static decoder resource category is invalid");
-      }
-      return reserve(category, byteLength);
     }
   });
 }
@@ -496,7 +324,7 @@ export function reserveRuntimeResourcePlan(
   });
 }
 
-/** Reserve only animation owners; loader/static/canvas owners lease themselves. */
+/** Reserve only animation owners; loader/canvas owners lease themselves. */
 function reserveCandidateRuntimeResources(
   account: PlayerResourceAccount,
   allocation: Readonly<RuntimeResourceAllocationSnapshot>
@@ -637,8 +465,7 @@ async function reserveCandidateRuntimeResourcesWithAdmission(
 const ASSET_OWNERSHIP_CATEGORIES: readonly RuntimeByteCategory[] = Object.freeze([
   "asset-metadata",
   "asset-full",
-  "verified-unit",
-  "verified-static"
+  "verified-unit"
 ]);
 
 const CANDIDATE_PLAN_CATEGORIES: readonly RuntimeByteCategory[] = Object.freeze([
@@ -651,11 +478,7 @@ const CANDIDATE_PLAN_CATEGORIES: readonly RuntimeByteCategory[] = Object.freeze(
 
 const DIRECT_PLAN_CATEGORIES: readonly RuntimeByteCategory[] = Object.freeze([
   ...CANDIDATE_PLAN_CATEGORIES,
-  "png-copy",
-  "png-zlib",
-  "png-scratch",
-  "animated-canvas-backing",
-  "static-canvas-backing"
+  "animated-canvas-backing"
 ]);
 
 const UNPLANNED_LIVE_CATEGORIES: readonly RuntimeByteCategory[] = Object.freeze([
@@ -680,24 +503,12 @@ function assertAccountWithinPlan(
       throw resourceInvariantError();
     }
   }
-  const surfaceBytes = (live.get("current-static-surface") ?? 0) +
-    (live.get("incoming-static-surface") ?? 0);
-  const surfaceTarget = (target.get("current-static-surface") ?? 0) +
-    (target.get("incoming-static-surface") ?? 0);
-  if (surfaceBytes > surfaceTarget) {
-    throw resourceInvariantError();
-  }
   for (const category of UNPLANNED_LIVE_CATEGORIES) {
     if ((live.get(category) ?? 0) !== 0) {
       throw resourceInvariantError();
     }
   }
-  // Optional decoded statics are page-managed LRU residency outside the
-  // candidate's guaranteed current/incoming peak. Their authentic leases are
-  // bounded and reclaimed by the page policy, not reserved by this candidate.
-  const optionalStaticBytes = live.get("decoded-static-cache") ?? 0;
-  const liveTotal = snapshot.reduce((total, { bytes }) => total + bytes, 0) -
-    optionalStaticBytes;
+  const liveTotal = snapshot.reduce((total, { bytes }) => total + bytes, 0);
   if (liveTotal > totalBytes) throw resourceInvariantError();
 }
 
@@ -860,23 +671,6 @@ function captureAdmissionReserve(
   };
 }
 
-function captureAccountTouch(
-  account: PlayerResourceAccount
-): () => Readonly<ReturnType<PlayerResourceAccount["touch"]>> {
-  if (!(account instanceof PlayerResourceAccount)) {
-    throw new TypeError("player resource host requires a player account");
-  }
-  const touch = account.touch;
-  if (typeof touch !== "function") {
-    throw new TypeError("player resource account touch capability is missing");
-  }
-  const assertGeneration = captureAccountGenerationGuard(account);
-  return () => {
-    assertGeneration();
-    return touch.call(account);
-  };
-}
-
 function captureAccountGenerationGuard(
   account: PlayerResourceAccount
 ): () => void {
@@ -900,18 +694,6 @@ function captureAccountGenerationGuard(
   };
 }
 
-function staticSurfaceRoleCategory(
-  role: StaticSurfaceStoreSurfaceRole
-): RuntimeByteCategory {
-  switch (role) {
-    case "current": return "current-static-surface";
-    case "incoming": return "incoming-static-surface";
-    case "optional": return "decoded-static-cache";
-    default:
-      throw new TypeError("static surface resource role is invalid");
-  }
-}
-
 function requireBodyCategory(
   value: PlayerBodyResourceCategory
 ): PlayerBodyResourceCategory {
@@ -928,7 +710,7 @@ function requireBodyCategory(
 function requireVerifiedCategory(
   value: VerifiedBlobResourceCategory
 ): VerifiedBlobResourceCategory {
-  if (value !== "verified-unit" && value !== "verified-static") {
+  if (value !== "verified-unit") {
     throw new RangeError("verified blob resource category is invalid");
   }
   return value;

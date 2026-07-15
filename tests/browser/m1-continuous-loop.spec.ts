@@ -97,8 +97,8 @@ test("draws realtime canvas seams without a boundary operation", async ({
   await expect.poll(async () => (await readSnapshot(page))?.state).toBe("running");
 
   const disposed = await page.evaluate(() => {
-    const api = (window as unknown as { __renderedMotionSpike: BrowserApi })
-      .__renderedMotionSpike;
+    const api = (window as unknown as { __avalSpike: BrowserApi })
+      .__avalSpike;
     api.dispose();
     return api.snapshot();
   });
@@ -115,8 +115,8 @@ test("decodes 2,002 tagged frames across exactly 1,000 seams", async ({
   await waitForReady(page);
 
   const result = await page.evaluate(() => {
-    const api = (window as unknown as { __renderedMotionSpike: BrowserApi })
-      .__renderedMotionSpike;
+    const api = (window as unknown as { __avalSpike: BrowserApi })
+      .__avalSpike;
     return api.runStress();
   });
 
@@ -178,16 +178,16 @@ function assertCodecEvidence(evidence: BrowserEvidence): void {
 
 async function waitForReady(page: Page): Promise<BrowserEvidence> {
   return page.evaluate(() => {
-    const api = (window as unknown as { __renderedMotionSpike: BrowserApi })
-      .__renderedMotionSpike;
+    const api = (window as unknown as { __avalSpike: BrowserApi })
+      .__avalSpike;
     return api.ready;
   });
 }
 
 async function readSnapshot(page: Page): Promise<BrowserSnapshot | null> {
   return page.evaluate(() => {
-    const api = (window as unknown as { __renderedMotionSpike: BrowserApi })
-      .__renderedMotionSpike;
+    const api = (window as unknown as { __avalSpike: BrowserApi })
+      .__avalSpike;
     return api.snapshot();
   });
 }

@@ -1,4 +1,4 @@
-import { FORMAT_DEFAULT_BUDGETS } from "@rendered-motion/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -152,8 +152,8 @@ describe("generation-aware SHA-256 verification", () => {
     expect(lease.releaseCalls()).toBe(1);
   });
 
-  it("accepts the maximum bounded input without making a second copy", async () => {
-    const bytes = new Uint8Array(FORMAT_DEFAULT_BUDGETS.maxFileBytes);
+  it("accepts input above the former 32 MiB cap without making a second copy", async () => {
+    const bytes = new Uint8Array(32 * 1024 * 1024 + 1);
     const digest = new Uint8Array(32);
     const adapter: Sha256DigestAdapter = {
       async digestSha256(observed) {
@@ -174,23 +174,24 @@ describe("generation-aware SHA-256 verification", () => {
         verified.inputLease.release();
         return verified.bytes.byteLength;
       }
-    })).resolves.toBe(FORMAT_DEFAULT_BUDGETS.maxFileBytes);
+    })).resolves.toBe(bytes.byteLength);
     expect(lease.releaseCalls()).toBe(1);
+    expect(FORMAT_DEFAULT_BUDGETS.maxFileBytes).toBe(Number.MAX_SAFE_INTEGER);
   });
 
-  it("rejects an input above the format cap before hashing", async () => {
+  it("rejects a malformed input before hashing", async () => {
     const adapter = fakeAdapter(new Uint8Array(32));
     const lease = countingLease();
 
     await expect(verifySha256AndPromote(adapter, {
-      bytes: new Uint8Array(FORMAT_DEFAULT_BUDGETS.maxFileBytes + 1),
+      bytes: {} as Uint8Array,
       expectedSha256Hex: "00".repeat(32),
       generation: 1,
       isGenerationCurrent: () => true,
       signal: new AbortController().signal,
       inputLease: lease.lease,
       promote: vi.fn()
-    })).rejects.toBeInstanceOf(RangeError);
+    })).rejects.toBeInstanceOf(TypeError);
     expect(adapter.digestSha256).not.toHaveBeenCalled();
     expect(lease.releaseCalls()).toBe(1);
   });

@@ -1,7 +1,7 @@
 {
-  "name": "@rendered-motion/player-web",
+  "name": "@aval/player-web",
   "version": "1.0.0",
-  "description": "Web decoder, scheduler, and presentation runtime for rendered motion assets.",
+  "description": "Web decoder, scheduler, and presentation runtime for AVAL assets.",
   "keywords": ["animation", "webcodecs", "webgl", "motion"],
   "private": false,
   "type": "module",
@@ -16,8 +16,8 @@
   "license": "MIT",
   "engines": { "node": ">=22.12.0" },
   "dependencies": {
-    "@rendered-motion/format": "1.0.0",
-    "@rendered-motion/graph": "1.0.0"
+    "@aval/format": "1.0.0",
+    "@aval/graph": "1.0.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.release.json",

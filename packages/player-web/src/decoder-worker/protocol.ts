@@ -1,3 +1,8 @@
+import type {
+  AvcCodecV01,
+  AvcQuantizationPolicy
+} from "@aval/format";
+
 /** Closed, structured-clone-safe protocol for the dedicated decoder worker. */
 
 export const DECODER_WORKER_PROTOCOL_VERSION = 1 as const;
@@ -6,8 +11,8 @@ export const DECODER_WORKER_HARD_LIMITS = Object.freeze({
   maxDecodeQueueSize: 12,
   maxPendingSamples: 24,
   maxOutstandingFrames: 12,
-  maxSampleBytes: 2 * 1024 * 1024,
-  maxDecodedBytes: 64 * 1024 * 1024
+  maxSampleBytes: Number.MAX_SAFE_INTEGER,
+  maxDecodedBytes: Number.MAX_SAFE_INTEGER
 });
 
 export type DecoderWorkerRequestOperation =
@@ -51,10 +56,11 @@ export interface DecoderWorkerAvcProfile {
   readonly peakBitrate: number;
   readonly cpbBufferBits: number;
   readonly requireBt709LimitedRange: true;
+  readonly quantizationPolicy: AvcQuantizationPolicy;
 }
 
 export interface DecoderWorkerAvcConfig {
-  readonly codec: "avc1.42E020";
+  readonly codec: AvcCodecV01;
   readonly codedWidth: number;
   readonly codedHeight: number;
   readonly hardwareAcceleration: HardwareAcceleration;

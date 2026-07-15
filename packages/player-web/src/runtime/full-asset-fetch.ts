@@ -2,7 +2,7 @@ import {
   FormatError,
   validateCompleteAsset,
   type ValidatedAssetLayout
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import {
   retireRuntimeBodyReader,

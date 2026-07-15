@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const temporary = await mkdtemp(join(tmpdir(), "rma-packed-archive-proof-"));
+const temporary = await mkdtemp(join(tmpdir(), "aval-packed-archive-proof-"));
 const root = join(temporary, "release-set");
 const packages = join(root, "packages");
 const index = join(root, "package-index.json");

@@ -6,7 +6,7 @@
 
 ## Outcome
 
-Add a pure `@rendered-motion/format` workspace package that writes one
+Add a pure `@aval/format` workspace package that writes one
 canonical 0.1 compiled asset, parses its bounded front index, validates a full
 file's layout and conformance payloads, and returns M3's validated graph without
 copying or retaining media payloads.
@@ -25,7 +25,7 @@ packages/format/src/index.ts
 ```
 
 Add the root project reference and build `graph` before `format`. The package
-has only `@rendered-motion/graph` as a production dependency. Enforce
+has only `@aval/graph` as a production dependency. Enforce
 `lib: ["ES2023"]` and `types: []` in production. Add a compile-only test that
 the public declarations contain no DOM, WebCodecs, Node, or platform crypto
 types.
@@ -164,7 +164,7 @@ packages/format/test/reference-frame.test.ts
 packages/format/test/png-envelope.test.ts
 ```
 
-Encode and validate the exact 24-byte `RMRF` header and unpremultiplied row-major
+Encode and validate the exact 24-byte `AVRF` header and unpremultiplied row-major
 RGBA payload. Return only metadata and an RGBA numeric range. During complete
 validation, inspect every reference record and shallow-check each PNG signature
 and IHDR envelope.
@@ -205,8 +205,8 @@ round trip.
 Add:
 
 ```text
-fixtures/conformance/m4/reference-loop.rma
-fixtures/conformance/m4/reference-graph.rma
+fixtures/conformance/m4/reference-loop.avl
+fixtures/conformance/m4/reference-graph.avl
 fixtures/conformance/m4/malformed/README.md
 packages/format/test/conformance.test.ts
 packages/format/test/mutation-fuzz.test.ts

@@ -168,14 +168,17 @@ export class IntegratedPlayerVisibility {
       throw new RangeError("hidden preparation already owns a control");
     }
     this.#control = control;
+    const commitBeforeReady = commitVisibility
+      ? () => this.#commitPreparedSuspension()
+      : undefined;
     try {
       await this.#staticPreparation.ensure(control.controller.signal);
       const result = await this.#staticPreparation.finish(
         "visibility-suspended",
         [],
-        control.controller.signal
+        control.controller.signal,
+        commitBeforeReady
       );
-      if (commitVisibility) this.#commitPreparedSuspension();
       return result;
     } catch (error) {
       if (this.#isDisposed()) throw integratedDisposedError();
@@ -194,9 +197,9 @@ export class IntegratedPlayerVisibility {
         const result = await this.#staticPreparation.finishBounded(
           "visibility-suspended",
           [],
-          timeoutMs
+          timeoutMs,
+          commitBeforeReady
         );
-        if (commitVisibility) this.#commitPreparedSuspension();
         return result;
       }
       if (isIntegratedAbortError(error)) throw error;
@@ -207,9 +210,9 @@ export class IntegratedPlayerVisibility {
       const result = await this.#staticPreparation.finishBounded(
         "visibility-suspended",
         [],
-        timeoutMs
+        timeoutMs,
+        commitBeforeReady
       );
-      if (commitVisibility) this.#commitPreparedSuspension();
       return result;
     } finally {
       this.#staticPreparation.releaseControl(control);

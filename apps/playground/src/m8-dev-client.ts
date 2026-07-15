@@ -1,19 +1,19 @@
 import {
-  defineRenderedMotionElement,
-  type RenderedMotionElement
-} from "@rendered-motion/element";
+  defineAvalElement,
+  type AvalElement
+} from "@aval/element";
 
 import { createM8DiagnosticsPanel } from "./m8-diagnostics-panel.js";
 import { deriveM8ProofSession } from "./m8-proof-session.js";
 
-defineRenderedMotionElement();
+defineAvalElement();
 
 const root = document.querySelector<HTMLElement>("#app");
 if (root === null) throw new Error("M8 playground root is unavailable");
 const control = document.createElement("button");
 control.id = "m8-interaction";
 control.type = "button";
-const motion = document.createElement("rendered-motion") as RenderedMotionElement;
+const motion = document.createElement("aval-player") as AvalElement;
 motion.interactionFor = control.id;
 const proofSession = deriveM8ProofSession(globalThis.location.search);
 motion.src = `/__m7__/asset?session=${proofSession}&scenario=exact-range`;

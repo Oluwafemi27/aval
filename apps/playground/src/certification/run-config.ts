@@ -145,7 +145,7 @@ export async function fetchVerifiedSource(
       credentials: "same-origin",
       redirect: "error",
       signal: controller.signal,
-      headers: { Accept: "application/vnd.rendered-motion, application/octet-stream" }
+      headers: { Accept: "application/vnd.aval, application/octet-stream" }
     });
     if (!response.ok) throw new Error(`certification source fetch failed with ${String(response.status)}`);
     bytes = await readBoundedResponseBytes(response, maximumBytes, "source");

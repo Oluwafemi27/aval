@@ -8,7 +8,6 @@ import {
   validateZeroPadding
 } from "./layout.js";
 import { validateCompiledManifestV01 } from "./manifest-schema.js";
-import { validatePngProfile } from "./png/profile.js";
 import { validateReferenceFrame } from "./reference-frame.js";
 import { FormatError, isFormatError } from "./errors.js";
 import type {
@@ -17,7 +16,6 @@ import type {
   FormatHeader,
   FormatOptions,
   ParsedFrontIndex,
-  ValidatedStaticPngProfile,
   ValidatedAssetLayout
 } from "./model.js";
 
@@ -223,8 +221,7 @@ export function parseFrontIndex(
       graph,
       records,
       frontIndexRange: layout.frontIndexRange,
-      unitBlobs: layout.unitBlobs,
-      staticBlobs: layout.staticBlobs
+      unitBlobs: layout.unitBlobs
     });
   } catch (error) {
     if (isFormatError(error)) {
@@ -238,7 +235,7 @@ function validatePayloadProfiles(
   bytes: Uint8Array,
   frontIndex: ParsedFrontIndex,
   options?: FormatOptions
-): readonly Readonly<ValidatedStaticPngProfile>[] {
+): void {
   for (const record of frontIndex.records) {
     const rendition = frontIndex.manifest.renditions[record.renditionIndex];
     if (rendition?.profile !== "reference-rgba-v0") continue;
@@ -261,42 +258,6 @@ function validatePayloadProfiles(
     }
   }
 
-  const staticPngProfiles: Readonly<ValidatedStaticPngProfile>[] = [];
-  for (let index = 0; index < frontIndex.staticBlobs.length; index += 1) {
-    const blob = frontIndex.staticBlobs[index];
-    const descriptor = frontIndex.manifest.staticFrames[index];
-    if (blob === undefined || descriptor === undefined) {
-      throw new FormatError(
-        "LAYOUT_INVALID",
-        "static frame ranges do not match manifest descriptors"
-      );
-    }
-    const pngEnd = checkedAdd(
-      blob.offset,
-      blob.length,
-      bytes.byteLength,
-      "static PNG end"
-    );
-    try {
-      const plan = validatePngProfile({
-        png: bytes.subarray(blob.offset, pngEnd),
-        expectedWidth: descriptor.width,
-        expectedHeight: descriptor.height,
-        options
-      });
-      staticPngProfiles.push(Object.freeze({
-        width: plan.width,
-        height: plan.height,
-        byteRange: plan.byteRange,
-        zlibByteLength: plan.zlibByteLength,
-        expectedFilteredBytes: plan.expectedFilteredBytes,
-        expectedRgbaBytes: plan.expectedRgbaBytes
-      }));
-    } catch (error) {
-      rethrowAtFileOffset(error, blob.offset);
-    }
-  }
-  return Object.freeze(staticPngProfiles);
 }
 
 /** Reparse and completely validate one exact, caller-owned asset byte array. */
@@ -342,16 +303,11 @@ export function validateCompleteAsset(input: {
       input.options
     );
     validateZeroPadding(input.bytes, layout.paddingRanges);
-    const staticPngProfiles = validatePayloadProfiles(
-      input.bytes,
-      reparsed,
-      input.options
-    );
+    validatePayloadProfiles(input.bytes, reparsed, input.options);
 
     return Object.freeze({
       frontIndex: reparsed,
-      fileRange: layout.fileRange,
-      staticPngProfiles
+      fileRange: layout.fileRange
     });
   } catch (error) {
     if (isFormatError(error)) {

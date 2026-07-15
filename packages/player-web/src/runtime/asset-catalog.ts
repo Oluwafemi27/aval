@@ -1,4 +1,4 @@
-import type { ValidatedMotionGraph } from "@rendered-motion/graph";
+import type { ValidatedMotionGraph } from "@aval/graph";
 import {
   FORMAT_DEFAULT_BUDGETS,
   FormatError,
@@ -12,9 +12,8 @@ import {
   type RenditionV01,
   type StateV01,
   type ValidatedAssetLayout,
-  type ValidatedStaticPngProfile,
   type UnitV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import {
   buildCatalogMaps,
@@ -22,13 +21,11 @@ import {
   createCatalogIdIndex,
   createCatalogPortIndex,
   createCatalogRecordIndex,
-  runtimeStaticBlobKey,
   runtimeUnitBlobKey,
   type CatalogMaps,
   type RuntimeCatalogIdIndex,
   type RuntimeCatalogPortIndex,
-  type RuntimeCatalogRecordIndex,
-  type RuntimeCatalogStaticFrame
+  type RuntimeCatalogRecordIndex
 } from "./asset-catalog-index.js";
 import {
   inspectBorrowedAvcRendition,
@@ -46,7 +43,6 @@ import type {
   RuntimeBlobResidencyState,
   RuntimeTransportMode
 } from "./model.js";
-import { normalizeRuntimeStaticProfile } from "./runtime-static-profile.js";
 import {
   VerifiedBlobStore,
   type VerifiedBlobDescriptor,
@@ -58,23 +54,15 @@ export type {
   RuntimeCatalogIdIndex,
   RuntimeCatalogPortEntry,
   RuntimeCatalogPortIndex,
-  RuntimeCatalogRecordIndex,
-  RuntimeCatalogStaticFrame
+  RuntimeCatalogRecordIndex
 } from "./asset-catalog-index.js";
-export { runtimeStaticBlobKey, runtimeUnitBlobKey } from "./asset-catalog-index.js";
-
-export interface RuntimeCatalogStaticProfileAuthority {
-  resolve(
-    staticFrame: string
-  ): Readonly<ValidatedStaticPngProfile> | undefined;
-}
+export { runtimeUnitBlobKey } from "./asset-catalog-index.js";
 
 export interface MetadataRuntimeAssetCatalogInput {
   readonly frontIndex: Readonly<ParsedFrontIndex>;
   readonly declaredFileLength: number;
   readonly mode: RuntimeTransportMode;
   readonly blobStore: VerifiedBlobStore;
-  readonly staticProfiles: RuntimeCatalogStaticProfileAuthority;
 }
 
 interface CatalogPayloadSnapshot {
@@ -82,12 +70,10 @@ interface CatalogPayloadSnapshot {
   readonly verifiedBytes: number;
   readonly persistentBytes: number;
   readonly unitBlobs: Readonly<RuntimeBlobResidencySnapshot>;
-  readonly staticBlobs: Readonly<RuntimeBlobResidencySnapshot>;
 }
 
 interface CatalogPayloadAuthority {
   state(key: string): RuntimeBlobResidencyState;
-  copy(key: string): Uint8Array<ArrayBuffer>;
   copyRange(
     key: string,
     relativeOffset: number,
@@ -98,12 +84,6 @@ interface CatalogPayloadAuthority {
   ): Readonly<AvcRenditionInspection>;
   snapshot(): Readonly<CatalogPayloadSnapshot>;
   dispose(): void;
-}
-
-interface CapturedStaticProfileAuthority {
-  readonly resolve: (
-    staticFrame: string
-  ) => Readonly<ValidatedStaticPngProfile> | undefined;
 }
 
 const CATALOG_INSTALLATION = Symbol("runtime asset catalog installation");
@@ -120,7 +100,6 @@ interface CatalogInstallation {
   readonly baseOwnedBytes: number;
   readonly payloadOwnership: "none" | "verified" | "persistent";
   readonly payloads: CatalogPayloadAuthority;
-  readonly staticProfiles: CapturedStaticProfileAuthority;
   readonly completeLayout: Readonly<ValidatedAssetLayout> | null;
 }
 
@@ -136,25 +115,16 @@ export class RuntimeAssetCatalog {
   public readonly edges: RuntimeCatalogIdIndex<EdgeV01>;
   public readonly ports: RuntimeCatalogPortIndex;
   public readonly records: RuntimeCatalogRecordIndex;
-  public readonly staticFrames: RuntimeCatalogIdIndex<RuntimeCatalogStaticFrame>;
-
   readonly #declaredFileLength: number;
   #mode: RuntimeTransportMode;
   readonly #metadataBytes: number;
   #baseOwnedBytes: number;
   #payloadOwnership: "none" | "verified" | "persistent";
   readonly #payloads: CatalogPayloadAuthority;
-  readonly #resolvedStaticProfiles = new Map<
-    string,
-    Readonly<ValidatedStaticPngProfile>
-  >();
-
   #disposed = false;
   #frontIndex: Readonly<ParsedFrontIndex> | null;
   #layout: Readonly<ValidatedAssetLayout> | null;
   #maps: CatalogMaps | null;
-  #staticProfileAuthority: CapturedStaticProfileAuthority | null;
-
   public constructor(callerBytes: Uint8Array);
   /** @internal Branded sparse installation; use createMetadataRuntimeAssetCatalog. */
   public constructor(value: CatalogInstallation);
@@ -170,12 +140,9 @@ export class RuntimeAssetCatalog {
     this.#baseOwnedBytes = installed.baseOwnedBytes;
     this.#payloadOwnership = installed.payloadOwnership;
     this.#payloads = installed.payloads;
-    this.#staticProfileAuthority = installed.staticProfiles;
     this.#maps = buildCatalogMaps({
       frontIndex: installed.frontIndex,
-      declaredFileLength: installed.declaredFileLength,
-      resolveStaticPng: (staticFrame) =>
-        this.#resolveStaticPng(staticFrame)
+      declaredFileLength: installed.declaredFileLength
     });
 
     this.renditions = createCatalogIdIndex(
@@ -197,11 +164,6 @@ export class RuntimeAssetCatalog {
       "edge",
       () => this.#requireMaps().edges,
       (edge) => ({ edge })
-    );
-    this.staticFrames = createCatalogIdIndex(
-      "static frame",
-      () => this.#requireMaps().staticFrames,
-      (staticFrame) => ({ staticFrame })
     );
     this.ports = createCatalogPortIndex(() => this.#requireMaps().ports);
     this.records = createCatalogRecordIndex(() => this.#requireMaps().records);
@@ -232,23 +194,16 @@ export class RuntimeAssetCatalog {
     this.#payloadOwnership = "persistent";
   }
 
-  /** Available after every static profile has passed strict validation. */
   public get layout(): Readonly<ValidatedAssetLayout> {
     this.#throwIfDisposed();
     if (this.#layout !== null) return this.#layout;
     const frontIndex = this.#requireFrontIndex();
-    const staticPngProfiles = Object.freeze(
-      frontIndex.staticBlobs.map((blob) =>
-        this.#resolveStaticPng(blob.staticFrame)
-      )
-    );
     this.#layout = Object.freeze({
       frontIndex,
       fileRange: Object.freeze({
         offset: 0,
         length: this.#declaredFileLength
-      }),
-      staticPngProfiles
+      })
     });
     return this.#layout;
   }
@@ -290,15 +245,6 @@ export class RuntimeAssetCatalog {
     ).buffer;
   }
 
-  /** A fresh exact PNG copy, available only after digest and strict profile. */
-  public copyStaticPng(staticFrame: string): Uint8Array<ArrayBuffer> {
-    const entry = this.staticFrames.require(staticFrame);
-    void entry.png;
-    const blobKey = requireCatalogBlobKey(entry.blobKey);
-    this.#requireVerifiedBlob(blobKey, { staticFrame });
-    return this.#payloads.copy(blobKey);
-  }
-
   public residencySnapshot(): Readonly<RuntimeAssetResidencySnapshot> {
     const payloads = this.#payloads.snapshot();
     return Object.freeze({
@@ -307,8 +253,7 @@ export class RuntimeAssetCatalog {
       declaredFileBytes: this.#declaredFileLength,
       metadataBytes: this.#disposed ? 0 : this.#metadataBytes,
       verifiedPayloadBytes: this.#disposed ? 0 : payloads.verifiedBytes,
-      unitBlobs: payloads.unitBlobs,
-      staticBlobs: payloads.staticBlobs
+      unitBlobs: payloads.unitBlobs
     });
   }
 
@@ -318,8 +263,6 @@ export class RuntimeAssetCatalog {
     this.#payloads.dispose();
     this.#frontIndex = null;
     this.#layout = null;
-    this.#staticProfileAuthority = null;
-    this.#resolvedStaticProfiles.clear();
     const maps = this.#maps;
     this.#maps = null;
     if (maps !== null) {
@@ -329,43 +272,7 @@ export class RuntimeAssetCatalog {
       maps.edges.clear();
       maps.ports.clear();
       maps.records.clear();
-      maps.staticFrames.clear();
     }
-  }
-
-  #resolveStaticPng(
-    staticFrame: string
-  ): Readonly<ValidatedStaticPngProfile> {
-    this.#throwIfDisposed();
-    const cached = this.#resolvedStaticProfiles.get(staticFrame);
-    if (cached !== undefined) return cached;
-    const authority = this.#staticProfileAuthority;
-    if (authority === null) throw disposedCatalogError();
-    let supplied: Readonly<ValidatedStaticPngProfile> | undefined;
-    try {
-      supplied = authority.resolve(staticFrame);
-    } catch {
-      throw catalogError(
-        "load-failure",
-        "validated static PNG profile is unavailable",
-        { staticFrame }
-      );
-    }
-    if (supplied === undefined) {
-      const state = this.#payloadState(runtimeStaticBlobKey(staticFrame));
-      throw catalogError(
-        "load-failure",
-        "validated static PNG profile is unavailable",
-        { staticFrame, policyPhase: state }
-      );
-    }
-    const profile = normalizeStaticProfile(
-      supplied,
-      this.#requireFrontIndex(),
-      staticFrame
-    );
-    this.#resolvedStaticProfiles.set(staticFrame, profile);
-    return profile;
   }
 
   #inspectAvcRendition(
@@ -479,18 +386,6 @@ export function createRuntimeCatalogBlobDescriptors(
       byteLength: blob.length
     }));
   }
-  for (const blob of frontIndex.staticBlobs) {
-    checkedCatalogRangeEnd(
-      blob.offset,
-      blob.length,
-      frontIndex.header.declaredFileLength
-    );
-    descriptors.push(Object.freeze({
-      key: runtimeStaticBlobKey(blob.staticFrame),
-      kind: "static",
-      byteLength: blob.length
-    }));
-  }
   return Object.freeze(descriptors);
 }
 
@@ -525,18 +420,6 @@ function installOwnedBytes(callerBytes: Uint8Array): CatalogInstallation {
   } catch (error) {
     throw normalizeInstallError(error);
   }
-  const profiles = new Map<string, Readonly<ValidatedStaticPngProfile>>();
-  for (let index = 0; index < layout.frontIndex.staticBlobs.length; index += 1) {
-    const blob = layout.frontIndex.staticBlobs[index];
-    const profile = layout.staticPngProfiles[index];
-    if (blob === undefined || profile === undefined) {
-      throw catalogError(
-        "invalid-asset",
-        "complete asset static profile relation is missing"
-      );
-    }
-    profiles.set(blob.staticFrame, profile);
-  }
   return freezeInstallation({
     frontIndex: layout.frontIndex,
     declaredFileLength: bytes.byteLength,
@@ -545,9 +428,6 @@ function installOwnedBytes(callerBytes: Uint8Array): CatalogInstallation {
     baseOwnedBytes: bytes.byteLength,
     payloadOwnership: "none",
     payloads: createOwnedPayloadAuthority(bytes, layout.frontIndex),
-    staticProfiles: Object.freeze({
-      resolve: (staticFrame: string) => profiles.get(staticFrame)
-    }),
     completeLayout: layout
   });
 }
@@ -585,8 +465,7 @@ function installMetadata(
   const snapshot = input.blobStore.snapshot();
   if (
     snapshot.disposed ||
-    snapshot.unitBlobs.total !== frontIndex.unitBlobs.length ||
-    snapshot.staticBlobs.total !== frontIndex.staticBlobs.length
+    snapshot.unitBlobs.total !== frontIndex.unitBlobs.length
   ) {
     throw catalogError(
       "invalid-asset",
@@ -611,7 +490,6 @@ function installMetadata(
       : frontIndex.frontIndexRange.length,
     payloadOwnership: input.mode === "range" ? "verified" : "persistent",
     payloads: createVerifiedPayloadAuthority(input.blobStore),
-    staticProfiles: captureStaticProfileAuthority(input.staticProfiles),
     completeLayout: null
   });
 }
@@ -620,7 +498,6 @@ function createVerifiedPayloadAuthority(
   store: VerifiedBlobStore
 ): CatalogPayloadAuthority {
   const state = store.state;
-  const copy = store.copy;
   const copyRange = store.copyRange;
   const inspectAvcRendition = store.inspectAvcRendition;
   const snapshot = store.snapshot;
@@ -628,8 +505,6 @@ function createVerifiedPayloadAuthority(
   return Object.freeze({
     state: (key: string) => Reflect.apply(state, store, [key]) as
       RuntimeBlobResidencyState,
-    copy: (key: string) => Reflect.apply(copy, store, [key]) as
-      Uint8Array<ArrayBuffer>,
     copyRange: (key: string, offset: number, length: number) =>
       Reflect.apply(copyRange, store, [key, offset, length]) as
         Uint8Array<ArrayBuffer>,
@@ -659,29 +534,18 @@ function createOwnedPayloadAuthority(
       Object.freeze({ offset: blob.offset, length: blob.length })
     );
   }
-  for (const blob of frontIndex.staticBlobs) {
-    ranges.set(
-      runtimeStaticBlobKey(blob.staticFrame),
-      Object.freeze({ offset: blob.offset, length: blob.length })
-    );
-  }
   const snapshot = (disposed: boolean): Readonly<CatalogPayloadSnapshot> => {
     const unitBlobs = summarizeOwnedBlobs(
       frontIndex.unitBlobs.map((blob) => blob.length),
-      disposed
-    );
-    const staticBlobs = summarizeOwnedBlobs(
-      frontIndex.staticBlobs.map((blob) => blob.length),
       disposed
     );
     return Object.freeze({
       generation: 0,
       verifiedBytes: disposed
         ? 0
-        : unitBlobs.verifiedBytes + staticBlobs.verifiedBytes,
+        : unitBlobs.verifiedBytes,
       persistentBytes: 0,
-      unitBlobs,
-      staticBlobs
+      unitBlobs
     });
   };
   return Object.freeze({
@@ -690,10 +554,6 @@ function createOwnedPayloadAuthority(
         throw catalogError("invalid-asset", "owned blob key is unavailable");
       }
       return bytes === null ? "absent" : "verified";
-    },
-    copy(key: string): Uint8Array<ArrayBuffer> {
-      const range = requireOwnedRange(ranges, key);
-      return copyOwnedBytes(bytes, range, 0, range.length);
     },
     copyRange(
       key: string,
@@ -801,70 +661,6 @@ function copyOwnedBytes(
   }
   copy.set(bytes.subarray(absoluteOffset, end));
   return copy;
-}
-
-function captureStaticProfileAuthority(
-  value: RuntimeCatalogStaticProfileAuthority
-): CapturedStaticProfileAuthority {
-  if (typeof value !== "object" || value === null) {
-    throw catalogError(
-      "invalid-asset",
-      "static PNG profile authority is unavailable"
-    );
-  }
-  let resolve: unknown;
-  try {
-    resolve = Reflect.get(value, "resolve");
-  } catch {
-    throw catalogError(
-      "invalid-asset",
-      "static PNG profile authority is inaccessible"
-    );
-  }
-  if (typeof resolve !== "function") {
-    throw catalogError(
-      "invalid-asset",
-      "static PNG profile authority is malformed"
-    );
-  }
-  return Object.freeze({
-    resolve: (staticFrame: string) => Reflect.apply(
-      resolve,
-      value,
-      [staticFrame]
-    ) as Readonly<ValidatedStaticPngProfile> | undefined
-  });
-}
-
-function normalizeStaticProfile(
-  supplied: Readonly<ValidatedStaticPngProfile>,
-  frontIndex: Readonly<ParsedFrontIndex>,
-  staticFrame: string
-): Readonly<ValidatedStaticPngProfile> {
-  const frame = frontIndex.manifest.staticFrames.find(
-    (candidate) => candidate.id === staticFrame
-  );
-  const blob = frontIndex.staticBlobs.find(
-    (candidate) => candidate.staticFrame === staticFrame
-  );
-  if (frame === undefined || blob === undefined) {
-    throw catalogError(
-      "invalid-asset",
-      "static PNG profile relation is missing",
-      { staticFrame }
-    );
-  }
-  try {
-    return normalizeRuntimeStaticProfile(
-      supplied, frame.width, frame.height, blob.length
-    );
-  } catch {
-    throw catalogError(
-      "invalid-asset",
-      "validated static PNG profile is inconsistent",
-      { staticFrame }
-    );
-  }
 }
 
 function freezeInstallation(

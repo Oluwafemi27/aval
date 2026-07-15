@@ -1,18 +1,22 @@
 import type { AnnexBNalUnit } from "./annex-b.js";
 import { RbspBitReader } from "./bit-reader.js";
 import { requireAvc } from "./failure.js";
-import type { AvcColorSummary, AvcCropSummary } from "./types.js";
+import { isAvcLevelIdc, type AvcLevelIdc } from "./codec.js";
+import type {
+  AvcColorSummary,
+  AvcCropSummary,
+  AvcQuantizationPolicy
+} from "./types.js";
 
 const BASELINE_PROFILE_IDC = 66;
-const LEVEL_3_2_IDC = 32;
-const MAX_HRD_BITS = 8_000_000n;
+const MAX_HRD_BITS = BigInt(Number.MAX_SAFE_INTEGER);
 
 export interface ParsedSps {
   readonly id: number;
   /** Exact, immutable payload identity without retaining caller byte views. */
   readonly payloadSignature: string;
   readonly constraintSet2: boolean;
-  readonly levelIdc: 32;
+  readonly levelIdc: AvcLevelIdc;
   readonly frameNumBits: number;
   readonly picOrderCount: PicOrderCountSyntax;
   readonly maxNumRefFrames: 1;
@@ -54,6 +58,7 @@ export interface ParsedPps {
   readonly payloadSignature: string;
   readonly bottomFieldPicOrderInFramePresent: boolean;
   readonly deblockingFilterControlPresent: boolean;
+  readonly picInitQpMinus26: number;
 }
 
 interface HrdSummary {
@@ -76,7 +81,11 @@ interface VuiSummary {
   readonly color: AvcColorSummary;
 }
 
-export function parseSps(nal: AnnexBNalUnit, path: string): ParsedSps {
+export function parseSps(
+  nal: AnnexBNalUnit,
+  path: string,
+  compatibilityPolicy: "strict" | "encoder-candidate" = "strict"
+): ParsedSps {
   const reader = new RbspBitReader(nal.rbsp, path, nal.offset + 1);
   const profileIdc = reader.readBits(8, "profile_idc");
   requireAvc(
@@ -93,21 +102,30 @@ export function parseSps(nal: AnnexBNalUnit, path: string): ParsedSps {
     "constraint_set0_flag and constraint_set1_flag must both be one",
     nal.offset + 2
   );
+  const levelIdc = reader.readBits(8, "level_idc");
   requireAvc(
-    (compatibility & 0x1f) === 0,
+    isAvcLevelIdc(levelIdc),
     path,
-    "constraint_set3..5 and reserved constraint bits must be zero",
+    "level_idc must identify a supported AVC level",
+    nal.offset + 3
+  );
+  requireAvc(
+    (compatibility & 0x0f) === 0,
+    path,
+    "constraint_set4..5 and reserved constraint bits must be zero",
+    nal.offset + 2
+  );
+  const constraintSet3 = (compatibility & 0x10) !== 0;
+  requireAvc(
+    !constraintSet3 ||
+      (compatibilityPolicy === "encoder-candidate" &&
+        levelIdc === 11 &&
+        (compatibility & 0x20) === 0),
+    path,
+    "constraint_set3_flag is permitted only for an encoder Level 1b candidate",
     nal.offset + 2
   );
   const constraintSet2 = (compatibility & 0x20) !== 0;
-
-  const levelIdc = reader.readBits(8, "level_idc");
-  requireAvc(
-    levelIdc === LEVEL_3_2_IDC,
-    path,
-    "level_idc must be 32 (Level 3.2)",
-    nal.offset + 3
-  );
   const id = reader.readUnsignedExpGolomb("seq_parameter_set_id", 31);
   const log2MaxFrameNumMinus4 = reader.readUnsignedExpGolomb(
     "log2_max_frame_num_minus4",
@@ -188,7 +206,7 @@ export function parseSps(nal: AnnexBNalUnit, path: string): ParsedSps {
     id,
     payloadSignature: createPayloadSignature(nal.payload),
     constraintSet2,
-    levelIdc: 32,
+    levelIdc,
     frameNumBits,
     picOrderCount,
     maxNumRefFrames: 1,
@@ -206,7 +224,11 @@ export function parseSps(nal: AnnexBNalUnit, path: string): ParsedSps {
   });
 }
 
-export function parsePps(nal: AnnexBNalUnit, path: string): ParsedPps {
+export function parsePps(
+  nal: AnnexBNalUnit,
+  path: string,
+  quantizationPolicy: AvcQuantizationPolicy
+): ParsedPps {
   const reader = new RbspBitReader(nal.rbsp, path, nal.offset + 1);
   const id = reader.readUnsignedExpGolomb("pic_parameter_set_id", 255);
   const spsId = reader.readUnsignedExpGolomb("seq_parameter_set_id", 31);
@@ -255,10 +277,15 @@ export function parsePps(nal: AnnexBNalUnit, path: string): ParsedPps {
     "weighted biprediction is forbidden",
     nal.offset + 1 + Math.floor(reader.bitOffset / 8)
   );
+  const picInitQpMinus26 = reader.readSignedExpGolomb(
+    "pic_init_qp_minus26",
+    -26,
+    25
+  );
   requireAvc(
-    reader.readSignedExpGolomb("pic_init_qp_minus26", -26, 25) === 0,
+    quantizationPolicy !== "fixed-qp26-v0" || picInitQpMinus26 === 0,
     path,
-    "pic_init_qp_minus26 must match the frozen encoder profile",
+    "pic_init_qp_minus26 must match the frozen AVC v0 profile",
     nal.offset + 1 + Math.floor(reader.bitOffset / 8)
   );
   requireAvc(
@@ -297,7 +324,7 @@ export function parsePps(nal: AnnexBNalUnit, path: string): ParsedPps {
   requireAvc(
     !reader.moreRbspData(),
     path,
-    "PPS extension syntax is not permitted by AVC v0",
+    "PPS extension syntax is not permitted by the production AVC profile",
     nal.offset + 1 + Math.floor(reader.bitOffset / 8)
   );
   reader.readTrailingBits();
@@ -307,7 +334,8 @@ export function parsePps(nal: AnnexBNalUnit, path: string): ParsedPps {
     spsId,
     payloadSignature: createPayloadSignature(nal.payload),
     bottomFieldPicOrderInFramePresent,
-    deblockingFilterControlPresent
+    deblockingFilterControlPresent,
+    picInitQpMinus26
   });
 }
 
@@ -516,13 +544,13 @@ function parseHrd(
     requireAvc(
       bitrate <= MAX_HRD_BITS,
       path,
-      "HRD bitrate exceeds 8,000,000 bits/second",
+      "HRD bitrate exceeds the JavaScript safe-integer range",
       absoluteOffset + Math.floor(reader.bitOffset / 8)
     );
     requireAvc(
       cpbBits <= MAX_HRD_BITS,
       path,
-      "HRD CPB exceeds 8,000,000 bits",
+      "HRD CPB exceeds the JavaScript safe-integer range",
       absoluteOffset + Math.floor(reader.bitOffset / 8)
     );
     if (bitrate > maximumBitrate) {

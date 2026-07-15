@@ -1,12 +1,15 @@
 import { dirname } from "node:path";
 
+import {
+  avcRateControlArguments,
+  validateAvcEncoding
+} from "../compile/avc-encoding-policy.js";
 import { CompilerError } from "../diagnostics.js";
 import {
   DEFAULT_MEDIA_TIMEOUT_MS,
   MAX_PROCESS_OUTPUT_BYTES,
   MAX_PROCESS_STDERR_BYTES,
-  MAX_SOURCE_DIMENSION,
-  MAX_SOURCE_FRAMES,
+  type NormalizedAvcEncoding,
   type RationalV01
 } from "../model.js";
 import { runBoundedProcess } from "../process-runner.js";
@@ -38,8 +41,6 @@ export type FfmpegFrameInput =
       readonly frameBytes: number;
     };
 
-export const FROZEN_AVC_KEYINT = 901;
-
 export interface EncodeAvcUnitInput {
   readonly source: Extract<FfmpegFrameInput, { readonly type: "raw-yuv420p" }>;
   readonly startFrame: number;
@@ -47,13 +48,10 @@ export interface EncodeAvcUnitInput {
   readonly codedWidth: number;
   readonly codedHeight: number;
   readonly decodedStorageRect?: readonly [number, number, number, number];
-  readonly bitrate: {
-    readonly average: number;
-    readonly peak: number;
-  };
+  readonly encoding: Readonly<NormalizedAvcEncoding>;
   readonly executable?: string;
   readonly signal?: AbortSignal;
-  /** Per-subprocess wall limit; may only lower the 120-second media default. */
+  /** Positive per-subprocess wall limit; defaults to 120 seconds. */
   readonly timeoutMs?: number;
 }
 
@@ -108,6 +106,8 @@ export function createEncodeAvcUnitInvocation(
   input: EncodeAvcUnitInput
 ): Readonly<EncodeAvcUnitInvocation> {
   const frameCount = validateRange(input.startFrame, input.endFrame);
+  const keyInterval = Math.max(2, frameCount);
+  const encoding = validateAvcEncoding(input.encoding);
   const source = input.source as FfmpegFrameInput;
   if (source.type !== "raw-yuv420p") {
     throw new CompilerError(
@@ -130,7 +130,6 @@ export function createEncodeAvcUnitInvocation(
     "-hide_banner",
     "-loglevel", "error",
     "-xerror",
-    "-max_alloc", String(64 * 1024 * 1024),
     "-protocol_whitelist", "pipe",
     ...rawYuvPipeArguments(source),
     "-map", "0:v:0",
@@ -140,10 +139,9 @@ export function createEncodeAvcUnitInvocation(
     "-frames:v", String(frameCount),
     "-fps_mode", "passthrough",
     "-c:v", "libx264",
-    "-preset", "medium",
-    "-tune", "zerolatency",
+    "-preset", encoding.preset,
+    ...(encoding.legacyZeroLatency ? ["-tune", "zerolatency"] : []),
     "-profile:v", "baseline",
-    "-level:v", "3.2",
     "-pix_fmt", "yuv420p",
     "-color_range", "tv",
     "-color_primaries", "bt709",
@@ -151,14 +149,12 @@ export function createEncodeAvcUnitInvocation(
     "-colorspace", "bt709",
     "-threads", "1",
     "-filter_threads", "1",
-    "-g", String(FROZEN_AVC_KEYINT),
-    "-keyint_min", String(FROZEN_AVC_KEYINT),
+    "-g", String(keyInterval),
+    "-keyint_min", String(keyInterval),
     "-sc_threshold", "0",
     "-bf", "0",
     "-refs", "1",
-    "-b:v", String(input.bitrate.average),
-    "-maxrate", String(input.bitrate.peak),
-    "-bufsize", String(input.bitrate.peak),
+    ...avcRateControlArguments(encoding.rateControl),
     "-x264-params",
     [
       "aud=1",
@@ -168,8 +164,8 @@ export function createEncodeAvcUnitInvocation(
       "colorprim=bt709",
       ...(cropParameter === undefined ? [] : [cropParameter]),
       "force-cfr=1",
-      `keyint=${String(FROZEN_AVC_KEYINT)}`,
-      `min-keyint=${String(FROZEN_AVC_KEYINT)}`,
+      `keyint=${String(keyInterval)}`,
+      `min-keyint=${String(keyInterval)}`,
       "open-gop=0",
       "ref=1",
       "range=tv",
@@ -179,7 +175,7 @@ export function createEncodeAvcUnitInvocation(
       "slices=1",
       "threads=1",
       "lookahead-threads=1",
-      "sync-lookahead=0",
+      ...(encoding.legacyZeroLatency ? ["sync-lookahead=0"] : []),
       "transfer=bt709"
     ].join(":"),
     "-f", "h264",
@@ -228,7 +224,7 @@ export interface ExtractRgbaRangeInput {
   readonly height: number;
   readonly executable?: string;
   readonly signal?: AbortSignal;
-  /** Per-subprocess wall limit; may only lower the 120-second media default. */
+  /** Positive per-subprocess wall limit; defaults to 120 seconds. */
   readonly timeoutMs?: number;
 }
 
@@ -238,13 +234,7 @@ export async function extractRgbaRange(
 ): Promise<readonly Uint8Array[]> {
   const frameCount = validateRange(input.startFrame, input.endFrame);
   const frameBytes = checkedFrameBytes(input.width, input.height);
-  const outputBytes = frameBytes * frameCount;
-  if (!Number.isSafeInteger(outputBytes) || outputBytes > MAX_PROCESS_OUTPUT_BYTES) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      "Requested RGBA extraction exceeds the process output budget"
-    );
-  }
+  const outputBytes = checkedProduct(frameBytes, frameCount, "RGBA extraction bytes");
   const invocation = createExtractRgbaRangeInvocation(input);
   const result = await runBoundedProcess({
     executable: input.executable ?? "ffmpeg",
@@ -386,7 +376,6 @@ function decodePrefix(source: FfmpegFrameInput): readonly string[] {
     "-hide_banner",
     "-loglevel", "error",
     "-xerror",
-    "-max_alloc", String(64 * 1024 * 1024),
     "-protocol_whitelist", "file,pipe",
     ...sourceArguments(source),
     "-map", "0:v:0",
@@ -426,7 +415,6 @@ function selectionExpression(frames: readonly number[]): string {
 function validateSelectedFrames(frames: readonly number[]): readonly number[] {
   if (
     frames.length < 1 ||
-    frames.length > MAX_SOURCE_FRAMES ||
     frames.some((frame, index) =>
       !Number.isSafeInteger(frame) ||
       frame < 0 ||
@@ -446,13 +434,11 @@ function validateNativeDimensions(width: number, height: number): void {
     !Number.isSafeInteger(width) ||
     !Number.isSafeInteger(height) ||
     width < 1 ||
-    height < 1 ||
-    width > MAX_SOURCE_DIMENSION ||
-    height > MAX_SOURCE_DIMENSION
+    height < 1
   ) {
     throw new CompilerError(
-      "SOURCE_LIMIT",
-      "RGBA materialization dimensions exceed the source limit"
+      "INPUT_INVALID",
+      "RGBA materialization dimensions must be positive safe integers"
     );
   }
 }
@@ -461,12 +447,11 @@ export function mediaTimeout(timeoutMs: number | undefined): number {
   const value = timeoutMs ?? DEFAULT_MEDIA_TIMEOUT_MS;
   if (
     !Number.isSafeInteger(value) ||
-    value < 1 ||
-    value > DEFAULT_MEDIA_TIMEOUT_MS
+    value < 1
   ) {
     throw new CompilerError(
       "INPUT_INVALID",
-      `Media timeout must be an integer from 1 to ${String(DEFAULT_MEDIA_TIMEOUT_MS)} ms`
+      "Media timeout must be a positive safe integer in milliseconds"
     );
   }
   return value;
@@ -500,11 +485,16 @@ function checkedFrameBytes(width: number, height: number): number {
     !Number.isSafeInteger(width) ||
     !Number.isSafeInteger(height) ||
     width < 1 ||
-    height < 1 ||
-    width > 512 ||
-    height > 512
+    height < 1
   ) {
-    throw new CompilerError("SOURCE_LIMIT", "RGBA dimensions must fit 512×512");
+    throw new CompilerError(
+      "INPUT_INVALID",
+      "RGBA dimensions must be positive safe integers"
+    );
   }
-  return width * height * 4;
+  return checkedProduct(
+    checkedProduct(width, height, "RGBA pixels"),
+    4,
+    "RGBA frame bytes"
+  );
 }

@@ -1,7 +1,7 @@
 import type {
   GraphPresentation,
   MotionGraphResult
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 import { describe, expect, it } from "vitest";
 
 import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
@@ -17,7 +17,7 @@ import {
   type IntegratedCandidateFactory,
   type IntegratedPlaybackSession,
   type IntegratedPreparedContentTick,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player.js";
 
 describe("IntegratedPlayer animated failure recovery", () => {
@@ -74,7 +74,7 @@ describe("IntegratedPlayer animated failure recovery", () => {
     });
   });
 
-  it("covers strict static before starting asynchronous candidate cleanup", async () => {
+  it("covers with host fallback before asynchronous candidate cleanup", async () => {
     const harness = await createHarness();
     const disposalGate = deferred<void>();
     harness.factory.nextDisposeGate = disposalGate;
@@ -141,7 +141,7 @@ describe("IntegratedPlayer animated failure recovery", () => {
     });
   });
 
-  it("terminalizes a recovery whose strict static cover cannot become visible", async () => {
+  it("terminalizes a recovery whose host fallback cannot cover", async () => {
     const harness = await createHarness();
     harness.store.coverFailuresRemaining = 2;
     harness.session.failure = fatalWorkerFailure();
@@ -621,7 +621,7 @@ describe("IntegratedPlayer animated failure recovery", () => {
     });
     expect(harness.player.motionSnapshot()).toMatchObject({
       actualMode: "static",
-      staticOrigin: "png-failure",
+      staticOrigin: "fallback-failure",
       stickyFailure: true
     });
     await harness.player.dispose();
@@ -677,7 +677,7 @@ async function createHarness(): Promise<RecoveryHarness> {
   const failures: Readonly<RuntimeFailure>[] = [];
   const player = new IntegratedPlayer({
     bytes: createIntegratedOpaqueTestAsset(),
-    createStaticStore: () => store,
+    createFallbackStore: () => store,
     candidateFactory: factory,
     eventSink(event) {
       events.push(event);
@@ -883,7 +883,7 @@ function schedulerSnapshot(cursor: Readonly<{
   });
 }
 
-class RecoveryStaticStore implements IntegratedStaticSurfaceStore {
+class RecoveryStaticStore implements IntegratedFallbackStore {
   public readonly presented: string[] = [];
   public readonly committed: string[] = [];
   public failure: Error | null = null;

@@ -2,7 +2,7 @@ import type {
   GraphPresentation,
   MotionGraphSnapshot,
   ValidatedMotionGraph
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import {
   RuntimePlaybackError,
@@ -21,7 +21,7 @@ import {
   type IntegratedPreparedContentTick,
   type IntegratedPlayerOptions,
   type IntegratedRealtimeDriverOptions,
-  type IntegratedStaticSurfaceStore,
+  type IntegratedFallbackStore,
   type IntegratedTimerHost
 } from "./integrated-player-contracts.js";
 import type { RuntimeMediaPresentation } from "./model.js";
@@ -41,7 +41,7 @@ export const DEFAULT_INTEGRATED_TIMERS: IntegratedTimerHost = Object.freeze({
 });
 export const DEFAULT_INTEGRATED_PREPARATION_TIMEOUT_MS = 5_000 as const;
 
-export function disposeInvalidIntegratedStaticStore(value: unknown): void {
+export function disposeInvalidIntegratedFallbackStore(value: unknown): void {
   if (value === null || typeof value !== "object") return;
   try {
     const dispose = Reflect.get(value, "dispose");
@@ -96,8 +96,8 @@ export function validateIntegratedPlayerOptions(
     throw new TypeError("integrated player options must be an object");
   }
   const assetSource = captureIntegratedPlayerAssetSource(options);
-  if (typeof options.createStaticStore !== "function") {
-    throw new TypeError("integrated player requires a static-store factory");
+  if (typeof options.createFallbackStore !== "function") {
+    throw new TypeError("integrated player requires a fallback-store factory");
   }
   if (
     options.candidateFactory === null ||
@@ -205,11 +205,11 @@ export function validateIntegratedPlayerOptions(
   return assetSource;
 }
 
-export function validateIntegratedStaticStore(
-  store: IntegratedStaticSurfaceStore
+export function validateIntegratedFallbackStore(
+  store: IntegratedFallbackStore
 ): void {
   if (store === null || typeof store !== "object") {
-    throw new TypeError("static-store factory returned no store");
+    throw new TypeError("fallback-store factory returned no store");
   }
   for (const method of [
     "installInitial",
@@ -222,7 +222,7 @@ export function validateIntegratedStaticStore(
     "dispose"
   ] as const) {
     if (typeof store[method] !== "function") {
-      throw new TypeError(`integrated static store is missing ${method}`);
+      throw new TypeError(`integrated fallback store is missing ${method}`);
     }
   }
 }
@@ -285,7 +285,7 @@ export function createIntegratedActivationPresentation(
       "animated activation initial state identity diverged"
     );
   }
-  if (snapshot.requestedState === initial && state.initialUnit !== undefined) {
+  if (state.initialUnit !== undefined) {
     return Object.freeze({
       kind: "intro",
       state: initial,
@@ -301,7 +301,7 @@ export function createIntegratedActivationPresentation(
   });
 }
 
-/** Body-frame-zero activation used only when leaving settled static mode. */
+/** First playable presentation used when leaving settled static mode. */
 export function createIntegratedResumePresentation(
   graph: Readonly<ValidatedMotionGraph>,
   snapshot: Readonly<MotionGraphSnapshot>
@@ -326,6 +326,18 @@ export function createIntegratedResumePresentation(
     throw new IntegratedPlaybackInvariantError(
       "animated re-entry state is absent from the graph"
     );
+  }
+  if (
+    snapshot.initialUnitPending &&
+    state.id === graph.definition.initialState &&
+    state.initialUnit !== undefined
+  ) {
+    return Object.freeze({
+      kind: "intro" as const,
+      state: state.id,
+      unitId: state.initialUnit.unitId,
+      frameIndex: 0
+    });
   }
   return Object.freeze({
     kind: "body" as const,
@@ -387,8 +399,7 @@ export function sameGraphPresentation(
   switch (left.kind) {
     case "static":
       return right.kind === "static" &&
-        left.state === right.state &&
-        left.staticFrameId === right.staticFrameId;
+        left.state === right.state;
     case "intro":
     case "body":
       return right.kind === left.kind &&
@@ -568,7 +579,13 @@ export async function raceIntegratedAbort<T>(
   operation: Promise<T>,
   signal: AbortSignal
 ): Promise<T> {
-  if (signal.aborted) throw integratedAbortReason(signal);
+  if (signal.aborted) {
+    // Callers create the operation before entering this helper. Observe a
+    // rejection from that already-created promise even though cancellation
+    // wins immediately, otherwise it escapes as an unhandled rejection.
+    void operation.catch(() => undefined);
+    throw integratedAbortReason(signal);
+  }
   let remove = (): void => undefined;
   const aborted = new Promise<never>((_resolve, reject) => {
     const listener = (): void => reject(integratedAbortReason(signal));

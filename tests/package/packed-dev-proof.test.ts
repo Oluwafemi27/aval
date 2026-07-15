@@ -9,7 +9,7 @@ describe("packed dev proof", () => {
       readFile(".github/workflows/ci.yml", "utf8"),
       readFile(".github/workflows/release-candidate.yml", "utf8")
     ]);
-    expect(source).toContain('"node_modules",\n    "@rendered-motion",\n    "compiler"');
+    expect(source).toContain('"node_modules",\n    "@aval",\n    "compiler"');
     expect(source).not.toContain("packages/compiler/dist/cli.js");
     expect(source).toContain('headers: { Range: "bytes=0-31" }');
     expect(source).toContain('range.headers.get("etag")');
@@ -21,9 +21,9 @@ describe("packed dev proof", () => {
     expect(source).toContain('waitForElementReady(fallbackPage, "staticReady")');
     expect(source).toContain("await starterFailures.assertWorkerExecuted()");
     expect(source).toContain("await browserFailures.assertWorkerExecuted()");
-    expect(source).toContain("__renderedMotionWorkerEvidence");
-    expect(source).toContain('new URL("asset.rma", url)');
-    expect(source).not.toContain("asset.rma?v=");
+    expect(source).toContain("__avalWorkerEvidence");
+    expect(source).toContain('new URL("asset.avl", url)');
+    expect(source).not.toContain("asset.avl?v=");
     expect(source).toContain("[A-Za-z0-9_-]{43}");
     expect(source).toContain("unscoped dev origin unexpectedly returned");
     expect(localProof).toContain("--test-only-packed-proof");

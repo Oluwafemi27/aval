@@ -1,5 +1,5 @@
 {
-  "name": "@rendered-motion/playground",
+  "name": "@aval/playground",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@rendered-motion/element": "1.0.0",
-    "@rendered-motion/format": "1.0.0",
-    "@rendered-motion/player-web": "1.0.0"
+    "@aval/element": "1.0.0",
+    "@aval/format": "1.0.0",
+    "@aval/player-web": "1.0.0"
   }
 }

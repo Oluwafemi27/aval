@@ -1,7 +1,12 @@
 import { isAbsolute } from "node:path";
 
 import { CompilerError } from "./diagnostics.js";
-import type { RationalV01, SourceAlphaPolicy } from "./model.js";
+import {
+  AVC_ENCODER_PRESETS,
+  type AvcEncoderPreset,
+  type RationalV01,
+  type SourceAlphaPolicy
+} from "./model.js";
 
 interface CliBaseArguments {
   readonly json: boolean;
@@ -16,10 +21,14 @@ export interface CompileCliArguments extends CliBaseArguments {
   readonly fps?: RationalV01;
   readonly canvas?: readonly [number, number];
   readonly bitrate?: { readonly average: number; readonly peak: number };
+  readonly crf?: number;
+  readonly maxBitrate?: number;
+  readonly preset?: AvcEncoderPreset;
   readonly alpha?: SourceAlphaPolicy;
   readonly frames?: { readonly firstNumber: number; readonly frameCount: number };
   readonly ffmpegPath?: string;
   readonly ffprobePath?: string;
+  readonly mediaTimeoutMs?: number;
   readonly normalizeVfr: boolean;
   readonly force: boolean;
 }
@@ -51,6 +60,7 @@ export interface DevCliArguments extends CliBaseArguments {
   readonly output: string;
   readonly ffmpegPath?: string;
   readonly ffprobePath?: string;
+  readonly mediaTimeoutMs?: number;
   readonly force: boolean;
   readonly port?: number;
   readonly open?: boolean;
@@ -76,10 +86,14 @@ const VALUE_FLAGS = new Set([
   "--fps",
   "--canvas",
   "--bitrate",
+  "--crf",
+  "--max-bitrate",
+  "--preset",
   "--alpha",
   "--frames",
   "--ffmpeg",
   "--ffprobe",
+  "--media-timeout-ms",
   "--port"
 ]);
 
@@ -176,7 +190,8 @@ function parseRaw(tokens: readonly string[]): RawCommand {
 function parseCompile(raw: RawCommand): CompileCliArguments {
   allowFlags(raw, [
     "--out", "--report", "--loop", "--fps", "--canvas", "--bitrate",
-    "--alpha", "--frames", "--ffmpeg", "--ffprobe", "--json", "--force",
+    "--crf", "--max-bitrate", "--preset", "--alpha", "--frames",
+    "--ffmpeg", "--ffprobe", "--media-timeout-ms", "--json", "--force",
     "--normalize-vfr"
   ]);
   const input = onePositional(raw, "compile");
@@ -189,7 +204,7 @@ function parseCompile(raw: RawCommand): CompileCliArguments {
   if (!direct) {
     for (const flag of [
       "--loop", "--fps", "--canvas", "--bitrate", "--alpha", "--frames",
-      "--normalize-vfr"
+      "--crf", "--max-bitrate", "--preset", "--normalize-vfr"
     ]) {
       if (raw.values.has(flag) || raw.booleans.has(flag)) {
         usage(`${flag} is valid only for direct media input`);
@@ -197,10 +212,10 @@ function parseCompile(raw: RawCommand): CompileCliArguments {
     }
   } else if (pngPattern) {
     const fileName = input.split(/[\\/]/u).at(-1) ?? "";
-    if (!/^[^%]*%0[1-9]d[^%]*\.png$/u.test(fileName)) {
-      usage("PNG input requires exactly one %0Nd token with N from 1 through 9");
+    if (!/^[^%]*%0(?:[1-9]|1[0-2])d[^%]*\.png$/u.test(fileName)) {
+      usage("PNG input requires exactly one %0Nd token with N from 1 through 12");
     }
-    for (const flag of ["--frames", "--fps", "--canvas"] as const) {
+    for (const flag of ["--frames", "--fps"] as const) {
       if (!raw.values.has(flag)) usage(`PNG input requires ${flag}`);
     }
     if (raw.booleans.has("--normalize-vfr")) {
@@ -212,8 +227,20 @@ function parseCompile(raw: RawCommand): CompileCliArguments {
   if (raw.booleans.has("--normalize-vfr") && !raw.values.has("--fps")) {
     usage("--normalize-vfr requires --fps");
   }
+  if (raw.values.has("--crf") && raw.values.has("--bitrate")) {
+    usage("--crf and --bitrate are mutually exclusive");
+  }
+  if (raw.values.has("--crf") && !raw.values.has("--max-bitrate")) {
+    usage("--crf requires --max-bitrate");
+  }
+  if (raw.values.has("--max-bitrate") && !raw.values.has("--crf")) {
+    usage("--max-bitrate is valid only with --crf");
+  }
   const ffmpegPath = optionalToolPath(raw.values.get("--ffmpeg"), "--ffmpeg");
   const ffprobePath = optionalToolPath(raw.values.get("--ffprobe"), "--ffprobe");
+  const mediaTimeoutMs = raw.values.has("--media-timeout-ms")
+    ? parsePositiveInteger(raw.values.get("--media-timeout-ms")!, "--media-timeout-ms")
+    : undefined;
   const loop = raw.values.has("--loop")
     ? parseHalfOpenRange(raw.values.get("--loop")!, "--loop")
     : undefined;
@@ -240,12 +267,27 @@ function parseCompile(raw: RawCommand): CompileCliArguments {
     ...(raw.values.has("--bitrate")
       ? { bitrate: parseBitrate(raw.values.get("--bitrate")!) }
       : {}),
+    ...(raw.values.has("--crf")
+      ? { crf: parseCrf(raw.values.get("--crf")!) }
+      : {}),
+    ...(raw.values.has("--max-bitrate")
+      ? {
+          maxBitrate: parsePositiveInteger(
+            raw.values.get("--max-bitrate")!,
+            "--max-bitrate"
+          )
+        }
+      : {}),
+    ...(raw.values.has("--preset")
+      ? { preset: parsePreset(raw.values.get("--preset")!) }
+      : {}),
     ...(direct
       ? { alpha: parseAlphaPolicy(raw.values.get("--alpha") ?? "auto") }
       : {}),
     ...(frames === undefined ? {} : { frames }),
     ...(ffmpegPath === undefined ? {} : { ffmpegPath }),
     ...(ffprobePath === undefined ? {} : { ffprobePath }),
+    ...(mediaTimeoutMs === undefined ? {} : { mediaTimeoutMs }),
     normalizeVfr: raw.booleans.has("--normalize-vfr"),
     force: raw.booleans.has("--force"),
     json: raw.booleans.has("--json")
@@ -257,6 +299,23 @@ function parseAlphaPolicy(value: string): SourceAlphaPolicy {
     usage("--alpha must be auto, opaque, or packed");
   }
   return value;
+}
+
+function parseCrf(value: string): number {
+  if (!/^\d+$/u.test(value)) usage("--crf must be an integer from 1 through 51");
+  const crf = safeInteger(value, "--crf");
+  if (crf < 1 || crf > 51) {
+    usage("--crf must be an integer from 1 through 51");
+  }
+  return crf;
+}
+
+function parsePreset(value: string): AvcEncoderPreset {
+  const preset = AVC_ENCODER_PRESETS.find((candidate) => candidate === value);
+  if (preset === undefined) {
+    usage(`--preset must be one of ${AVC_ENCODER_PRESETS.join(", ")}`);
+  }
+  return preset;
 }
 
 function parseOneInput(
@@ -292,16 +351,21 @@ function parseInit(raw: RawCommand): InitCliArguments {
 
 function parseDev(raw: RawCommand): DevCliArguments {
   allowFlags(raw, [
-    "--out", "--ffmpeg", "--ffprobe", "--port", "--json", "--force", "--open"
+    "--out", "--ffmpeg", "--ffprobe", "--media-timeout-ms", "--port",
+    "--json", "--force", "--open"
   ]);
   const ffmpegPath = optionalToolPath(raw.values.get("--ffmpeg"), "--ffmpeg");
   const ffprobePath = optionalToolPath(raw.values.get("--ffprobe"), "--ffprobe");
+  const mediaTimeoutMs = raw.values.has("--media-timeout-ms")
+    ? parsePositiveInteger(raw.values.get("--media-timeout-ms")!, "--media-timeout-ms")
+    : undefined;
   return Object.freeze({
     command: "dev",
     project: onePositional(raw, "dev"),
     output: pathToken(requiredValue(raw, "--out"), "--out"),
     ...(ffmpegPath === undefined ? {} : { ffmpegPath }),
     ...(ffprobePath === undefined ? {} : { ffprobePath }),
+    ...(mediaTimeoutMs === undefined ? {} : { mediaTimeoutMs }),
     force: raw.booleans.has("--force"),
     port: parsePort(raw.values.get("--port") ?? "4174"),
     open: raw.booleans.has("--open"),
@@ -386,11 +450,8 @@ function parseCanvas(value: string): readonly [number, number] {
   if (match === null) usage("--canvas must use widthxheight");
   const width = safeInteger(match[1]!, "--canvas");
   const height = safeInteger(match[2]!, "--canvas");
-  if (
-    width < 16 || height < 16 || width > 512 || height > 512 ||
-    width % 16 !== 0 || height % 16 !== 0
-  ) {
-    usage("--canvas dimensions must be 16-aligned and from 16 through 512");
+  if (width < 1 || height < 1 || width > 0xffff_ffff || height > 0xffff_ffff) {
+    usage("--canvas dimensions must fit positive unsigned 32-bit PNG fields");
   }
   return Object.freeze([width, height]);
 }
@@ -400,8 +461,8 @@ function parseBitrate(value: string): { readonly average: number; readonly peak:
   if (match === null) usage("--bitrate must use average:peak");
   const average = safeInteger(match[1]!, "--bitrate");
   const peak = safeInteger(match[2]!, "--bitrate");
-  if (average < 1 || peak < average || peak > 8_000_000) {
-    usage("--bitrate requires 1 <= average <= peak <= 8,000,000");
+  if (average < 1 || peak < average) {
+    usage("--bitrate requires positive safe integers with average <= peak");
   }
   return Object.freeze({ average, peak });
 }
@@ -414,8 +475,8 @@ function parseFrameSelection(value: string): {
   if (match === null) usage("--frames must use first-number:count");
   const firstNumber = safeInteger(match[1]!, "--frames");
   const frameCount = safeInteger(match[2]!, "--frames");
-  if (frameCount < 1 || frameCount > 1_800) {
-    usage("--frames count must be from 1 through 1,800");
+  if (frameCount < 1) {
+    usage("--frames count must be a positive safe integer");
   }
   return Object.freeze({ firstNumber, frameCount });
 }
@@ -425,6 +486,13 @@ function safeInteger(value: string, label: string): number {
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
     usage(`${label} contains an unsafe integer`);
   }
+  return parsed;
+}
+
+function parsePositiveInteger(value: string, label: string): number {
+  if (!/^\d+$/u.test(value)) usage(`${label} must be a positive safe integer`);
+  const parsed = safeInteger(value, label);
+  if (parsed < 1) usage(`${label} must be a positive safe integer`);
   return parsed;
 }
 

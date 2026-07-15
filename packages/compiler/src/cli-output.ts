@@ -1,7 +1,7 @@
 import {
   serializeCanonicalJsonWithLimits,
   type CanonicalJsonValue
-} from "@rendered-motion/format";
+} from "@aval/format";
 import { boundedUtf8Text } from "./bounded-text.js";
 import type { CompilerDiagnostic, CompilerErrorCode } from "./diagnostics.js";
 
@@ -13,9 +13,9 @@ export interface CliIo {
 const decoder = new TextDecoder();
 const MAX_JSON_STRING_BYTES = 4_096;
 const CLI_JSON_LIMITS = Object.freeze({
-  maxBytes: 32 * 1024 * 1024,
+  maxBytes: Number.MAX_SAFE_INTEGER,
   maxDepth: 128,
-  maxNodes: 1_000_000,
+  maxNodes: Number.MAX_SAFE_INTEGER,
   maxStringBytes: MAX_JSON_STRING_BYTES
 });
 

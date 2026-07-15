@@ -61,8 +61,8 @@ describe("common HTTP response contract", () => {
       status: 206,
       expectedStatus: 206,
       responseType: "cors",
-      finalUrl: "https://cdn.example.test/assets/motion.rma",
-      pinnedFinalUrl: "https://cdn.example.test/assets/motion.rma",
+      finalUrl: "https://cdn.example.test/assets/motion.avl",
+      pinnedFinalUrl: "https://cdn.example.test/assets/motion.avl",
       bodyAvailable: true,
       headers,
       expectedBodyBytes: 64,
@@ -71,7 +71,7 @@ describe("common HTTP response contract", () => {
 
     expect(result).toEqual({
       status: 206,
-      finalUrl: "https://cdn.example.test/assets/motion.rma",
+      finalUrl: "https://cdn.example.test/assets/motion.avl",
       contentLength: 64
     });
     expect(Object.isFrozen(result)).toBe(true);
@@ -84,7 +84,7 @@ describe("common HTTP response contract", () => {
           status,
           expectedStatus: "range-or-full",
           responseType: "basic",
-          finalUrl: "http://127.0.0.1/asset.rma",
+          finalUrl: "http://127.0.0.1/asset.avl",
           bodyAvailable: true,
           headers: createHeaders({}),
           maximumBodyBytes: 1024
@@ -100,7 +100,7 @@ describe("common HTTP response contract", () => {
         status: 200,
         expectedStatus: 200,
         responseType: "basic",
-        finalUrl: "https://cdn.example.test/asset.rma",
+        finalUrl: "https://cdn.example.test/asset.avl",
         bodyAvailable: true,
         headers: createHeaders({
           ...(contentEncoding === null ? {} : { "content-encoding": contentEncoding }),
@@ -109,7 +109,7 @@ describe("common HTTP response contract", () => {
         maximumBodyBytes: 64
       })).toEqual({
         status: 200,
-        finalUrl: "https://cdn.example.test/asset.rma",
+        finalUrl: "https://cdn.example.test/asset.avl",
         contentLength: null
       });
     }
@@ -122,7 +122,7 @@ describe("common HTTP response contract", () => {
     { status: 404 },
     { finalUrl: "" },
     { finalUrl: "data:text/plain,bytes" },
-    { pinnedFinalUrl: "https://other.example.test/asset.rma" },
+    { pinnedFinalUrl: "https://other.example.test/asset.avl" },
     { bodyAvailable: false },
     { bodyAvailable: 1 as unknown as boolean },
     { maximumBodyBytes: 0 },
@@ -137,8 +137,8 @@ describe("common HTTP response contract", () => {
         status: 206,
         expectedStatus: 206,
         responseType: "cors",
-        finalUrl: "https://cdn.example.test/asset.rma",
-        pinnedFinalUrl: "https://cdn.example.test/asset.rma",
+        finalUrl: "https://cdn.example.test/asset.avl",
+        pinnedFinalUrl: "https://cdn.example.test/asset.avl",
         bodyAvailable: true,
         headers: createHeaders({ "content-length": "64" }),
         expectedBodyBytes: 64,
@@ -155,7 +155,7 @@ describe("common HTTP response contract", () => {
         status: 200,
         expectedStatus: 200,
         responseType: "basic",
-        finalUrl: " https://cdn.example.test/asset.rma",
+        finalUrl: " https://cdn.example.test/asset.avl",
         bodyAvailable: true,
         headers: createHeaders({}),
         maximumBodyBytes: 64

@@ -1,12 +1,18 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
-const VALID_INTEGRITY = "sha256-qmb7ynhxOLaS5/7Wkcur7Fjdn5V2tjsT1O2caSadmg8=";
+const VALID_INTEGRITY = (JSON.parse(readFileSync(new URL(
+  "../../fixtures/conformance/m7/reference-packed.provenance.json",
+  import.meta.url
+), "utf8")) as { readonly asset: { readonly externalIntegrity: string } })
+  .asset.externalIntegrity;
 const INVALID_INTEGRITY = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
-test("fatal loader failures preserve the progressive author fallback", async ({ page }) => {
+test("loader integrity failures preserve the progressive author fallback", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?fallbacks");
   const result = await page.evaluate(async () => {
-    const element = document.createElement("rendered-motion") as HTMLElement & {
+    const element = document.createElement("aval-player") as HTMLElement & {
       src: string;
       readiness: string;
       getDiagnostics(): { lastFailure: { code: string } | null };
@@ -15,7 +21,7 @@ test("fatal loader failures preserve the progressive author fallback", async ({ 
     fallback.slot = "fallback";
     fallback.textContent = "Still useful without animation";
     element.append(fallback);
-    document.body.append(element);
+    document.body.prepend(element);
     let hostErrors = 0;
     let windowErrors = 0;
     element.addEventListener("error", () => { hostErrors += 1; });
@@ -23,14 +29,17 @@ test("fatal loader failures preserve the progressive author fallback", async ({ 
       if (event instanceof CustomEvent && event.target === element) windowErrors += 1;
     };
     window.addEventListener("error", windowError);
-    element.src = "/__m7__/asset?session=m8-fatal-static&scenario=corrupt-static";
-    await waitUntil(() => element.readiness === "error", 20_000);
+    element.src = "/__m7__/asset?session=m8-fatal-unit&scenario=corrupt-bootstrap-unit";
+    await waitUntil(() =>
+      element.readiness === "staticReady" &&
+      element.getDiagnostics().lastFailure !== null,
+    20_000);
     const diagnostics = element.getDiagnostics();
-    const afterFatal = visibleLayer(element);
+    const afterFailure = visibleLayer(element);
     const fallbackVisible = fallback.getClientRects().length > 0;
     window.removeEventListener("error", windowError);
     return {
-      afterFatal,
+      afterFailure,
       fallbackVisible,
       hostErrors,
       windowErrors,
@@ -40,8 +49,8 @@ test("fatal loader failures preserve the progressive author fallback", async ({ 
 
     function visibleLayer(host: HTMLElement): string | null {
       return host.shadowRoot?.querySelector<HTMLElement>(
-        "[data-rma-layer]:not([hidden])"
-      )?.dataset.rmaLayer ?? "fallback";
+        "[data-aval-layer]:not([hidden])"
+      )?.dataset.avalLayer ?? "fallback";
     }
     async function waitUntil(predicate: () => boolean, timeout = 5_000): Promise<void> {
       const deadline = performance.now() + timeout;
@@ -52,19 +61,19 @@ test("fatal loader failures preserve the progressive author fallback", async ({ 
     }
   });
   expect(result).toMatchObject({
-    afterFatal: "fallback",
+    afterFailure: "fallback",
     fallbackVisible: true,
     windowErrors: 0
   });
   expect(result.hostErrors).toBeGreaterThanOrEqual(1);
   expect(result.failure).not.toBeNull();
-  expect(result.diagnosticText).not.toContain("m8-fatal-static");
+  expect(result.diagnosticText).not.toContain("m8-fatal-unit");
   expect(result.diagnosticText).not.toContain("Still useful without animation");
 });
 
 test("external integrity selects bounded full transport and mismatch fails closed", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?integrity");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   const before = await motion.evaluate((element) =>
     (element as unknown as { getDiagnostics(): { sourceGeneration: number } })
       .getDiagnostics().sourceGeneration
@@ -105,7 +114,7 @@ test("external integrity selects bounded full transport and mismatch fails close
 
 test("cross-origin range loading requires explicit CORS permission", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?cors");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await motion.evaluate((element) => {
     const node = element as unknown as {
       crossOrigin: string;
@@ -147,8 +156,8 @@ test("cross-origin range loading requires explicit CORS permission", async ({ pa
     };
     const diagnostic = node.getDiagnostics();
     const visible = element.shadowRoot?.querySelector<HTMLElement>(
-      "[data-rma-layer]:not([hidden])"
-    )?.dataset.rmaLayer ?? "fallback";
+      "[data-aval-layer]:not([hidden])"
+    )?.dataset.avalLayer ?? "fallback";
     return node.dispose().then(() => ({
       diagnostic,
       visible,
@@ -169,13 +178,13 @@ test("use-credentials is the only cross-origin mode that sends the sentinel cook
   const main = new URL(page.url());
   const crossOrigin = `http://127.0.0.1:${String(Number(main.port) + 1)}`;
   await context.addCookies([{
-    name: "rma_m8_credential",
+    name: "aval_m8_credential",
     value: "present",
     url: crossOrigin,
     sameSite: "Lax",
     secure: false
   }]);
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await motion.evaluate((element, origin) => {
     const node = element as unknown as { crossOrigin: string; src: string };
     node.crossOrigin = "anonymous";
@@ -203,10 +212,10 @@ test("use-credentials is the only cross-origin mode that sends the sentinel cook
   ]));
   expect(credentialed.requests.length).toBeGreaterThan(0);
   expect(credentialed.requests.every(({ credentialPresent }) => credentialPresent === true)).toBe(true);
-  expect(JSON.stringify({ anonymous, credentialed })).not.toContain("rma_m8_credential");
+  expect(JSON.stringify({ anonymous, credentialed })).not.toContain("aval_m8_credential");
 });
 
-test("missing animation capability resolves as honest static usability", async ({ page }) => {
+test("missing animation capability resolves as honest host-fallback usability", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(globalThis, "WebGL2RenderingContext", {
       value: undefined,
@@ -222,7 +231,7 @@ test("missing animation capability resolves as honest static usability", async (
     });
   });
   await page.goto("/m8-dev-entry.html?unsupported-animation");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("staticReady");
@@ -272,7 +281,7 @@ test("a self-hosted CSP needs no inline style, unsafe-eval, or blob workers", as
   });
   page.on("pageerror", (error) => { pageErrors.push(error.message); });
   await page.goto("/m8-strict-csp.html");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toMatch(/^(interactiveReady|staticReady)$/u);

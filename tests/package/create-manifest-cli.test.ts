@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 
 describe("candidate manifest CLI", () => {
   it("runs end to end against one isolated clean synthetic repository authority", async () => {
-    const repository = await mkdtemp(join(tmpdir(), "rma-candidate-cli-"));
+    const repository = await mkdtemp(join(tmpdir(), "aval-candidate-cli-"));
     try {
       const candidate = join(repository, "candidate");
       await mkdir(candidate);

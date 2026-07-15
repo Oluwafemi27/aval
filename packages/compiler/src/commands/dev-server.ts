@@ -118,7 +118,7 @@ export async function startDevServer(options: Readonly<{
       completionSettled = true;
       rejectClosed(new CompilerError("IO_FAILED", "Dev server stopped unexpectedly", {
         cause,
-        hint: "Restart rma dev after checking the local network and port."
+        hint: "Restart avl dev after checking the local network and port."
       }));
     }
   }

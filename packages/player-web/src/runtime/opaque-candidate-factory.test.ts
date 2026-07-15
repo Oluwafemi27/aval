@@ -1,5 +1,8 @@
-import { maximumAvcDecodedRgbaBytes } from "@rendered-motion/format";
-import { MotionGraphEngine } from "@rendered-motion/graph";
+import {
+  deriveAvcRenditionGeometry,
+  maximumAvcDecodedRgbaBytes
+} from "@aval/format";
+import { MotionGraphEngine } from "@aval/graph";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -26,7 +29,7 @@ import type {
 import type {
   RuntimeCanvasResourceHost,
   RuntimeCanvasResourceLease
-} from "./static-resource-plan.js";
+} from "./canvas-resource-plan.js";
 import {
   LeakTracker,
   ManualTimers,
@@ -78,7 +81,8 @@ describe("AvcCandidateFactory", () => {
         averageBitrate: 1_000_000,
         peakBitrate: 2_000_000,
         cpbBufferBits: 2_000_000,
-        requireBt709LimitedRange: true
+        requireBt709LimitedRange: true,
+        quantizationPolicy: "fixed-qp26-v0"
       },
       expectedOutput: {
         codedWidth: 64,
@@ -115,8 +119,11 @@ describe("AvcCandidateFactory", () => {
       provisionalResourcePlan: { ringCapacity: 12 },
       interactionCache: { rendition: "opaque-high" }
     });
-    expect(tracker.readinessWarmupCalls).toBe(1);
-    expect(tracker.initialRingCalls).toBe(1);
+    // Normal page startup must not run the exhaustive all-routes certification
+    // adapters. The live playback activation below prepares its own initial
+    // ring; certification remains an explicit, separately exercised workflow.
+    expect(tracker.readinessWarmupCalls).toBe(0);
+    expect(tracker.initialRingCalls).toBe(0);
 
     const expected = activationPresentation(contexts.high);
     const token = await attempt.prepareActivation({
@@ -136,7 +143,118 @@ describe("AvcCandidateFactory", () => {
     tracker.expectZeroLeaks();
   });
 
-  it("accepts a settled static graph snapshot for body-zero re-entry", async () => {
+  it("keeps exhaustive readiness adapters out of normal startup", async () => {
+    const contexts = createContexts();
+    const tracker = new LeakTracker({
+      modes: { "opaque-high": "readiness-pending" }
+    });
+    const attempt = new AvcCandidateFactory(createDependencies(tracker).options)
+      .create(contexts.high);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(new DOMException(
+      "normal startup invoked the certification probe",
+      "AbortError"
+    )), 100);
+
+    try {
+      await expect(attempt.prepare({
+        signal: controller.signal,
+        deadlineMs: 10_000
+      })).resolves.toBeUndefined();
+    } finally {
+      clearTimeout(timeout);
+    }
+    expect(tracker.readinessWarmupCalls).toBe(0);
+    expect(tracker.initialRingCalls).toBe(0);
+
+    const expected = activationPresentation(contexts.high);
+    const token = await attempt.prepareActivation({
+      ...operationOptions(),
+      graphSnapshot: contexts.high.graphSnapshot,
+      expectedPresentation: expected
+    });
+    attempt.drawInitial(token, expected);
+    expect(attempt.playback.traceState().scheduler.ringCapacity).toBe(6);
+
+    await attempt.dispose();
+    tracker.expectZeroLeaks();
+  });
+
+  it("passes a dynamic 4K codec and decoded budget above 64 MiB to the worker", async () => {
+    const contexts = createContexts();
+    const context = largeDynamicContext(contexts.high);
+    const tracker = new LeakTracker();
+    const base = createDependencies(tracker).options;
+    const factory = new AvcCandidateFactory({
+      ...base,
+      rendererFactory: {
+        available: true,
+        create(candidateContext) {
+          const reservation = base.rendererFactory.create(candidateContext);
+          return {
+            limits: reservation.limits,
+            allocate() {
+              throw new Error("stop after worker configuration");
+            },
+            dispose: reservation.dispose.bind(reservation)
+          };
+        }
+      }
+    });
+    const attempt = factory.create(context);
+
+    // Stop at renderer admission, after the worker boundary has captured the
+    // exact derived setup but before the fixture's small media is exercised.
+    await expect(attempt.prepare(operationOptions())).rejects.toMatchObject({
+      code: "renderer-failure"
+    });
+    expect(tracker.configurations).toHaveLength(1);
+    expect(tracker.configurations[0]).toMatchObject({
+      config: {
+        codec: "avc1.42E033",
+        codedWidth: 3_840,
+        codedHeight: 2_160
+      },
+      limits: {
+        maxOutstandingFrames: 12,
+        maxDecodedBytes:
+          maximumAvcDecodedRgbaBytes(3_840, 2_160) * 12
+      }
+    });
+    expect(tracker.configurations[0]!.limits.maxDecodedBytes)
+      .toBeGreaterThan(64 * 1024 * 1024);
+
+    await attempt.dispose();
+    tracker.expectZeroLeaks();
+  });
+
+  it("rejects a manifest codec that does not match the inspected SPS level", async () => {
+    const contexts = createContexts();
+    const dynamic = largeDynamicContext(contexts.high);
+    const context = Object.freeze({
+      ...dynamic,
+      candidate: Object.freeze({
+        ...dynamic.candidate,
+        rendition: Object.freeze({
+          ...dynamic.candidate.rendition,
+          codec: "avc1.42E032" as const
+        })
+      })
+    });
+    const tracker = new LeakTracker();
+    const attempt = new AvcCandidateFactory(
+      createDependencies(tracker).options
+    ).create(context);
+
+    await expect(attempt.prepare(operationOptions())).rejects.toMatchObject({
+      code: "resource-rejection"
+    });
+    expect(tracker.configurations).toEqual([]);
+    await attempt.dispose();
+    tracker.expectZeroLeaks();
+  });
+
+  it("accepts a settled static graph snapshot for first-play re-entry", async () => {
     const contexts = createContexts();
     const graph = new MotionGraphEngine();
     graph.install(contexts.high.catalog.graph);
@@ -370,8 +488,7 @@ describe("AvcCandidateFactory", () => {
 
   it.each([
     ["renderer allocation", "renderer-failure"],
-    ["persistent interaction cache", "cache-failure"],
-    ["all-routes readiness", "readiness-failure"]
+    ["persistent interaction cache", "cache-failure"]
   ] as const)("cleans every owner after %s failure", async (_label, mode) => {
     const contexts = createContexts();
     const tracker = new LeakTracker({
@@ -385,9 +502,6 @@ describe("AvcCandidateFactory", () => {
 
     tracker.expectZeroLeaks();
     expect(tracker.maximumWorkersAlive).toBe(1);
-    if (mode === "readiness-failure") {
-      expect(tracker.readinessDisposals).toBe(1);
-    }
   });
 
   it("rejects a fallible initial-media precommit and releases the final scheduler", async () => {
@@ -414,7 +528,6 @@ describe("AvcCandidateFactory", () => {
   it.each([
     ["configure", "configure-pending", false],
     ["cache", "cache-pending", false],
-    ["readiness", "readiness-pending", false],
     ["activation", "activation-pending", true]
   ] as const)(
     "propagates abort during %s and leaves zero live resources",
@@ -882,6 +995,64 @@ describe("AvcCandidateFactory", () => {
     }
   );
 });
+
+function largeDynamicContext(
+  base: ReturnType<typeof createContexts>["high"]
+): typeof base {
+  const codedWidth = 3_840;
+  const codedHeight = 2_160;
+  const geometry = deriveAvcRenditionGeometry({
+    profile: "avc-annexb-opaque-v0",
+    canvasWidth: codedWidth,
+    canvasHeight: codedHeight,
+    colorRect: [0, 0, codedWidth, codedHeight],
+    codedWidth,
+    codedHeight
+  });
+  return Object.freeze({
+    ...base,
+    candidate: Object.freeze({
+      rank: 0,
+      visibleColorArea: codedWidth * codedHeight,
+      codedArea: codedWidth * codedHeight,
+      geometry,
+      rendition: Object.freeze({
+        ...base.candidate.rendition,
+        profile: "avc-annexb-opaque-v0" as const,
+        codec: "avc1.42E033" as const,
+        codedWidth,
+        codedHeight,
+        alphaLayout: Object.freeze({
+          type: "opaque-v0" as const,
+          colorRect: Object.freeze([
+            0,
+            0,
+            codedWidth,
+            codedHeight
+          ] as const)
+        })
+      })
+    }),
+    inspection: Object.freeze({
+      ...base.inspection,
+      macroblocksPerFrame: (codedWidth / 16) * (codedHeight / 16),
+      parameterSet: Object.freeze({
+        ...base.inspection.parameterSet,
+        levelIdc: 51 as const,
+        codedWidth,
+        codedHeight,
+        crop: Object.freeze({
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          visibleWidth: codedWidth,
+          visibleHeight: codedHeight
+        })
+      })
+    })
+  });
+}
 
 function guardMethodReads<T extends object>(
   target: T,

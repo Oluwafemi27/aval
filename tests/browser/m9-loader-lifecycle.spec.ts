@@ -2,9 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("public lifecycle profile retires replacement, adoption, transport, and element ownership", async ({ page }) => {
   await page.goto("/certification.html");
-  await page.waitForFunction(() => "renderedMotionCertification" in window);
+  await page.waitForFunction(() => "avalCertification" in window);
   const report = await page.evaluate(async () => {
-    const api = (window as unknown as { renderedMotionCertification: {
+    const api = (window as unknown as { avalCertification: {
       ready: Promise<void>;
       runResourceFaultProfile(): Promise<{
         status: string;
@@ -12,7 +12,7 @@ test("public lifecycle profile retires replacement, adoption, transport, and ele
         network: readonly Record<string, unknown>[];
         failures: readonly string[];
       }>;
-    } }).renderedMotionCertification;
+    } }).avalCertification;
     await api.ready;
     return api.runResourceFaultProfile();
   });
@@ -30,6 +30,6 @@ test("public lifecycle profile retires replacement, adoption, transport, and ele
   expect(report.network).toEqual(expect.arrayContaining([
     expect.objectContaining({ scenario: "ignored-initial-range", status: "passed", outstandingSettled: true }),
     expect.objectContaining({ scenario: "changed-etag", status: "passed", outstandingSettled: true }),
-    expect.objectContaining({ scenario: "corrupt-static", status: "passed", outstandingSettled: true })
+    expect.objectContaining({ scenario: "corrupt-bootstrap-unit", status: "passed", outstandingSettled: true })
   ]));
 });

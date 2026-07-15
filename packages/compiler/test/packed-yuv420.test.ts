@@ -1,4 +1,4 @@
-import { deriveAvcRenditionGeometry } from "@rendered-motion/format";
+import { deriveAvcRenditionGeometry } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import {

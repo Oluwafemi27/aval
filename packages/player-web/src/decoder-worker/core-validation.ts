@@ -1,4 +1,9 @@
-import { maximumAvcDecoderSurfaceDimension } from "@rendered-motion/format";
+import {
+  avcLevelLimits,
+  maximumAvcDecodedRgbaBytes,
+  maximumAvcDecoderSurfaceDimension,
+  parseAvcCodec
+} from "@aval/format";
 
 import {
   DECODER_WORKER_HARD_LIMITS,
@@ -10,8 +15,6 @@ import {
   type DecoderWorkerOutputExpectation,
   type DecoderWorkerSample
 } from "./protocol.js";
-
-const MAX_DIMENSION = 16_384;
 
 export class DecoderWorkerCoreError extends Error {
   public readonly code: DecoderWorkerErrorCode;
@@ -44,8 +47,11 @@ export function validateConfiguration(
   ])) {
     throw protocolError("decoder config has unknown or missing fields");
   }
-  if (config.codec !== "avc1.42E020") {
-    throw protocolError("decoder config must use avc1.42E020");
+  let level: ReturnType<typeof parseAvcCodec>;
+  try {
+    level = parseAvcCodec(config.codec);
+  } catch {
+    throw protocolError("decoder codec is invalid");
   }
   if (
     config.hardwareAcceleration !== "no-preference" &&
@@ -57,7 +63,7 @@ export function validateConfiguration(
   if (config.optimizeForLatency !== true) {
     throw protocolError("decoder optimizeForLatency must be true");
   }
-  validateAvcProfile(avcProfile);
+  validateAvcProfile(avcProfile, level.levelIdc);
   validateOutputExpectation(expected);
   validateLimits(limits);
 
@@ -78,6 +84,28 @@ export function validateConfiguration(
     config.codedHeight !== avcProfile.codedHeight
   ) {
     throw protocolError("decoder config geometry does not match the AVC profile");
+  }
+  let decodedBytesPerSurface: number;
+  try {
+    decodedBytesPerSurface = maximumAvcDecodedRgbaBytes(
+      config.codedWidth,
+      config.codedHeight
+    );
+  } catch {
+    throw protocolError("decoder decoded-surface byte count is unsafe");
+  }
+  if (
+    decodedBytesPerSurface >
+      Math.floor(Number.MAX_SAFE_INTEGER / limits.maxOutstandingFrames)
+  ) {
+    throw protocolError("decoder decoded-surface budget is unsafe");
+  }
+  const exactDecodedBytes =
+    decodedBytesPerSurface * limits.maxOutstandingFrames;
+  if (limits.maxDecodedBytes !== exactDecodedBytes) {
+    throw protocolError(
+      "maxDecodedBytes must exactly match the decoded-surface budget"
+    );
   }
 }
 
@@ -312,7 +340,10 @@ function validateOutputExpectation(
   }
 }
 
-function validateAvcProfile(profile: DecoderWorkerAvcProfile): void {
+function validateAvcProfile(
+  profile: DecoderWorkerAvcProfile,
+  levelIdc: number
+): void {
   if (!isRecord(profile) || !hasExactKeys(profile, [
     "codedWidth",
     "codedHeight",
@@ -320,12 +351,13 @@ function validateAvcProfile(profile: DecoderWorkerAvcProfile): void {
     "averageBitrate",
     "peakBitrate",
     "cpbBufferBits",
-    "requireBt709LimitedRange"
+    "requireBt709LimitedRange",
+    "quantizationPolicy"
   ])) {
     throw protocolError("AVC profile has unknown or missing fields");
   }
-  requireBoundedPositive(profile.codedWidth, 2_048, "avcProfile.codedWidth");
-  requireBoundedPositive(profile.codedHeight, 2_048, "avcProfile.codedHeight");
+  requirePositiveInteger(profile.codedWidth, "avcProfile.codedWidth");
+  requirePositiveInteger(profile.codedHeight, "avcProfile.codedHeight");
   if (!isRecord(profile.frameRate) || !hasExactKeys(profile.frameRate, [
     "numerator",
     "denominator"
@@ -350,18 +382,29 @@ function validateAvcProfile(profile: DecoderWorkerAvcProfile): void {
   ) {
     throw protocolError("AVC frame rate must be reduced and no greater than 60 fps");
   }
-  const macroblocksPerFrame =
-    Math.ceil(profile.codedWidth / 16) * Math.ceil(profile.codedHeight / 16);
+  const macroblockWidth = Math.ceil(profile.codedWidth / 16);
+  const macroblockHeight = Math.ceil(profile.codedHeight / 16);
+  const macroblocksPerFrame = macroblockWidth * macroblockHeight;
+  const level = avcLevelLimits(levelIdc);
   if (
-    macroblocksPerFrame > 5_120 ||
-    macroblocksPerFrame * profile.frameRate.numerator >
-      216_000 * profile.frameRate.denominator
+    macroblockWidth > level.maximumMacroblockDimension ||
+    macroblockHeight > level.maximumMacroblockDimension ||
+    macroblocksPerFrame > level.maximumMacroblocksPerFrame ||
+    BigInt(macroblocksPerFrame) * BigInt(profile.frameRate.numerator) >
+      BigInt(level.maximumMacroblocksPerSecond) *
+        BigInt(profile.frameRate.denominator)
   ) {
-    throw protocolError("AVC profile exceeds Level 3.2 macroblock limits");
+    throw protocolError("AVC profile exceeds its declared level macroblock limits");
   }
-  requireBoundedPositive(profile.averageBitrate, 8_000_000, "averageBitrate");
-  requireBoundedPositive(profile.peakBitrate, 8_000_000, "peakBitrate");
-  requireBoundedPositive(profile.cpbBufferBits, 8_000_000, "cpbBufferBits");
+  requirePositiveInteger(profile.averageBitrate, "averageBitrate");
+  requirePositiveInteger(profile.peakBitrate, "peakBitrate");
+  requirePositiveInteger(profile.cpbBufferBits, "cpbBufferBits");
+  if (
+    profile.peakBitrate > level.maximumBitrate ||
+    profile.cpbBufferBits > level.maximumCpbBits
+  ) {
+    throw protocolError("AVC bitrate or CPB exceeds its declared level");
+  }
   if (
     profile.averageBitrate > profile.peakBitrate ||
     profile.cpbBufferBits !== profile.peakBitrate
@@ -370,6 +413,12 @@ function validateAvcProfile(profile: DecoderWorkerAvcProfile): void {
   }
   if (profile.requireBt709LimitedRange !== true) {
     throw protocolError("AVC profile must require BT.709 limited range");
+  }
+  if (
+    profile.quantizationPolicy !== "fixed-qp26-v0" &&
+    profile.quantizationPolicy !== "bounded-qp-v1"
+  ) {
+    throw protocolError("AVC quantization policy is invalid");
   }
 }
 
@@ -450,7 +499,7 @@ function checkedProduct(left: number, right: number, label: string): number {
 }
 
 function requireDimension(value: number, label: string): void {
-  requireBoundedPositive(value, MAX_DIMENSION, label);
+  requirePositiveInteger(value, label);
 }
 
 function requireBoundedPositive(

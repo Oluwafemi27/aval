@@ -13,7 +13,7 @@ describe("M8 idle-hover starter", () => {
   });
 
   it("creates a provenanced arbitrary-state accessible starter", async () => {
-    root = await mkdtemp(join(tmpdir(), "rma-m8-starter-"));
+    root = await mkdtemp(join(tmpdir(), "aval-m8-starter-"));
     const result = await runInitCommand({
       command: "init",
       directory: "starter",
@@ -50,7 +50,7 @@ describe("M8 idle-hover starter", () => {
     expect(html).toContain("interaction-for=\"favorite\"");
     expect(html).toContain('src="./main.js"');
     expect(await readFile(join(result.directory, "main.js"), "utf8")).toBe(
-      'import "@rendered-motion/element/auto";\n'
+      'import "@aval/element/auto";\n'
     );
     expect(html).not.toContain("tabindex");
     const packageJson = JSON.parse(await readFile(
@@ -61,10 +61,10 @@ describe("M8 idle-hover starter", () => {
       scripts?: Record<string, string>;
     };
     expect(packageJson.dependencies).toEqual({
-      "@rendered-motion/compiler": "1.0.0",
-      "@rendered-motion/element": "1.0.0"
+      "@aval/compiler": "1.0.0",
+      "@aval/element": "1.0.0"
     });
-    expect(packageJson.scripts?.dev).toBe("rma dev motion.json --out starter.rma --force");
+    expect(packageJson.scripts?.dev).toBe("avl dev motion.json --out starter.avl --force");
     const combined = await Promise.all(result.files.map((file) =>
       readFile(join(result.directory, file), "utf8").catch(() => "")
     ));
@@ -74,7 +74,7 @@ describe("M8 idle-hover starter", () => {
   });
 
   it("never replaces an empty directory raced in after staging", async () => {
-    const raceRoot = await mkdtemp(join(tmpdir(), "rma-m8-init-race-"));
+    const raceRoot = await mkdtemp(join(tmpdir(), "aval-m8-init-race-"));
     try {
       const target = join(raceRoot, "starter");
       await expect(runInitCommand({
@@ -85,14 +85,14 @@ describe("M8 idle-hover starter", () => {
         beforePublish: async () => mkdir(target)
       })).rejects.toMatchObject({ code: "IO_FAILED" });
       expect(await readdir(target)).toEqual([]);
-      expect((await readdir(raceRoot)).filter((name) => name.includes(".rma-init-"))).toEqual([]);
+      expect((await readdir(raceRoot)).filter((name) => name.includes(".avl-init-"))).toEqual([]);
     } finally {
       await rm(raceRoot, { recursive: true, force: true });
     }
   });
 
   it("reports a committed project when the final parent sync is uncertain", async () => {
-    const syncRoot = await mkdtemp(join(tmpdir(), "rma-m8-init-durability-"));
+    const syncRoot = await mkdtemp(join(tmpdir(), "aval-m8-init-durability-"));
     try {
       let syncs = 0;
       const operation = runInitCommand({
@@ -113,7 +113,7 @@ describe("M8 idle-hover starter", () => {
       });
       expect(await readdir(join(syncRoot, "starter"))).toContain("motion.json");
       expect((await readdir(syncRoot)).filter((name) =>
-        name.includes(".rma-init-")
+        name.includes(".avl-init-")
       )).toEqual([]);
     } finally {
       await rm(syncRoot, { recursive: true, force: true });

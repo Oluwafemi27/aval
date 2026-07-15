@@ -1,4 +1,5 @@
 import type { Rect } from "../model.js";
+import type { AvcLevelIdc } from "./codec.js";
 
 /** A single Annex B access unit and its container key assertion. */
 export interface AvcAccessUnitInput {
@@ -17,6 +18,10 @@ export interface AvcFrameRate {
   readonly denominator: number;
 }
 
+export type AvcQuantizationPolicy =
+  | "fixed-qp26-v0"
+  | "bounded-qp-v1";
+
 /**
  * The non-bitstream limits supplied by the compiler profile. `cpbBufferBits`
  * is the exact FFmpeg VBV buffer setting; when HRD is present it is also
@@ -32,6 +37,7 @@ export interface AvcConstrainedBaselineProfile {
   readonly peakBitrate: number;
   readonly cpbBufferBits: number;
   readonly requireBt709LimitedRange: true;
+  readonly quantizationPolicy: AvcQuantizationPolicy;
 }
 
 export interface AvcRenditionInspectionInput {
@@ -58,7 +64,7 @@ export interface AvcColorSummary {
 export interface AvcParameterSetSummary {
   readonly profileIdc: 66;
   readonly constraintSet2: boolean;
-  readonly levelIdc: 32;
+  readonly levelIdc: AvcLevelIdc;
   readonly codedWidth: number;
   readonly codedHeight: number;
   readonly crop: AvcCropSummary;

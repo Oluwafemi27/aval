@@ -5,7 +5,7 @@
     "declaration": false,
     "declarationMap": false,
     "paths": {
-      "@rendered-motion/format": ["../format/src/index.ts"]
+      "@aval/format": ["../format/src/index.ts"]
     },
     "lib": [
       "ES2023",

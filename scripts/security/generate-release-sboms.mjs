@@ -28,8 +28,8 @@ for (const archive of releaseSet.packages) {
   const document = {
     spdxVersion: "SPDX-2.3", dataLicense: "CC0-1.0", SPDXID: "SPDXRef-DOCUMENT",
     name: `${archive.name}-${archive.version}`,
-    documentNamespace: `https://spdx.org/spdxdocs/rendered-motion-${encodeURIComponent(archive.name)}-${archive.version}-${archive.tarballSha256}`,
-    creationInfo: { created: deterministicCreatedAt(), creators: ["Tool: rendered-motion-package-sbom-v1"] },
+    documentNamespace: `https://spdx.org/spdxdocs/aval-${encodeURIComponent(archive.name)}-${archive.version}-${archive.tarballSha256}`,
+    creationInfo: { created: deterministicCreatedAt(), creators: ["Tool: aval-package-sbom-v1"] },
     packages: [{
       SPDXID: packageId, name: archive.name, versionInfo: archive.version, downloadLocation: "NOASSERTION", filesAnalyzed: true,
       licenseConcluded: archive.manifest.license, licenseDeclared: archive.manifest.license,
@@ -46,7 +46,7 @@ for (const archive of releaseSet.packages) {
     ]
   };
   validateSpdxDocument(document);
-  await writeFile(join(output, `${archive.name.slice("@rendered-motion/".length)}.spdx.json`), `${JSON.stringify(document, null, 2)}\n`, { flag: "wx" });
+  await writeFile(join(output, `${archive.name.slice("@aval/".length)}.spdx.json`), `${JSON.stringify(document, null, 2)}\n`, { flag: "wx" });
 }
 process.stdout.write(`${JSON.stringify({ status: "passed", output, releaseSetDigest: releaseSet.releaseSetDigest, packages: releaseSet.packages.length })}\n`);
 function spdxId(value) { return `SPDXRef-${createHash("sha256").update(value).digest("hex").slice(0, 32)}`; }

@@ -36,15 +36,8 @@ describe("verified blob store", () => {
       interestedWaiterCount: 0,
       pendingLoadCount: 0,
       unitBlobs: {
-        total: 2,
-        absent: 2,
-        loading: 0,
-        verified: 0,
-        verifiedBytes: 0
-      },
-      staticBlobs: {
-        total: 1,
-        absent: 1,
+        total: 3,
+        absent: 3,
         loading: 0,
         verified: 0,
         verifiedBytes: 0
@@ -82,7 +75,7 @@ describe("verified blob store", () => {
     expect(store.snapshot()).toMatchObject({
       interestedWaiterCount: 2,
       pendingLoadCount: 1,
-      unitBlobs: { absent: 1, loading: 1, verified: 0 }
+      unitBlobs: { absent: 2, loading: 1, verified: 0 }
     });
 
     pending.resolve();
@@ -114,7 +107,7 @@ describe("verified blob store", () => {
       persistentLeaseCount: 1,
       interestedWaiterCount: 0,
       pendingLoadCount: 0,
-      unitBlobs: { absent: 1, loading: 0, verified: 1, verifiedBytes: 3 }
+      unitBlobs: { absent: 2, loading: 0, verified: 1, verifiedBytes: 3 }
     });
   });
 
@@ -467,18 +460,18 @@ describe("verified blob store", () => {
 
   it("returns to absent after transport failure and starts a clean retry", async () => {
     const { store } = createStore();
-    const failed = store.ensure("static:poster", {
+    const failed = store.ensure("unit:retry", {
       load: async () => {
         throw new Error("https://private.example/asset.rmo");
       }
     });
 
     await expect(failed).rejects.toMatchObject({ code: "load-failure" });
-    expect(store.state("static:poster")).toBe("absent");
-    await expect(store.ensure("static:poster", {
+    expect(store.state("unit:retry")).toBe("absent");
+    await expect(store.ensure("unit:retry", {
       load: (request) => promoteVerified(request, bytes(7, 8), 7)
-    })).resolves.toMatchObject({ kind: "static" });
-    expect([...store.copy("static:poster")]).toEqual([7, 8]);
+    })).resolves.toMatchObject({ kind: "unit" });
+    expect([...store.copy("unit:retry")]).toEqual([7, 8]);
   });
 
   it("rejects a loader that settles without using the verifier promotion seam", async () => {
@@ -760,7 +753,7 @@ describe("verified blob store", () => {
 
   it("disposes verified leases idempotently and rejects later access", async () => {
     const { store, resources } = createStore();
-    await store.ensure("static:poster", {
+    await store.ensure("unit:retry", {
       load: (request) => promoteVerified(request, bytes(7, 8), 7)
     });
 
@@ -769,9 +762,9 @@ describe("verified blob store", () => {
     expect(first).toBe(second);
     await first;
     expect(resources.snapshot()).toEqual({ live: 0, peak: 2, releases: 1 });
-    expect(store.state("static:poster")).toBe("absent");
-    expect(() => store.copy("static:poster")).toThrow();
-    await expect(store.ensure("static:poster", {
+    expect(store.state("unit:retry")).toBe("absent");
+    expect(() => store.copy("unit:retry")).toThrow();
+    await expect(store.ensure("unit:retry", {
       load: (request) => promoteVerified(request, bytes(7, 8), 7)
     })).rejects.toMatchObject({ name: "AbortError" });
   });
@@ -782,7 +775,7 @@ describe("verified blob store", () => {
       generation: 1,
       descriptors: [
         { key: "same", kind: "unit", byteLength: 1 },
-        { key: "same", kind: "static", byteLength: 1 }
+        { key: "same", kind: "unit", byteLength: 1 }
       ],
       resources
     })).toThrow();
@@ -805,7 +798,7 @@ function createStore(sessionSignal?: AbortSignal): {
     descriptors: [
       { key: "unit:a", kind: "unit", byteLength: 3 },
       { key: "unit:b", kind: "unit", byteLength: 4 },
-      { key: "static:poster", kind: "static", byteLength: 2 }
+      { key: "unit:retry", kind: "unit", byteLength: 2 }
     ] as const,
     resources
   };

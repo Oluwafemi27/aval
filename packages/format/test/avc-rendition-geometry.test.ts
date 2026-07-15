@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  avcQuantizationPolicyForRendition,
   deriveAvcRenditionGeometry,
   deriveAvcRenditionGeometryFromVisible,
   type AvcRenditionGeometryInput
@@ -10,6 +11,58 @@ import { FormatError } from "../src/errors.js";
 const DIMENSIONS = [1, 2, 15, 16, 511, 512] as const;
 
 describe("deriveAvcRenditionGeometry", () => {
+  it("maps each exact production profile to its versioned quantization policy", () => {
+    expect(avcQuantizationPolicyForRendition("avc-annexb-opaque-v0"))
+      .toBe("fixed-qp26-v0");
+    expect(avcQuantizationPolicyForRendition("avc-annexb-packed-alpha-v0"))
+      .toBe("fixed-qp26-v0");
+    expect(avcQuantizationPolicyForRendition("avc-annexb-opaque-v1"))
+      .toBe("bounded-qp-v1");
+    expect(avcQuantizationPolicyForRendition("avc-annexb-packed-alpha-v1"))
+      .toBe("bounded-qp-v1");
+    expectProfileInvalid(() => avcQuantizationPolicyForRendition(
+      "avc-annexb-opaque-v2" as never
+    ), "rendition.profile");
+  });
+
+  it("derives v1 geometry without changing the opaque or packed layout", () => {
+    expect(deriveAvcRenditionGeometryFromVisible({
+      canvasWidth: 16,
+      canvasHeight: 16,
+      profile: "avc-annexb-opaque-v1",
+      visibleWidth: 16,
+      visibleHeight: 16
+    })).toMatchObject({
+      profile: "avc-annexb-opaque-v1",
+      decodedStorageRect: [0, 0, 16, 16]
+    });
+    expect(deriveAvcRenditionGeometryFromVisible({
+      canvasWidth: 16,
+      canvasHeight: 16,
+      profile: "avc-annexb-packed-alpha-v1",
+      visibleWidth: 16,
+      visibleHeight: 16
+    })).toMatchObject({
+      profile: "avc-annexb-packed-alpha-v1",
+      visibleAlphaRect: [0, 24, 16, 16],
+      decodedStorageRect: [0, 0, 16, 40]
+    });
+  });
+  it("preserves authored visible geometry above the former canvas ceiling", () => {
+    expect(deriveAvcRenditionGeometryFromVisible({
+      canvasWidth: 1_024,
+      canvasHeight: 576,
+      profile: "avc-annexb-opaque-v0",
+      visibleWidth: 1_024,
+      visibleHeight: 576
+    })).toMatchObject({
+      visibleColorRect: [0, 0, 1_024, 576],
+      codedWidth: 1_024,
+      codedHeight: 576,
+      decodedRgbaBytes: 1_024 * 576 * 4
+    });
+  });
+
   it("derives compiler-ready manifest facts from visible dimensions alone", () => {
     expect(deriveAvcRenditionGeometryFromVisible({
       canvasWidth: 15,

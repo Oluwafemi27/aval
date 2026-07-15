@@ -2,7 +2,7 @@ import {
   MotionGraphEngine,
   type GraphPresentation,
   type MotionGraphSnapshot
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import {
@@ -191,7 +191,10 @@ export class IntegratedAnimatedPreparation {
       );
       hasAvcRendition = candidates.length > 0;
 
-      for (const candidate of candidates) {
+      // Rendition order is authored quality policy. A failed preferred
+      // rendition is an explicit static fallback, never permission to switch
+      // the user's media to a lower-quality candidate.
+      for (const candidate of candidates.slice(0, 1)) {
         throwIfIntegratedAborted(control.controller.signal);
         try {
           if (this.#residency.requiresEnsure) {
@@ -519,6 +522,7 @@ function sameActivationState(
 ): boolean {
   return current.readiness === prepared.readiness &&
     current.phase === prepared.phase &&
+    current.initialUnitPending === prepared.initialUnitPending &&
     current.requestedState === prepared.requestedState &&
     current.visualState === prepared.visualState &&
     current.prospectiveState === prepared.prospectiveState &&

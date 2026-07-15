@@ -1,0 +1,172 @@
+{
+  "projectVersion": "0.3",
+  "profile": "avc-annexb-opaque-v1",
+  "canvas": {
+    "width": 1280,
+    "height": 720,
+    "fit": "contain",
+    "pixelAspect": [1, 1],
+    "colorSpace": "srgb"
+  },
+  "frameRate": { "numerator": 24, "denominator": 1 },
+  "sources": [
+    {
+      "id": "rabbit",
+      "type": "video",
+      "path": "source/grass-test-with-intro.mp4",
+      "timing": { "mode": "exact" }
+    }
+  ],
+  "renditions": [
+    {
+      "id": "avc.1x",
+      "width": 1280,
+      "height": 720,
+      "encoding": {
+        "codec": "h264",
+        "preset": "veryslow",
+        "rateControl": {
+          "mode": "crf",
+          "crf": 30,
+          "maxBitrate": 10000000
+        }
+      }
+    }
+  ],
+  "units": [
+    {
+      "id": "intro",
+      "kind": "one-shot",
+      "source": "rabbit",
+      "range": [0, 30]
+    },
+    {
+      "id": "idle-loop",
+      "kind": "body",
+      "source": "rabbit",
+      "range": [30, 100],
+      "playback": "loop",
+      "ports": [
+        { "id": "default", "entryFrame": 0, "portalFrames": [69] }
+      ]
+    },
+    {
+      "id": "hover-in",
+      "kind": "body",
+      "source": "rabbit",
+      "range": [100, 167],
+      "playback": "finite",
+      "ports": [
+        { "id": "default", "entryFrame": 0, "portalFrames": [66] }
+      ]
+    },
+    {
+      "id": "hover-loop",
+      "kind": "body",
+      "source": "rabbit",
+      "range": [167, 263],
+      "playback": "loop",
+      "ports": [
+        { "id": "default", "entryFrame": 0, "portalFrames": [95] }
+      ]
+    },
+    {
+      "id": "hover-out",
+      "kind": "body",
+      "source": "rabbit",
+      "range": [263, 311],
+      "playback": "finite",
+      "ports": [
+        { "id": "default", "entryFrame": 0, "portalFrames": [47] }
+      ]
+    }
+  ],
+  "initialState": "idle",
+  "states": [
+    {
+      "id": "idle",
+      "bodyUnit": "idle-loop",
+      "initialUnit": "intro"
+    },
+    {
+      "id": "entering",
+      "bodyUnit": "hover-in"
+    },
+    {
+      "id": "hover",
+      "bodyUnit": "hover-loop"
+    },
+    {
+      "id": "exiting",
+      "bodyUnit": "hover-out"
+    }
+  ],
+  "edges": [
+    {
+      "id": "idle.entering",
+      "from": "idle",
+      "to": "entering",
+      "trigger": { "type": "event", "name": "hover.enter" },
+      "start": {
+        "type": "portal",
+        "sourcePort": "default",
+        "targetPort": "default",
+        "maxWaitFrames": 139
+      },
+      "continuity": "exact-authored"
+    },
+    {
+      "id": "entering.hover",
+      "from": "entering",
+      "to": "hover",
+      "trigger": { "type": "completion" },
+      "start": {
+        "type": "finish",
+        "targetPort": "default",
+        "maxWaitFrames": 66
+      },
+      "continuity": "exact-authored"
+    },
+    {
+      "id": "entering.exiting",
+      "from": "entering",
+      "to": "exiting",
+      "trigger": { "type": "event", "name": "hover.leave" },
+      "start": {
+        "type": "finish",
+        "targetPort": "default",
+        "maxWaitFrames": 66
+      },
+      "continuity": "exact-authored"
+    },
+    {
+      "id": "hover.exiting",
+      "from": "hover",
+      "to": "exiting",
+      "trigger": { "type": "event", "name": "hover.leave" },
+      "start": {
+        "type": "portal",
+        "sourcePort": "default",
+        "targetPort": "default",
+        "maxWaitFrames": 191
+      },
+      "continuity": "exact-authored"
+    },
+    {
+      "id": "exiting.idle",
+      "from": "exiting",
+      "to": "idle",
+      "trigger": { "type": "completion" },
+      "start": {
+        "type": "finish",
+        "targetPort": "default",
+        "maxWaitFrames": 47
+      },
+      "continuity": "exact-authored"
+    }
+  ],
+  "bindings": [
+    { "source": "engagement.on", "event": "hover.enter" },
+    { "source": "engagement.off", "event": "hover.leave" }
+  ]
+}

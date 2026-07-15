@@ -81,7 +81,7 @@ packages/certification/test/schema-validation.test.ts
 packages/certification/test/canonical-json.test.ts
 ```
 
-Mark `@rendered-motion/certification` private and exclude it from the public
+Mark `@aval/certification` private and exclude it from the public
 release set. Add it to workspace typecheck/build/test without making the five
 public packages depend on it.
 
@@ -112,7 +112,7 @@ Run:
 
 ```text
 npx vitest run packages/certification/test/schema-validation.test.ts packages/certification/test/canonical-json.test.ts
-npm run typecheck -w @rendered-motion/certification
+npm run typecheck -w @aval/certification
 ```
 
 ### 2. Freeze the 1.0 public API and compatibility policy
@@ -879,7 +879,7 @@ rg -n "playwright|webkit|chromium|chrome|edge|firefox|safari" docs/certification
 rg -n "latest|stable|@[A-Za-z0-9._/-]+$" .github config/release package.json packages/*/package.json
 rg -n "npm publish|dist-tag|unpublish|id-token|NODE_AUTH_TOKEN" .github scripts
 rg -n "(/Users/|/home/|[A-Z]:\\\\|BEGIN .*PRIVATE KEY|token=|authorization:)" docs fixtures artifacts
-rg -n "@rendered-motion/.+/src/|\.\./src/" apps examples tests/consumers
+rg -n "@aval/.+/src/|\.\./src/" apps examples tests/consumers
 ```
 
 Every match must be a sole authority, explicit negative assertion, schema,

@@ -99,7 +99,7 @@ jobs:
         run: node scripts/release/write-workflow-result.mjs --output workflow-results/reports.json --job assemble
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: rendered-motion-1.0.0-reports-${{ inputs.commit }}
+          name: aval-1.0.0-reports-${{ inputs.commit }}
           path: incoming/reports
           if-no-files-found: error
           include-hidden-files: false
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: rendered-motion-1.0.0-reports-result-${{ github.run_id }}
+          name: aval-1.0.0-reports-result-${{ github.run_id }}
           path: workflow-results/reports.json
           if-no-files-found: warn
           include-hidden-files: false

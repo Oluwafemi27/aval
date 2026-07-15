@@ -97,15 +97,16 @@ describe("pure restricted PNG decode", () => {
     expectDecodeError(() => decodePngRgba(filterPlan));
   });
 
-  it("decodes the maximum 512x512 stored profile without an unbounded path", () => {
-    const width = 512;
-    const height = 512;
+  it("decodes exact authored geometry and payloads above the former limits", () => {
+    const width = 1_024;
+    const height = 513;
     const rgba = patternedRgba(width, height);
     const plan = validatePngProfile({
       png: makeTestPng({ width, height, rgba, compression: "stored" }),
       expectedWidth: width,
       expectedHeight: height
     });
+    expect(plan.byteRange.length).toBeGreaterThan(2 * 1024 * 1024);
     expect(decodePngRgba(plan).rgba).toEqual(rgba);
   });
 });

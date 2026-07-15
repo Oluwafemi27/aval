@@ -18,11 +18,11 @@ const MAX_REQUESTS = 128;
 export function m8HttpFixturePlugin(): Plugin {
   const paths = {
     "one-state": fileURLToPath(new URL(
-      "../../fixtures/conformance/m8/one-state-partial-loop.rma",
+      "../../fixtures/conformance/m8/one-state-partial-loop.avl",
       import.meta.url
     )),
     "user-states": fileURLToPath(new URL(
-      "../../fixtures/conformance/m8/user-states-all-routes-alpha.rma",
+      "../../fixtures/conformance/m8/user-states-all-routes-alpha.avl",
       import.meta.url
     ))
   } as const;
@@ -152,7 +152,7 @@ export function m8HttpFixturePlugin(): Plugin {
             ...(requireCredential ? { credentialPresent: true } : {})
           }));
           response.statusCode = status;
-          response.setHeader("Content-Type", "application/vnd.rendered-motion");
+          response.setHeader("Content-Type", "application/vnd.aval");
           response.setHeader("Content-Encoding", "identity");
           response.setHeader("Accept-Ranges", "bytes");
           response.setHeader("Cache-Control", "no-store");
@@ -185,7 +185,7 @@ export function m8HttpFixturePlugin(): Plugin {
   }
 
   return {
-    name: "rendered-motion-m8-http-fixture",
+    name: "aval-m8-http-fixture",
     enforce: "pre",
     async buildStart() {
       await loadAssets();
@@ -213,7 +213,7 @@ function crossOriginPort(server: ViteDevServer | PreviewServer): number {
 function hasCredentialSentinel(request: IncomingMessage): boolean {
   const cookie = header(request, "cookie");
   return cookie !== null && cookie.split(";").some((part) =>
-    part.trim() === "rma_m8_credential=present"
+    part.trim() === "aval_m8_credential=present"
   );
 }
 

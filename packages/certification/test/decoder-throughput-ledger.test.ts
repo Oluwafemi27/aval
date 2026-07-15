@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { evaluateDecoderThroughputLedger } from "../src/decoder-throughput-ledger.js";
 
-function validLedger(): unknown {
+function validLedger(
+  codec = "avc1.42E020",
+  profile = "avc-annexb-packed-alpha-v0"
+): unknown {
   const warmup = 24;
   const measured = 300;
   return {
@@ -11,8 +14,8 @@ function validLedger(): unknown {
     fixtureDigest: "b".repeat(64),
     selectedRendition: {
       id: "alpha.1x",
-      profile: "avc-annexb-packed-alpha-v0",
-      codec: "avc1.42E020",
+      profile,
+      codec,
       codedWidth: 64,
       codedHeight: 32,
       frameRateNumerator: 30,
@@ -59,6 +62,45 @@ function validLedger(): unknown {
 }
 
 describe("decoder throughput raw ledger", () => {
+  it.each([
+    "avc-annexb-packed-alpha-v0",
+    "avc-annexb-opaque-v0",
+    "avc-annexb-packed-alpha-v1",
+    "avc-annexb-opaque-v1"
+  ])("accepts production AVC profile %s", (profile) => {
+    const result = evaluateDecoderThroughputLedger(
+      validLedger("avc1.42E020", profile)
+    );
+    expect(result.ledger.selectedRendition.profile).toBe(profile);
+    expect(result.evaluation.passed).toBe(true);
+  });
+
+  it("rejects an unversioned AVC profile", () => {
+    expect(() => evaluateDecoderThroughputLedger(
+      validLedger("avc1.42E020", "avc-annexb-packed-alpha")
+    )).toThrow(/profile is invalid/u);
+  });
+
+  it.each([
+    "avc1.42E015",
+    "avc1.42E028",
+    "avc1.42E03E"
+  ])("accepts and preserves supported Constrained Baseline codec %s", (codec) => {
+    const result = evaluateDecoderThroughputLedger(validLedger(codec));
+    expect(result.ledger.selectedRendition.codec).toBe(codec);
+    expect(result.evaluation.passed).toBe(true);
+  });
+
+  it.each([
+    "avc1.640028",
+    "avc1.42E023",
+    "avc1.42e028"
+  ])("rejects unsupported or noncanonical codec %s", (codec) => {
+    expect(() => evaluateDecoderThroughputLedger(validLedger(codec))).toThrow(
+      /supported Constrained Baseline codec/u
+    );
+  });
+
   it("excludes warm-up and recomputes sample count, elapsed media time, and ratio", () => {
     const result = evaluateDecoderThroughputLedger(validLedger());
     expect(result.evaluation).toMatchObject({

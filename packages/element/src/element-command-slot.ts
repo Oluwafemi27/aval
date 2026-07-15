@@ -1,4 +1,4 @@
-import { renderedMotionAbortError } from "./errors.js";
+import { avalAbortError } from "./errors.js";
 import type {
   ElementOwnershipHandle,
   ElementOwnershipLedger
@@ -73,7 +73,7 @@ export class ElementCommandSlot<Key> {
       started: false
     };
     if (current !== null) {
-      current.reject(renderedMotionAbortError("element command was superseded"));
+      current.reject(avalAbortError("element command was superseded"));
     }
     void promise.catch(() => undefined);
     return Object.freeze({ key, promise, joined: false, accepted: true });
@@ -107,7 +107,7 @@ export class ElementCommandSlot<Key> {
     const entry = this.#entry;
     this.#entry = null;
     entry?.ownership?.complete();
-    entry?.reject(renderedMotionAbortError("element command was invalidated"));
+    entry?.reject(avalAbortError("element command was invalidated"));
   }
 
   #take(key: Key): CommandEntry<Key> | null {

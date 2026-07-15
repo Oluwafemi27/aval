@@ -3,7 +3,6 @@ import { FormatError } from "./errors.js";
 import {
   cloneBindings,
   cloneEdges,
-  cloneFallback,
   cloneReadiness,
   cloneStates
 } from "./manifest-graph-schema.js";
@@ -16,8 +15,7 @@ import {
 import {
   cloneCanvas,
   cloneFrameRate,
-  cloneRenditions,
-  cloneStaticFrames
+  cloneRenditions
 } from "./manifest-rendition-schema.js";
 import {
   exactKeys,
@@ -34,8 +32,7 @@ import type {
 
 const TOP_LEVEL_KEYS = [
   "formatVersion", "generator", "canvas", "frameRate", "renditions", "units",
-  "staticFrames", "initialState", "states", "edges", "bindings", "readiness",
-  "fallback", "limits"
+  "initialState", "states", "edges", "bindings", "readiness", "limits"
 ] as const;
 
 /**
@@ -60,23 +57,17 @@ export function validateCompiledManifestV01(
     const renditions = cloneRenditions(
       input.renditions,
       canvas,
+      frameRate,
       budgets,
       "renditions"
     );
-    validateRawBlobCount(input.units, input.staticFrames, renditions.length, budgets);
+    validateRawBlobCount(input.units, renditions.length, budgets);
     const units = cloneUnits(input.units, renditions, budgets, "units");
-    const staticFrames = cloneStaticFrames(
-      input.staticFrames,
-      canvas,
-      budgets,
-      "staticFrames"
-    );
     const initialState = identifier(input.initialState, "initialState");
     const states = cloneStates(input.states, budgets, "states");
     const edges = cloneEdges(input.edges, budgets, "edges");
     const bindings = cloneBindings(input.bindings, budgets, "bindings");
     const readiness = cloneReadiness(input.readiness, budgets, "readiness");
-    const fallback = cloneFallback(input.fallback, "fallback");
     const limits = cloneDeclaredLimits(
       input.limits,
       renditions,
@@ -85,12 +76,11 @@ export function validateCompiledManifestV01(
       "limits"
     );
 
-    validateBlobCount(units, renditions, staticFrames, budgets);
+    validateBlobCount(units, renditions, budgets);
     validateManifestRelations({
       initialState,
       renditions,
       units,
-      staticFrames,
       states,
       edges,
       bindings,
@@ -104,13 +94,11 @@ export function validateCompiledManifestV01(
       frameRate,
       renditions,
       units,
-      staticFrames,
       initialState,
       states,
       edges,
       bindings,
       readiness,
-      fallback,
       limits
     });
   } catch (error) {

@@ -2,13 +2,13 @@ import { expect, test } from "@playwright/test";
 
 test("multiple public elements remain bounded and every participant retires", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?resource-budget");
-  const existing = page.locator("rendered-motion").first();
+  const existing = page.locator("aval-player").first();
   await expect.poll(() => existing.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toMatch(/^(interactiveReady|staticReady)$/u);
   await page.evaluate(() => {
     for (let index = 0; index < 5; index += 1) {
-      const element = document.createElement("rendered-motion") as HTMLElement & {
+      const element = document.createElement("aval-player") as HTMLElement & {
         src: string;
         state: string | null;
       };
@@ -24,7 +24,7 @@ test("multiple public elements remain bounded and every participant retires", as
       document.body.append(element);
     }
   });
-  const players = page.locator("rendered-motion");
+  const players = page.locator("aval-player");
   await expect(players).toHaveCount(6);
   await expect.poll(() => players.evaluateAll((elements) => elements.map((element) =>
     (element as unknown as { readiness: string }).readiness

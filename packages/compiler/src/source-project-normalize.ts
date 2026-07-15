@@ -1,20 +1,27 @@
 import {
   FormatError,
   parseStrictJson
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { CompilerError } from "./diagnostics.js";
 import type {
   NormalizedSourceProject,
   SourceAlphaPolicy,
   SourceProjectV01,
-  SourceProjectV02
+  SourceProjectV02,
+  SourceProjectV03,
+  SourceRenditionTargetV02,
+  SourceRenditionTargetV03
 } from "./model.js";
 import { record } from "./schema-validation.js";
 import { validateSourceProjectV01 } from "./source-project-v01-schema.js";
 import { validateSourceProjectV02 } from "./source-project-v02-schema.js";
+import { validateSourceProjectV03 } from "./source-project-v03-schema.js";
 
-export type ParsedSourceProject = SourceProjectV01 | SourceProjectV02;
+export type ParsedSourceProject =
+  | SourceProjectV01
+  | SourceProjectV02
+  | SourceProjectV03;
 
 /** Parse strict JSON, dispatch one closed schema, then erase versioned shapes. */
 export function parseNormalizedSourceProject(
@@ -46,9 +53,10 @@ export function validateVersionedSourceProject(
   }
   if (input.projectVersion === "0.1") return validateSourceProjectV01(input);
   if (input.projectVersion === "0.2") return validateSourceProjectV02(input);
+  if (input.projectVersion === "0.3") return validateSourceProjectV03(input);
   throw new CompilerError(
     "INPUT_INVALID",
-    "project.projectVersion must be 0.1 or 0.2",
+    "project.projectVersion must be 0.1, 0.2, or 0.3",
     { field: "project.projectVersion" }
   );
 }
@@ -67,8 +75,18 @@ export function normalizeSourceProject(
         id: rendition.id,
         width: rendition.codedWidth,
         height: rendition.codedHeight,
-        bitrate: rendition.bitrate
+        avcProfileVersion: "v0" as const,
+        encoding: legacyEncoding(rendition.bitrate)
       }))
+    });
+  }
+  if (project.projectVersion === "0.2") {
+    return normalizedProject({
+      sourceProjectVersion: project.projectVersion,
+      alphaPolicy: profilePolicy(project.profile),
+      alphaPolicyRejectionCode: "ALPHA_POLICY_REJECTED",
+      project,
+      renditions: project.renditions.map(normalizeLegacyRendition)
     });
   }
   return normalizedProject({
@@ -76,19 +94,78 @@ export function normalizeSourceProject(
     alphaPolicy: profilePolicy(project.profile),
     alphaPolicyRejectionCode: "ALPHA_POLICY_REJECTED",
     project,
-    renditions: project.renditions
+    renditions: project.renditions.map(normalizeV03Rendition)
   });
 }
 
-function profilePolicy(profile: SourceProjectV02["profile"]): SourceAlphaPolicy {
+function profilePolicy(
+  profile: SourceProjectV02["profile"] | SourceProjectV03["profile"]
+): SourceAlphaPolicy {
   switch (profile) {
     case "avc-annexb-auto-v0":
+    case "avc-annexb-auto-v1":
       return "auto";
     case "avc-annexb-opaque-v0":
+    case "avc-annexb-opaque-v1":
       return "opaque";
     case "avc-annexb-packed-alpha-v0":
+    case "avc-annexb-packed-alpha-v1":
       return "packed";
   }
+}
+
+function normalizeLegacyRendition(
+  rendition: Readonly<SourceRenditionTargetV02>
+): NormalizedSourceProject["renditions"][number] {
+  return Object.freeze({
+    id: rendition.id,
+    width: rendition.width,
+    height: rendition.height,
+    avcProfileVersion: "v0" as const,
+    encoding: legacyEncoding(rendition.bitrate)
+  });
+}
+
+function legacyEncoding(
+  bitrate: Readonly<SourceRenditionTargetV02["bitrate"]>
+): NormalizedSourceProject["renditions"][number]["encoding"] {
+  return Object.freeze({
+    codec: "h264" as const,
+    preset: "medium" as const,
+    legacyZeroLatency: true,
+    rateControl: Object.freeze({
+      mode: "abr" as const,
+      averageBitrate: bitrate.average,
+      maxBitrate: bitrate.peak
+    })
+  });
+}
+
+function normalizeV03Rendition(
+  rendition: Readonly<SourceRenditionTargetV03>
+): NormalizedSourceProject["renditions"][number] {
+  return Object.freeze({
+    id: rendition.id,
+    width: rendition.width,
+    height: rendition.height,
+    avcProfileVersion: "v1" as const,
+    encoding: Object.freeze({
+      codec: rendition.encoding.codec,
+      preset: rendition.encoding.preset,
+      legacyZeroLatency: false,
+      rateControl: rendition.encoding.rateControl.mode === "abr"
+        ? Object.freeze({
+            mode: "abr" as const,
+            averageBitrate: rendition.encoding.rateControl.averageBitrate,
+            maxBitrate: rendition.encoding.rateControl.maxBitrate
+          })
+        : Object.freeze({
+            mode: "crf" as const,
+            crf: rendition.encoding.rateControl.crf,
+            maxBitrate: rendition.encoding.rateControl.maxBitrate
+          })
+    })
+  });
 }
 
 function normalizedProject(input: {

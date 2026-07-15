@@ -1,8 +1,8 @@
 import type {
   MotionGraphReadiness,
   MotionGraphResult
-} from "@rendered-motion/graph";
-import type { ValidatedAssetLayout } from "@rendered-motion/format";
+} from "@aval/graph";
+import type { ValidatedAssetLayout } from "@aval/format";
 
 import {
   RUNTIME_TRACE_CAPACITY,
@@ -28,10 +28,8 @@ import {
   RendererUploadTimeoutError,
   RuntimeAssetCatalog,
   RuntimePlaybackError,
-  StaticSurfaceDecodeTimeoutError,
-  UNSUPPORTED_NATIVE_INFLATER,
+  StateFallbackStore,
   createBrowserAvcCandidateComposition,
-  createBrowserPngNativeInflater,
   createBrowserOpaqueCandidateComposition,
   createAvcRenditionCandidates,
   createPlayerRuntimeAssetSessionResources,
@@ -51,6 +49,7 @@ import {
   type DecoderWorkerSample,
   type ManagedDecoderWorkerFrame,
   type IntegratedContentTickResult,
+  type IntegratedFallbackStore,
   type IntegratedPlayerOptions,
   type IntegratedPlayerContextSnapshot,
   type IntegratedRealtimeDriverOptions,
@@ -78,9 +77,6 @@ import {
   type BrowserOpaqueCandidateCompositionOptions,
   type BrowserOpaqueCandidateControls,
   type BrowserOpaqueFrameBackendOptions,
-  type BrowserPngNativeInflater,
-  type BrowserStaticSurfaceDecoderOptions,
-  type BrowserStaticSurfaceDecoderSnapshot,
   type FrameRendererOptions,
   type FrameRendererSnapshot,
   type FrameRendererTimerHost,
@@ -108,7 +104,6 @@ import {
   type RuntimeLoaderPolicy,
   type RuntimeCandidateReport,
   type RuntimeCatalogAccessUnit,
-  type RuntimeCatalogStaticFrame,
   type RuntimeFailure,
   type RuntimeFrameKey,
   type RuntimeMediaPresentation,
@@ -134,7 +129,7 @@ import {
   type RuntimeTraceRecord,
   type RuntimeVisibilitySnapshot,
   type RuntimeVisibilityState,
-  type StaticPngInflatePath,
+  type StateFallbackStoreOptions,
   type StaticReason,
   type VisibilityPolicyTransition
 } from "../index.js";
@@ -163,7 +158,6 @@ const avcCandidateFactory: typeof createAvcRenditionCandidates =
 const avcInspector: typeof inspectAvcRenditionCandidate =
   inspectAvcRenditionCandidate;
 const catalogEntry = null as unknown as RuntimeCatalogAccessUnit;
-const staticEntry = null as unknown as RuntimeCatalogStaticFrame;
 const opaqueCandidate = null as unknown as RuntimeOpaqueRenditionCandidate;
 const opaqueInspection = null as unknown as RuntimeOpaqueRenditionInspection;
 const avcCandidate = null as unknown as RuntimeAvcRenditionCandidate;
@@ -218,6 +212,9 @@ const opaqueFactoryConstructor: typeof OpaqueCandidateFactory =
 const compatibleOpaqueFactory: typeof AvcCandidateFactory =
   OpaqueCandidateFactory;
 const integratedOptions = null as unknown as IntegratedPlayerOptions;
+const fallbackStore = null as unknown as IntegratedFallbackStore;
+const fallbackStoreConstructor: typeof StateFallbackStore = StateFallbackStore;
+const fallbackStoreOptions = null as unknown as StateFallbackStoreOptions;
 const integratedRealtimeOptions = null as unknown as IntegratedRealtimeDriverOptions;
 const opaqueFactoryOptions = null as unknown as OpaqueCandidateFactoryOptions;
 const avcFactoryOptions: AvcCandidateFactoryOptions = opaqueFactoryOptions;
@@ -258,18 +255,8 @@ const browserBackendOptions = null as unknown as BrowserOpaqueFrameBackendOption
 const rendererOptions = null as unknown as FrameRendererOptions;
 const rendererSnapshot = null as unknown as FrameRendererSnapshot;
 const frameRendererTimer = null as unknown as FrameRendererTimerHost;
-const staticDecoderOptions =
-  null as unknown as BrowserStaticSurfaceDecoderOptions;
-const staticDecoderSnapshot =
-  null as unknown as BrowserStaticSurfaceDecoderSnapshot;
-const nativeInflaterFactory: typeof createBrowserPngNativeInflater =
-  createBrowserPngNativeInflater;
-const nativeInflater: Readonly<BrowserPngNativeInflater> =
-  UNSUPPORTED_NATIVE_INFLATER;
-const inflatePath = null as unknown as StaticPngInflatePath;
 const rendererTimer = null as unknown as OpaqueFrameRendererTimerHost;
 const uploadTimeout: Error = new RendererUploadTimeoutError(1);
-const staticTimeout: Error = new StaticSurfaceDecodeTimeoutError(1);
 
 // M7's package-root composition surface is sufficient for M8 without access
 // to accounting bridges or manager-owned maps.
@@ -387,10 +374,6 @@ void packageApi.createPlayerBlobAssemblyResourceHost;
 void packageApi.createPlayerVerifiedBlobResourceHost;
 // @ts-expect-error candidate accounting is available only through the closed bundle
 void packageApi.createPlayerCandidateResourceAuthority;
-// @ts-expect-error static PNG accounting is available only through the closed bundle
-void packageApi.createPlayerStaticDecoderResourceHost;
-// @ts-expect-error decoded-static accounting is available only through the closed bundle
-void packageApi.createPlayerStaticSurfaceResourceHost;
 // @ts-expect-error canvas accounting is available only through the closed bundle
 void packageApi.createPlayerCanvasBackingResourceHost;
 // @ts-expect-error sparse-store construction remains session-owned
@@ -399,10 +382,6 @@ void packageApi.VerifiedBlobStore;
 void packageApi.RUNTIME_CATALOG_AVC_INSPECTION;
 // @ts-expect-error borrowed AVC backing orchestration remains internal
 void packageApi.inspectBorrowedAvcRendition;
-// @ts-expect-error leased static-copy capabilities remain store-owned
-void packageApi.LEASED_STATIC_PNG_DECODER;
-// @ts-expect-error leased static decoder capture remains internal
-void packageApi.captureLeasedStaticPngDecoder;
 // @ts-expect-error range transport construction remains session-owned
 void packageApi.openRangeAssetSession;
 // @ts-expect-error bounded readers remain behind the asset-session API
@@ -411,12 +390,12 @@ void packageApi.readBoundedBody;
 void packageApi.verifySha256AndPromote;
 
 const assetRequest: RuntimeAssetRequest = {
-  url: "https://example.test/motion.rma",
+  url: "https://example.test/motion.avl",
   integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
   credentials: "same-origin"
 };
 const requestWithUnknownField: RuntimeAssetRequest = {
-  url: "https://example.test/motion.rma",
+  url: "https://example.test/motion.avl",
   // @ts-expect-error asset requests do not expose transport header overrides
   headers: { Range: "bytes=0-63" }
 };
@@ -472,7 +451,6 @@ void inspector;
 void avcCandidateFactory;
 void avcInspector;
 void catalogEntry;
-void staticEntry;
 void opaqueCandidate;
 void opaqueInspection;
 void avcCandidate;
@@ -500,6 +478,9 @@ void avcFactoryConstructor;
 void opaqueFactoryConstructor;
 void compatibleOpaqueFactory;
 void integratedOptions;
+void fallbackStore;
+void fallbackStoreConstructor;
+void fallbackStoreOptions;
 void integratedRealtimeOptions;
 void opaqueFactoryOptions;
 void avcFactoryOptions;
@@ -526,14 +507,8 @@ void browserBackendOptions;
 void rendererOptions;
 void rendererSnapshot;
 void frameRendererTimer;
-void staticDecoderOptions;
-void staticDecoderSnapshot;
-void nativeInflaterFactory;
-void nativeInflater;
-void inflatePath;
 void rendererTimer;
 void uploadTimeout;
-void staticTimeout;
 void assetRequest;
 void requestWithUnknownField;
 void policyWithUnknownField;

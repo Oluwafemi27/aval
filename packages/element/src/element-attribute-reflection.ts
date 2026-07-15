@@ -12,11 +12,11 @@ import {
   readElementConfiguration
 } from "./element-configuration.js";
 import type {
-  RenderedMotionAutoplay,
-  RenderedMotionBindings,
-  RenderedMotionCrossOrigin,
-  RenderedMotionFit,
-  RenderedMotionMotion
+  AvalAutoplay,
+  AvalBindings,
+  AvalCrossOrigin,
+  AvalFit,
+  AvalMotion
 } from "./public-types.js";
 
 /** Realm-independent reflected attribute normalization. */
@@ -30,26 +30,26 @@ export class ElementAttributeReflection {
   public set integrity(value: string) {
     this.#optional("integrity", normalizeIntegrity(value));
   }
-  public get crossOrigin(): RenderedMotionCrossOrigin { return this.#read().crossOrigin; }
-  public set crossOrigin(value: RenderedMotionCrossOrigin) {
+  public get crossOrigin(): AvalCrossOrigin { return this.#read().crossOrigin; }
+  public set crossOrigin(value: AvalCrossOrigin) {
     this.#host.setAttribute("crossorigin", normalizeCrossOrigin(value));
   }
-  public get motion(): RenderedMotionMotion { return this.#read().motion; }
-  public set motion(value: RenderedMotionMotion) {
+  public get motion(): AvalMotion { return this.#read().motion; }
+  public set motion(value: AvalMotion) {
     this.#host.setAttribute("motion", normalizeMotion(value));
   }
-  public get autoplay(): RenderedMotionAutoplay { return this.#read().autoplay; }
-  public set autoplay(value: RenderedMotionAutoplay) {
+  public get autoplay(): AvalAutoplay { return this.#read().autoplay; }
+  public set autoplay(value: AvalAutoplay) {
     this.#host.setAttribute("autoplay", normalizeAutoplay(value));
   }
-  public get fit(): RenderedMotionFit | null { return this.#read().fit; }
-  public set fit(value: RenderedMotionFit | null) {
+  public get fit(): AvalFit | null { return this.#read().fit; }
+  public set fit(value: AvalFit | null) {
     const checked = normalizeFit(value);
     if (checked === null) this.#host.removeAttribute("fit");
     else this.#host.setAttribute("fit", checked);
   }
-  public get bindings(): RenderedMotionBindings { return this.#read().bindings; }
-  public set bindings(value: RenderedMotionBindings) {
+  public get bindings(): AvalBindings { return this.#read().bindings; }
+  public set bindings(value: AvalBindings) {
     this.#host.setAttribute("bindings", normalizeBindings(value));
   }
   public get state(): string | null { return this.#read().state; }

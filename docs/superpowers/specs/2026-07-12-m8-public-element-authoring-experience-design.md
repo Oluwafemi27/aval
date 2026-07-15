@@ -2,13 +2,13 @@
 
 **Date:** 2026-07-12
 
-**Status:** Approved implementation slice derived from the committed web
-rendered-motion design and the approved M4-M7 contracts
+**Status:** Approved implementation slice derived from the committed AVAL
+design and the approved M4-M7 contracts
 
 **Authority:**
 
-- [Web Rendered Motion Format Design](2026-07-11-web-rendered-motion-format-design.md)
-- [Web Rendered Motion Implementation Plan](../plans/2026-07-11-web-rendered-motion-implementation.md)
+- [AVAL Format Design](2026-07-11-aval-format-design.md)
+- [AVAL Implementation Plan](../plans/2026-07-11-aval-implementation.md)
 - [M5.5 Integrated Scheduler and Readiness Design](2026-07-12-m55-integrated-scheduler-readiness-design.md)
 - [M6 Transparency and Static Fallback Design](2026-07-12-m6-transparency-static-fallback-design.md)
 - [M7 Loader, Integrity, and Resource Manager Design](2026-07-12-m7-loader-integrity-resource-manager-design.md)
@@ -50,7 +50,7 @@ M8 proves that:
   examples, and failure messages form one coherent first-use experience.
 
 The compiled wire format remains exactly `0.1`. The package name
-`@rendered-motion/element`, tag name `rendered-motion`, and `.rma` extension are
+`@aval/element`, tag name `aval-player`, and `.avl` extension are
 prototype identifiers until product naming is complete. M8 does not claim a
 permanent name, framework-specific wrapper, mobile animation certification,
 or named-device smoothness. M9 owns CI publication and certification evidence.
@@ -92,9 +92,9 @@ The fixed version-0.1 binding-source union remains the only automatic bridge.
 ### 2.3 Provide explicit registration plus an opt-in auto entry
 
 The package root has no registration side effect and is safe to import in an
-SSR process. It exports `defineRenderedMotionElement()` and public types.
+SSR process. It exports `defineAvalElement()` and public types.
 Calling the function in a browser registers the prototype tag. A
-separate `@rendered-motion/element/auto` entry registers it immediately for a
+separate `@aval/element/auto` entry registers it immediately for a
 CDN or simple client-only module import.
 
 Automatic root registration was rejected because it makes SSR imports fail,
@@ -103,7 +103,7 @@ when browser globals are touched. Requiring every user to subclass or manually
 wire the runtime was also rejected as needless ceremony.
 
 The definition helper registers only the fixed prototype tag
-`rendered-motion`. A repeated definition made by this package returns the
+`aval-player`. A repeated definition made by this package returns the
 existing constructor. A tag already owned by unrelated code fails with a
 bounded `NotSupportedError`; it is never silently replaced. Product naming and
 any future migration or alias policy require their own release decision rather
@@ -143,15 +143,15 @@ the element another authoring language.
 
 ## 3. Package Authority and Internal Layers
 
-M8 adds `packages/element`. It depends on `@rendered-motion/player-web`; no
+M8 adds `packages/element`. It depends on `@aval/player-web`; no
 lower-level package depends on it.
 
 ```text
-@rendered-motion/format       compiled 0.1 schema and binding sources
-@rendered-motion/graph        deterministic state/request semantics
-@rendered-motion/player-web   M6/M7 loader, player, policy, resource owners
+@aval/format       compiled 0.1 schema and binding sources
+@aval/graph        deterministic state/request semantics
+@aval/player-web   M6/M7 loader, player, policy, resource owners
              ↑
-@rendered-motion/element
+@aval/element
   registration and SSR-safe entries
   attribute/property configuration
   asset-generation lifecycle
@@ -228,13 +228,13 @@ The default zero-configuration path is:
 
 ```html
 <script type="module">
-  import { defineRenderedMotionElement } from "@rendered-motion/element";
-  defineRenderedMotionElement();
+  import { defineAvalElement } from "@aval/element";
+  defineAvalElement();
 </script>
 
-<rendered-motion src="/assets/orbit.rma">
+<aval-player src="/assets/orbit.avl">
   <img slot="fallback" src="/assets/orbit.png" alt="">
-</rendered-motion>
+</aval-player>
 ```
 
 Connection starts metadata/static preparation automatically. If the asset is
@@ -300,19 +300,19 @@ in DOM event details or diagnostic snapshots.
 The public package exports types equivalent to:
 
 ```ts
-type RenderedMotionAutoplay = "visible" | "manual";
-type RenderedMotionBindings = "auto" | "none";
-type RenderedMotionCrossOrigin = "anonymous" | "use-credentials";
-type RenderedMotionFit = "contain" | "cover" | "fill" | "none";
+type AvalAutoplay = "visible" | "manual";
+type AvalBindings = "auto" | "none";
+type AvalCrossOrigin = "anonymous" | "use-credentials";
+type AvalFit = "contain" | "cover" | "fill" | "none";
 
-interface RenderedMotionElement extends HTMLElement {
+interface AvalElement extends HTMLElement {
   src: string;
   integrity: string;
-  crossOrigin: RenderedMotionCrossOrigin;
+  crossOrigin: AvalCrossOrigin;
   motion: "auto" | "reduce" | "full";
-  autoplay: RenderedMotionAutoplay;
-  fit: RenderedMotionFit | null;
-  bindings: RenderedMotionBindings;
+  autoplay: AvalAutoplay;
+  fit: AvalFit | null;
+  bindings: AvalBindings;
   state: string | null;
   interactionFor: string;
   interactionTarget: Element | null;
@@ -340,7 +340,7 @@ interface RenderedMotionElement extends HTMLElement {
   pause(): void;
   resume(): Promise<void>;
   getDiagnostics(options?: { trace?: boolean }):
-    Readonly<RenderedMotionDiagnostics>;
+    Readonly<AvalDiagnostics>;
   dispose(): Promise<void>;
 }
 ```
@@ -359,7 +359,7 @@ the motion element. Cross-document and cross-shadow-root targets reject.
 
 The package supplies `HTMLElementTagNameMap` typing for the default prototype
 tag plus typed `addEventListener` overloads. It exports a framework-neutral
-`RenderedMotionElementAttributes` type, but it does not depend on React types
+`AvalElementAttributes` type, but it does not depend on React types
 or globally augment a framework's JSX namespace.
 
 ### 6.1 Preparation and readiness
@@ -516,13 +516,13 @@ control wrapper, `interaction-for` points to a semantic same-root element:
 
 ```html
 <button id="favorite" type="button" aria-pressed="false">
-  <rendered-motion
-    src="/favorite.rma"
+  <aval-player
+    src="/favorite.avl"
     interaction-for="favorite"
     aria-hidden="true"
   >
     <img slot="fallback" src="/favorite.png" alt="">
-  </rendered-motion>
+  </aval-player>
   <span class="sr-only">Favorite</span>
 </button>
 ```
@@ -594,7 +594,11 @@ that reduced motion is false as a certification fact.
 Reduced mode never starts or advances an infinite body loop. State requests,
 automatic bindings, and events still work by atomically swapping strict
 per-state statics. Returning to full motion uses the M6 fresh body-frame-zero
-re-entry and never replays the initial intro.
+re-entry after the intro has already reached its body. A fresh source whose
+first animated activation follows initial static preparation still starts at
+intro frame zero. Re-entry restarts an unfinished intro, while an intro that
+already joined the body is never replayed. An explicit noninitial state commit
+in static mode waives that pending intro.
 
 ## 10. Visibility, Autoplay, and Playback Intent
 
@@ -631,8 +635,9 @@ can load bounded metadata and the current strict static while hidden without a
 decoder lease. Entering view rebuilds animation behind the static cover before
 logical time begins. Leaving view freezes the exact content ordinal, covers
 static, cancels animation callbacks, and releases reclaimable animation
-resources. Re-entry starts the current semantic body's frame zero without
-wall-time catch-up or intro replay.
+resources. Re-entry restarts an unfinished intro at frame zero; otherwise it
+starts the current semantic body's frame zero without wall-time catch-up or
+intro replay.
 
 Document `visibilitychange`, `pagehide`, viewport intersection, autoplay, and
 manual calls enter one coalesced controller lane. `pageshow` after a
@@ -651,7 +656,7 @@ is present the other dimension follows the known aspect ratio.
 Authors should set dimensions in CSS for responsive layouts:
 
 ```css
-rendered-motion {
+aval-player {
   width: clamp(3rem, 10vw, 8rem);
   aspect-ratio: 1;
 }
@@ -797,12 +802,12 @@ a fatal application error.
 
 ## 16. npm, CDN, and Build Ergonomics
 
-`@rendered-motion/element` is built as publish-ready ESM with declarations, the
+`@aval/element` is built as publish-ready ESM with declarations, the
 module worker asset, and explicit package exports:
 
 ```text
-@rendered-motion/element       SSR-safe types and definition helper
-@rendered-motion/element/auto  browser-only default-tag registration
+@aval/element       SSR-safe types and definition helper
+@aval/element/auto  browser-only default-tag registration
 ```
 
 The root is side-effect-free. The auto entry is marked as the sole intentional
@@ -818,7 +823,7 @@ the browser's supported component-style mechanism may reduce enhancement but
 must leave the light-DOM fallback usable.
 
 The CDN guide pins an exact package version and imports `/auto`. The npm guide
-uses explicit definition. Hosting documentation includes correct `.rma`
+uses explicit definition. Hosting documentation includes correct `.avl`
 content type guidance, byte ranges, identity encoding, strong ETag, CORS,
 credentialed CORS, CSP `worker-src`/`connect-src`, and optional external asset
 integrity. It explains that external integrity intentionally disables range
@@ -840,7 +845,7 @@ paths.
 The direct path remains frame-canonical:
 
 ```text
-rma compile input.mov --loop 48:96 --out orbit.rma
+avl compile input.mov --loop 48:96 --out orbit.avl
 ```
 
 It produces one state named `idle`, an optional intro `[0, 48)`, a closed body
@@ -865,7 +870,7 @@ sentence. Terminal text is escaped and never interpreted as control sequences.
 
 ### 17.2 User-defined states and starter project
 
-`rma init <directory>` creates a small idle/hover project with:
+`avl init <directory>` creates a small idle/hover project with:
 
 - project schema `0.2` and comments in an adjacent guide, not invalid JSON;
 - licensed/generated RGBA sample frames and recorded provenance;
@@ -881,7 +886,7 @@ special hard-coded hover template inside the runtime.
 
 ### 17.3 Watch playground
 
-`rma dev project.json` watches source/project files, compiles to a temporary
+`avl dev project.json` watches source/project files, compiles to a temporary
 file, validates the complete result, and atomically publishes only successful
 bytes. The browser keeps the last valid generation while an invalid edit is
 reported. A successful compile replaces `src` with a cache-busted local URL so
@@ -954,7 +959,7 @@ script, fetch response, GL object, graph definition, or resource lease.
 Ownership is hierarchical:
 
 ```text
-RenderedMotionElement
+AvalElement
   -> configuration/input/visibility/resize subscriptions
   -> active ElementAssetGeneration
       -> root abort and source-scoped waits
@@ -1032,7 +1037,7 @@ queues, trace arrays, and allocation terms retain explicit caps.
 
 ### 21.2 Real browser proof
 
-The M8 browser proof imports only `@rendered-motion/element` public entries and
+The M8 browser proof imports only `@aval/element` public entries and
 uses real custom-element upgrade, HTTP M7 loading, worker WebCodecs, WebGL2,
 Canvas2D statics, observers, media query, and input events. It covers:
 

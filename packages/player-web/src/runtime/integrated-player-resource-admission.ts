@@ -14,16 +14,15 @@ import {
 } from "./integrated-player-asset-session.js";
 import {
   captureRuntimeCanvasResourceHost,
-  createStaticRuntimeResourcePlan,
+  createCanvasRuntimeResourcePlan,
   type RuntimeCanvasResourceHost,
-  type RuntimeCanvasResourceLease,
-  type RuntimeStaticResourceCatalogView
-} from "./static-resource-plan.js";
+  type RuntimeCanvasResourceLease
+} from "./canvas-resource-plan.js";
 
 export interface IntegratedPlayerResourceAdmission {
   readonly catalog: RuntimeAssetCatalog;
   readonly hostMaxRuntimeBytes: number | null;
-  readonly staticResourceLease: RuntimeCanvasResourceLease | null;
+  readonly canvasResourceLease: RuntimeCanvasResourceLease | null;
 }
 
 export interface IntegratedPlayerSourceAdmission {
@@ -67,14 +66,14 @@ export function admitIntegratedPlayerAssetSource(input: Readonly<{
     if (binding !== null) {
       void binding.dispose();
     } else if (resources !== null) {
-      try { resources.staticResourceLease?.release(); } catch {}
+      try { resources.canvasResourceLease?.release(); } catch {}
       if (input.source.kind === "bytes") resources.catalog.dispose();
     }
     throw error;
   }
 }
 
-/** Admit owned bytes and the complete static peak as one constructor transaction. */
+/** Admit owned bytes and the animated backing as one constructor transaction. */
 export function admitIntegratedPlayerResources(input: Readonly<{
   readonly bytes: Uint8Array;
   readonly candidateFactory: IntegratedCandidateFactory;
@@ -98,9 +97,9 @@ export function admitIntegratedPlayerResources(input: Readonly<{
   const resourceHost = captureCanvasResourceHost(input.candidateFactory);
 
   const catalog = installRuntimeAssetCatalog(input.bytes);
-  let staticResourceLease: RuntimeCanvasResourceLease | null = null;
+  let canvasResourceLease: RuntimeCanvasResourceLease | null = null;
   try {
-    const staticResourcePlan = createStaticRuntimeResourcePlan({
+    const canvasResourcePlan = createCanvasRuntimeResourcePlan({
       catalog,
       ...(hostMaxRuntimeBytes === null ? {} : { hostMaxRuntimeBytes }),
       ...(resourceHost === null
@@ -108,32 +107,30 @@ export function admitIntegratedPlayerResources(input: Readonly<{
         : { canvasBacking: resourceHost.currentCanvasBacking() })
     });
     if (resourceHost !== null) {
-      staticResourceLease = resourceHost.reserveCanvasResources(
-        staticResourcePlan
+      canvasResourceLease = resourceHost.reserveCanvasResources(
+        canvasResourcePlan
       );
     }
     return Object.freeze({
       catalog,
       hostMaxRuntimeBytes,
-      staticResourceLease
+      canvasResourceLease
     });
   } catch (error) {
     try {
-      staticResourceLease?.release();
+      canvasResourceLease?.release();
     } catch {
       // Cleanup cannot replace the admission result.
     }
     catalog.dispose();
     if (error instanceof RuntimePlaybackError) throw error;
-    throw resourceAdmissionError("static-resource-admission");
+    throw resourceAdmissionError("canvas-resource-admission");
   }
 }
 
 /**
  * Sparse sessions already own and account their catalog bytes. Player
- * admission borrows that catalog. A conservative metadata-only PNG view keeps
- * legacy canvas-plan admission ahead of decode; exact M7 hosts still reserve
- * each actual PNG/surface/canvas allocation independently.
+ * admission borrows that catalog and reserves only its animated backing.
  */
 export function admitIntegratedPlayerSessionResources(input: Readonly<{
   readonly catalog: RuntimeAssetCatalog;
@@ -158,58 +155,30 @@ export function admitIntegratedPlayerSessionResources(input: Readonly<{
     throw resourceAdmissionError("asset-catalog-admission");
   }
   const resourceHost = captureCanvasResourceHost(input.candidateFactory);
-  let staticResourceLease: RuntimeCanvasResourceLease | null = null;
+  let canvasResourceLease: RuntimeCanvasResourceLease | null = null;
   try {
-    const staticResourcePlan = createStaticRuntimeResourcePlan({
-      catalog: createConservativeSparseStaticCatalog(input.catalog),
+    const canvasResourcePlan = createCanvasRuntimeResourcePlan({
+      catalog: input.catalog,
       ...(hostMaxRuntimeBytes === null ? {} : { hostMaxRuntimeBytes }),
       ...(resourceHost === null
         ? {}
         : { canvasBacking: resourceHost.currentCanvasBacking() })
     });
     if (resourceHost !== null) {
-      staticResourceLease = resourceHost.reserveCanvasResources(
-        staticResourcePlan
+      canvasResourceLease = resourceHost.reserveCanvasResources(
+        canvasResourcePlan
       );
     }
     return Object.freeze({
       catalog: input.catalog,
       hostMaxRuntimeBytes,
-      staticResourceLease
+      canvasResourceLease
     });
   } catch (error) {
-    try { staticResourceLease?.release(); } catch {}
+    try { canvasResourceLease?.release(); } catch {}
     if (error instanceof RuntimePlaybackError) throw error;
-    throw resourceAdmissionError("static-resource-admission");
+    throw resourceAdmissionError("canvas-resource-admission");
   }
-}
-
-function createConservativeSparseStaticCatalog(
-  catalog: RuntimeAssetCatalog
-): RuntimeStaticResourceCatalogView {
-  const entries = catalog.staticFrames.values().map(({ frame, range }) => {
-    const expectedFilteredBytes = frame.height * (1 + frame.width * 4);
-    const expectedRgbaBytes = frame.width * frame.height * 4;
-    return Object.freeze({
-      frame,
-      range,
-      png: Object.freeze({
-        width: frame.width,
-        height: frame.height,
-        byteRange: Object.freeze({ offset: 0, length: range.length }),
-        zlibByteLength: range.length,
-        expectedFilteredBytes,
-        expectedRgbaBytes
-      })
-    });
-  });
-  return Object.freeze({
-    ownedByteLength: catalog.ownedByteLength,
-    manifest: catalog.manifest,
-    staticFrames: Object.freeze({
-      values: () => Object.freeze(entries.slice())
-    })
-  });
 }
 
 function captureCanvasResourceHost(
@@ -221,7 +190,7 @@ function captureCanvasResourceHost(
     return captureRuntimeCanvasResourceHost(host);
   } catch (error) {
     if (error instanceof RuntimePlaybackError) throw error;
-    throw resourceAdmissionError("static-resource-admission");
+    throw resourceAdmissionError("canvas-resource-admission");
   }
 }
 

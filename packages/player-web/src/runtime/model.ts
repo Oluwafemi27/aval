@@ -4,7 +4,7 @@ import type {
   MotionGraphOperation,
   MotionGraphReadiness,
   MotionGraphSnapshot
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import {
   normalizeRuntimeFailure,
@@ -61,6 +61,7 @@ export const STATIC_REASONS = Object.freeze([
   "readiness-failed",
   "preparation-timeout",
   "animation-failure",
+  "fallback-failure",
   "visibility-suspended",
   "decoder-queued"
 ] as const);
@@ -87,6 +88,7 @@ export const STATIC_REASON_CLASSIFICATIONS: Readonly<
   "readiness-failed": "sticky",
   "preparation-timeout": "sticky",
   "animation-failure": "sticky",
+  "fallback-failure": "sticky",
   "visibility-suspended": "transient",
   "decoder-queued": "transient"
 });
@@ -163,7 +165,6 @@ export interface RuntimeAssetResidencySnapshot {
   readonly metadataBytes: number;
   readonly verifiedPayloadBytes: number;
   readonly unitBlobs: Readonly<RuntimeBlobResidencySnapshot>;
-  readonly staticBlobs: Readonly<RuntimeBlobResidencySnapshot>;
 }
 
 export const RUNTIME_BYTE_CATEGORIES = Object.freeze([
@@ -173,20 +174,12 @@ export const RUNTIME_BYTE_CATEGORIES = Object.freeze([
   "quarantine",
   "blob-assembly",
   "verified-unit",
-  "verified-static",
   "worker-transfer",
   "decoder-output",
   "persistent-animation",
   "streaming-texture",
   "frame-staging",
-  "png-copy",
-  "png-zlib",
-  "png-scratch",
-  "decoded-static-cache",
-  "current-static-surface",
-  "incoming-static-surface",
   "animated-canvas-backing",
-  "static-canvas-backing"
 ] as const);
 
 export type RuntimeByteCategory = (typeof RUNTIME_BYTE_CATEGORIES)[number];
@@ -304,7 +297,6 @@ export interface RuntimeDecoderLease {
 }
 
 export type RuntimeReclamationReason =
-  | "decoded-static"
   | "abandoned-animation"
   | "hidden-animation"
   | "optional-cache"
@@ -515,8 +507,7 @@ export type RuntimeMediaPresentation =
   | {
       readonly kind: "static";
       readonly state: string;
-      readonly staticFrame: string;
-      readonly drawSource: "static";
+      readonly drawSource: "fallback";
     }
   | {
       readonly kind: "frame";

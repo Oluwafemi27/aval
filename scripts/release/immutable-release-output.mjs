@@ -8,7 +8,7 @@ export async function prepareImmutableReleaseSetOutput({ output, index }) {
   if (basename(finalOutput) !== "packages" || dirname(finalIndex) !== targetRoot || basename(finalIndex) !== "package-index.json") throw new Error("release package output and index must use one canonical atomic release-set root");
   await requireAbsent(targetRoot, "release-set output root");
   await mkdir(dirname(targetRoot), { recursive: true });
-  const temporaryRoot = await mkdtemp(join(dirname(targetRoot), ".rendered-motion-release-set-"));
+  const temporaryRoot = await mkdtemp(join(dirname(targetRoot), ".aval-release-set-"));
   const stagedRoot = join(temporaryRoot, "release-set");
   const stagedOutput = join(stagedRoot, "packages");
   const stagedIndex = join(stagedRoot, "package-index.json");

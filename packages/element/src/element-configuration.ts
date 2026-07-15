@@ -1,14 +1,14 @@
 import type {
-  RenderedMotionAutoplay,
-  RenderedMotionBindings,
-  RenderedMotionCrossOrigin,
-  RenderedMotionFit,
-  RenderedMotionMotion
+  AvalAutoplay,
+  AvalBindings,
+  AvalCrossOrigin,
+  AvalFit,
+  AvalMotion
 } from "./public-types.js";
 
 export const MAX_ELEMENT_URL_CODE_UNITS = 4_096;
 export const MAX_INTERACTION_ID_CODE_UNITS = 256;
-export const MAX_ELEMENT_SIZE_HINT = 16_384;
+const MAX_SAFE_INTEGER_DECIMAL_DIGITS = String(Number.MAX_SAFE_INTEGER).length;
 const IDENTIFIER_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/u;
 const EXTERNAL_INTEGRITY_PATTERN = /^sha256-([A-Za-z0-9+/]{43})=$/u;
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -16,11 +16,11 @@ const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 export interface ElementConfiguration {
   readonly src: string;
   readonly integrity: string;
-  readonly crossOrigin: RenderedMotionCrossOrigin;
-  readonly motion: RenderedMotionMotion;
-  readonly autoplay: RenderedMotionAutoplay;
-  readonly fit: RenderedMotionFit | null;
-  readonly bindings: RenderedMotionBindings;
+  readonly crossOrigin: AvalCrossOrigin;
+  readonly motion: AvalMotion;
+  readonly autoplay: AvalAutoplay;
+  readonly fit: AvalFit | null;
+  readonly bindings: AvalBindings;
   readonly state: string | null;
   readonly interactionFor: string;
   readonly width: number | null;
@@ -146,24 +146,24 @@ export function normalizeIntegrity(value: unknown): string {
   return value;
 }
 
-export function normalizeCrossOrigin(value: unknown): RenderedMotionCrossOrigin {
+export function normalizeCrossOrigin(value: unknown): AvalCrossOrigin {
   return normalizeEnum(value, CROSS_ORIGINS, "crossOrigin");
 }
 
-export function normalizeMotion(value: unknown): RenderedMotionMotion {
+export function normalizeMotion(value: unknown): AvalMotion {
   return normalizeEnum(value, MOTIONS, "motion");
 }
 
-export function normalizeAutoplay(value: unknown): RenderedMotionAutoplay {
+export function normalizeAutoplay(value: unknown): AvalAutoplay {
   return normalizeEnum(value, AUTOPLAYS, "autoplay");
 }
 
-export function normalizeFit(value: unknown): RenderedMotionFit | null {
+export function normalizeFit(value: unknown): AvalFit | null {
   if (value === null) return null;
   return normalizeEnum(value, FITS, "fit");
 }
 
-export function normalizeBindings(value: unknown): RenderedMotionBindings {
+export function normalizeBindings(value: unknown): AvalBindings {
   return normalizeEnum(value, BINDINGS, "bindings");
 }
 
@@ -193,10 +193,9 @@ export function normalizeSize(value: unknown): number | null {
   if (
     typeof value !== "number" ||
     !Number.isSafeInteger(value) ||
-    value < 1 ||
-    value > MAX_ELEMENT_SIZE_HINT
+    value < 1
   ) {
-    throw new RangeError("size hint must be an integer from 1 through 16384");
+    throw new RangeError("size hint must be a positive safe integer");
   }
   return value;
 }
@@ -209,12 +208,12 @@ function normalizeBoundedString(value: unknown, label: string): string {
   return value;
 }
 
-function normalizeCrossOriginAttribute(value: string | null): RenderedMotionCrossOrigin {
+function normalizeCrossOriginAttribute(value: string | null): AvalCrossOrigin {
   if (value === null || value === "") return "anonymous";
   return normalizeCrossOrigin(value);
 }
 
-function normalizeFitAttribute(value: string | null): RenderedMotionFit | null {
+function normalizeFitAttribute(value: string | null): AvalFit | null {
   if (value === null || value === "") return null;
   return normalizeFit(value);
 }
@@ -226,10 +225,23 @@ function normalizeOptionalIdentifier(value: string | null): string | null {
 
 function normalizeOptionalSizeAttribute(value: string | null): number | null {
   if (value === null || value === "") return null;
-  if (value.length > 5 || !/^[0-9]+$/u.test(value)) {
+  if (!/^[0-9]+$/u.test(value)) {
     throw new RangeError("size attribute must be a positive integer");
   }
-  return normalizeSize(Number(value));
+  let firstSignificant = 0;
+  while (
+    firstSignificant < value.length &&
+    value.charCodeAt(firstSignificant) === 0x30
+  ) {
+    firstSignificant += 1;
+  }
+  if (
+    firstSignificant === value.length ||
+    value.length - firstSignificant > MAX_SAFE_INTEGER_DECIMAL_DIGITS
+  ) {
+    throw new RangeError("size attribute must be a positive safe integer");
+  }
+  return normalizeSize(Number(value.slice(firstSignificant)));
 }
 
 function normalizeEnum<const T extends string>(
@@ -247,26 +259,26 @@ function normalizeEnum<const T extends string>(
   return value as T;
 }
 
-const CROSS_ORIGINS: ReadonlySet<RenderedMotionCrossOrigin> = new Set([
+const CROSS_ORIGINS: ReadonlySet<AvalCrossOrigin> = new Set([
   "anonymous",
   "use-credentials"
 ]);
-const MOTIONS: ReadonlySet<RenderedMotionMotion> = new Set([
+const MOTIONS: ReadonlySet<AvalMotion> = new Set([
   "auto",
   "reduce",
   "full"
 ]);
-const AUTOPLAYS: ReadonlySet<RenderedMotionAutoplay> = new Set([
+const AUTOPLAYS: ReadonlySet<AvalAutoplay> = new Set([
   "visible",
   "manual"
 ]);
-const FITS: ReadonlySet<RenderedMotionFit> = new Set([
+const FITS: ReadonlySet<AvalFit> = new Set([
   "contain",
   "cover",
   "fill",
   "none"
 ]);
-const BINDINGS: ReadonlySet<RenderedMotionBindings> = new Set([
+const BINDINGS: ReadonlySet<AvalBindings> = new Set([
   "auto",
   "none"
 ]);

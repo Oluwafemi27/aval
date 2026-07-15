@@ -1,4 +1,4 @@
-import type { GraphPresentation } from "@rendered-motion/graph";
+import type { GraphPresentation } from "@aval/graph";
 
 import {
   RuntimePlaybackError,
@@ -210,8 +210,7 @@ export function cloneAvcPresentation(
     case "static":
       return Object.freeze({
         kind: "static",
-        state: presentation.state,
-        staticFrameId: presentation.staticFrameId
+        state: presentation.state
       });
     case "intro":
     case "body":

@@ -3,11 +3,10 @@ import {
   roundedGpuAllocationBytes
 } from "./checked-runtime-bytes.js";
 import type { PresentationGeometry } from "./presentation-geometry.js";
-import type { RuntimeCanvasResourcePlan } from "./static-resource-plan.js";
+import type { RuntimeCanvasResourcePlan } from "./canvas-resource-plan.js";
 
 export interface BrowserCanvasBackingResourceInput {
   readonly animatedAllocationBytes: number;
-  readonly staticAllocationBytes: number;
 }
 
 export interface BrowserCanvasBackingResourceTransition {
@@ -46,37 +45,28 @@ export function createPresentationResourceReservation(
   const totalBytes = plan.totalBytes;
   const animatedCanvasBackingAllocationBytes =
     plan.animatedCanvasBackingAllocationBytes;
-  const staticCanvasBackingAllocationBytes =
-    plan.staticCanvasBackingAllocationBytes;
   for (const value of [
     effectiveCapBytes,
     totalBytes,
-    animatedCanvasBackingAllocationBytes,
-    staticCanvasBackingAllocationBytes
+    animatedCanvasBackingAllocationBytes
   ]) {
     if (!Number.isSafeInteger(value) || value < 0) {
       throw new RangeError("canvas resource plan bytes are invalid");
     }
   }
-  const nonCanvasBytes = totalBytes -
-    animatedCanvasBackingAllocationBytes -
-    staticCanvasBackingAllocationBytes;
-  const combinedAllocationBudget = effectiveCapBytes - nonCanvasBytes;
-  if (nonCanvasBytes < 0 || combinedAllocationBudget < 2) {
+  const nonCanvasBytes = totalBytes - animatedCanvasBackingAllocationBytes;
+  const allocationBudget = effectiveCapBytes - nonCanvasBytes;
+  if (nonCanvasBytes < 0 || allocationBudget < 1) {
     throw new RangeError("canvas resource plan has no backing allocation budget");
   }
-  // Each equal plane is charged ceil(raw * 5 / 4). Invert that frozen
-  // rounding exactly, then return the combined raw cap used by geometry.
-  const perPlaneAllocation = Math.floor(combinedAllocationBudget / 2);
-  const rawPerPlane = Math.floor(perPlaneAllocation * 4 / 5);
-  const combinedRaw = rawPerPlane * 2;
-  if (!Number.isSafeInteger(combinedRaw) || combinedRaw < 8) {
-    throw new RangeError("canvas resource plan cannot hold two backing pixels");
+  const rawBacking = Math.floor(allocationBudget * 4 / 5);
+  if (!Number.isSafeInteger(rawBacking) || rawBacking < 4) {
+    throw new RangeError("canvas resource plan cannot hold a backing pixel");
   }
   return Object.freeze({
     effectiveCapBytes,
     nonCanvasBytes,
-    maximumRawBackingBytes: combinedRaw
+    maximumRawBackingBytes: rawBacking
   });
 }
 
@@ -102,7 +92,7 @@ export function liveResourceTotal(
     roundedGpuAllocationBytes(rawBytesPerPlane),
     "presentation backing allocation"
   );
-  const total = reservation.nonCanvasBytes + allocation * 2;
+  const total = reservation.nonCanvasBytes + allocation;
   if (!Number.isSafeInteger(total) || total < 0) {
     throw new RangeError("live presentation resource total is unsafe");
   }

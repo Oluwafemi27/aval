@@ -29,15 +29,22 @@ export type {
 export {
   AvcIncrementalInspector,
   AVC_DECODER_SURFACE_PADDING,
+  avcCodecForLevel,
+  avcLevelLimits,
+  avcQuantizationPolicyForRendition,
   deriveAvcRenditionGeometry,
   deriveAvcRenditionGeometryFromVisible,
   inspectAvcAnnexBEncoderCandidateRendition,
   inspectAvcAnnexBRendition,
+  isAvcCodec,
+  isAvcLevelIdc,
   maximumAvcDecodedRgbaBytes,
   maximumAvcDecoderSurfaceDimension,
+  parseAvcCodec,
   prepareAvcEncoderRendition
 } from "./avc/index.js";
 export type {
+  AvcCodecV01,
   AvcAccessUnitInput,
   AvcAccessUnitSummary,
   AvcColorSummary,
@@ -49,8 +56,11 @@ export type {
   AvcFrameRate,
   AvcIncrementalAccessUnitInput,
   AvcIncrementalAccessUnitInspection,
+  AvcLevelIdc,
+  AvcLevelLimits,
   AvcParameterSetSummary,
   AvcProductionRenditionProfileV01,
+  AvcQuantizationPolicy,
   AvcRenditionGeometry,
   AvcRenditionGeometryInput,
   AvcRenditionInspection,
@@ -85,7 +95,6 @@ export type {
   CompiledManifestV01,
   DeclaredLimitsV01,
   EdgeV01,
-  FallbackV01,
   FormatBudgets,
   FormatHeader,
   FormatOptions,
@@ -104,17 +113,12 @@ export type {
   Sha256Hex,
   StartV01,
   StateV01,
-  StaticBlobRange,
-  StaticFrameInputV01,
-  StaticFrameV01,
-  StaticPayloadInputV01,
   TransitionV01,
   TriggerV01,
   UnitBlobRange,
   UnitInputV01,
   UnitV01,
-  ValidatedAssetLayout,
-  ValidatedStaticPngProfile
+  ValidatedAssetLayout
 } from "./model.js";
 export { parseFrontIndex, validateCompleteAsset } from "./parser.js";
 export {

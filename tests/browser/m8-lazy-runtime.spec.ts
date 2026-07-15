@@ -10,14 +10,14 @@ test("definition and a source-free element do not load the player runtime", asyn
 
   await page.goto("/m8-no-js.html");
   await page.evaluate(async () => {
-    const existing = document.querySelector("rendered-motion");
+    const existing = document.querySelector("aval-player");
     existing?.removeAttribute("src");
 
     const apiPath = "/src/m8-element-browser-api.ts";
     const api = await import(apiPath);
-    api.defineRenderedMotionElement();
+    api.defineAvalElement();
 
-    const element = document.createElement("rendered-motion") as HTMLElement & {
+    const element = document.createElement("aval-player") as HTMLElement & {
       readiness: string;
     };
     element.id = "lazy-runtime-motion";
@@ -96,12 +96,12 @@ test("a stalled lazy runtime chunk cannot hang terminal disposal", async ({ page
     });
   });
   await page.goto("/m8-no-js.html");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await motion.evaluate(async (element) => {
     element.removeAttribute("src");
     const apiPath = "/src/m8-element-browser-api.ts";
     const api = await import(apiPath);
-    api.defineRenderedMotionElement();
+    api.defineAvalElement();
     (element as unknown as { src: string }).src =
       "/__m8__/asset?fixture=one-state&session=m8-stalled-runtime-chunk";
   });
@@ -147,12 +147,12 @@ test("a rejected lazy runtime chunk publishes ownerless cleanup and permits repl
     await route.abort("failed");
   });
   await page.goto("/m8-no-js.html");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await motion.evaluate(async (element) => {
     element.removeAttribute("src");
     const apiPath = "/src/m8-element-browser-api.ts";
     const api = await import(apiPath);
-    api.defineRenderedMotionElement();
+    api.defineAvalElement();
     (element as unknown as { src: string }).src =
       "/__m8__/asset?fixture=one-state&session=m8-runtime-import-rejected-1";
   });

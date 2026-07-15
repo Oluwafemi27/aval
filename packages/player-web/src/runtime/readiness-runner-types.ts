@@ -3,12 +3,12 @@ import type {
   EdgeV01,
   ResidencyEndpointV01,
   UnitV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 import type {
   GraphEdgeDefinition,
   GraphStateDefinition,
   ValidatedMotionGraph
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { RuntimeFailure } from "./errors.js";
 import type {

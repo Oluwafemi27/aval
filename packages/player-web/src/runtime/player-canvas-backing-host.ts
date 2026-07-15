@@ -17,7 +17,7 @@ import type {
   BrowserCanvasBackingResourceTransition
 } from "./browser-canvas-backing-resources.js";
 
-/** Exact two-plane backing owner with async pressure admission before growth. */
+/** Exact animated-canvas backing owner with async pressure admission. */
 export function createPlayerCanvasBackingResourceHost(
   account: PlayerResourceAccount,
   admission?: Readonly<PlayerResourceAdmission>
@@ -26,7 +26,7 @@ export function createPlayerCanvasBackingResourceHost(
 }
 
 interface CanvasBackingLeaseRecord {
-  readonly category: "animated-canvas-backing" | "static-canvas-backing";
+  readonly category: "animated-canvas-backing";
   readonly lease: RuntimeByteLease;
   bytes: number;
 }
@@ -34,7 +34,6 @@ interface CanvasBackingLeaseRecord {
 interface CanvasBackingTransitionRecord {
   readonly additions: CanvasBackingLeaseRecord[];
   readonly nextAnimated: number;
-  readonly nextStatic: number;
   settled: boolean;
   rolledBack: boolean;
 }
@@ -45,9 +44,7 @@ class PlayerCanvasBackingHost implements BrowserCanvasBackingResourceHost {
   readonly #admission: Readonly<PlayerResourceAdmission> | null;
   readonly #generation: number;
   readonly #animated: CanvasBackingLeaseRecord[] = [];
-  readonly #statics: CanvasBackingLeaseRecord[] = [];
   #animatedBytes = 0;
-  #staticBytes = 0;
   #active: CanvasBackingTransitionRecord | null = null;
   #released = false;
 
@@ -85,13 +82,9 @@ class PlayerCanvasBackingHost implements BrowserCanvasBackingResourceHost {
       input?.animatedAllocationBytes,
       "animated canvas backing bytes"
     );
-    const nextStatic = requireBackingBytes(
-      input?.staticAllocationBytes,
-      "static canvas backing bytes"
-    );
     return this.#admission === null
-      ? this.#beginSynchronous(nextAnimated, nextStatic)
-      : this.#beginAsynchronous(nextAnimated, nextStatic);
+      ? this.#beginSynchronous(nextAnimated)
+      : this.#beginAsynchronous(nextAnimated);
   }
 
   public release(): void {
@@ -99,14 +92,11 @@ class PlayerCanvasBackingHost implements BrowserCanvasBackingResourceHost {
     this.#released = true;
     if (this.#active !== null) this.#rollback(this.#active);
     releaseCanvasBackingLeases(this.#animated);
-    releaseCanvasBackingLeases(this.#statics);
     this.#animatedBytes = 0;
-    this.#staticBytes = 0;
   }
 
   #beginSynchronous(
-    nextAnimated: number,
-    nextStatic: number
+    nextAnimated: number
   ): BrowserCanvasBackingResourceTransition {
     const additions: CanvasBackingLeaseRecord[] = [];
     try {
@@ -117,38 +107,24 @@ class PlayerCanvasBackingHost implements BrowserCanvasBackingResourceHost {
         this.#animatedBytes,
         nextAnimated
       );
-      reserveCanvasBackingGrowth(
-        (category, bytes) => this.#reserveDirect(category, bytes),
-        additions,
-        "static-canvas-backing",
-        this.#staticBytes,
-        nextStatic
-      );
     } catch (error) {
       releaseCanvasBackingLeases(additions);
       throw error;
     }
-    const record = this.#activate(additions, nextAnimated, nextStatic);
+    const record = this.#activate(additions, nextAnimated);
     return this.#transition(record);
   }
 
   async #beginAsynchronous(
-    nextAnimated: number,
-    nextStatic: number
+    nextAnimated: number
   ): Promise<BrowserCanvasBackingResourceTransition> {
-    const record = this.#activate([], nextAnimated, nextStatic);
+    const record = this.#activate([], nextAnimated);
     try {
       await this.#reserveGrowthAsync(
         record,
         "animated-canvas-backing",
         this.#animatedBytes,
         nextAnimated
-      );
-      await this.#reserveGrowthAsync(
-        record,
-        "static-canvas-backing",
-        this.#staticBytes,
-        nextStatic
       );
       this.#assertRecordActive(record);
       return this.#transition(record);
@@ -183,13 +159,11 @@ class PlayerCanvasBackingHost implements BrowserCanvasBackingResourceHost {
 
   #activate(
     additions: CanvasBackingLeaseRecord[],
-    nextAnimated: number,
-    nextStatic: number
+    nextAnimated: number
   ): CanvasBackingTransitionRecord {
     const record: CanvasBackingTransitionRecord = {
       additions,
       nextAnimated,
-      nextStatic,
       settled: false,
       rolledBack: false
     };
@@ -218,18 +192,10 @@ class PlayerCanvasBackingHost implements BrowserCanvasBackingResourceHost {
       this.#animated,
       this.#animatedBytes - Math.min(this.#animatedBytes, record.nextAnimated)
     );
-    trimCanvasBackingLeases(
-      this.#account,
-      this.#statics,
-      this.#staticBytes - Math.min(this.#staticBytes, record.nextStatic)
-    );
     for (const addition of record.additions.splice(0)) {
-      (addition.category === "animated-canvas-backing"
-        ? this.#animated
-        : this.#statics).push(addition);
+      this.#animated.push(addition);
     }
     this.#animatedBytes = record.nextAnimated;
-    this.#staticBytes = record.nextStatic;
     record.settled = true;
     this.#active = null;
   }

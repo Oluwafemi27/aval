@@ -96,7 +96,7 @@ export class ElementController {
   ): Promise<void> {
     await operation;
     if (owner.cleanupReceipt()?.completed !== true) {
-      throw new Error("rendered-motion generation did not prove cleanup");
+      throw new Error("aval-player generation did not prove cleanup");
     }
     this.#retiring = null;
     this.#onRetired();
@@ -107,7 +107,7 @@ export class ElementController {
     if (owner === null) return;
     await owner.dispose();
     if (owner.cleanupReceipt()?.completed !== true) {
-      throw new Error("previous rendered-motion generation cleanup is incomplete");
+      throw new Error("previous aval generation cleanup is incomplete");
     }
     this.#retiring = null;
     this.#onRetired();

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { chmod, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,21 +12,19 @@ const outputRoot = dirname(fileURLToPath(import.meta.url));
 const sourceRoot = resolve(outputRoot, "../../compiler/m5/source");
 const fixtures = [
   {
-    name: "opaque-loop.rma",
+    name: "opaque-loop.avl",
     project: "loop.json",
-    coverage: "Two-frame opaque body loop with one generated static fallback."
+    coverage: "Two-frame opaque body loop."
   },
   {
-    name: "opaque-path.rma",
+    name: "opaque-path.avl",
     project: "path.json",
-    coverage:
-      "Initial one-shot, two body loops, locked bridge, pointer binding, and two generated static fallbacks."
+    coverage: "Initial one-shot, two body loops, locked bridge, and pointer binding."
   },
   {
-    name: "opaque-reversible.rma",
+    name: "opaque-reversible.avl",
     project: "reversible.json",
-    coverage:
-      "Forward-authored reversible transition, exact inverse edge, finish route, deliberate cut, and three static fallbacks."
+    coverage: "Forward-authored reversible transition, exact inverse edge, finish route, and deliberate cut."
   }
 ];
 
@@ -46,25 +44,25 @@ for (const fixture of fixtures) {
 
 const provenance = {
   provenanceVersion: "0.2",
-  generatedAt: "2026-07-12",
-  generator: "rendered-motion-compiler/0.1",
+  generatedAt: "2026-07-14",
+  generator: "aval-compiler/0.1",
   pipelineLineage: {
-    migration: "rgba-filter-chain-to-direct-bt709-limited-yuv420p-v0",
+    migration: "embedded-posters-to-motion-only-v0",
     previousAssets: [
       {
-        name: "opaque-loop.rma",
-        sha256: "dcda9b3afbd9e56c5aec4c71b24208bec94bef98d6046656ba837a4bc322ca49"
+        name: "opaque-loop.avl",
+        sha256: "56b1616ef53a4d3974337e9fa3b910657700f8b5897266e15f6b0dff22671204"
       },
       {
-        name: "opaque-path.rma",
-        sha256: "edec42aad4ed140404caf895093fc3a986fbfdfaaf28f720cb47e918bf1308e0"
+        name: "opaque-path.avl",
+        sha256: "f3777ad640387940858e9ef52924dd7c1fec2c02d9f732b93c866fc0b39efa20"
       },
       {
-        name: "opaque-reversible.rma",
-        sha256: "642e5d60a461f3f0d0e53be9c1a238a3f5dfdad23f4db19eb2c12a94a6f13e8a"
+        name: "opaque-reversible.avl",
+        sha256: "d7cfff018d1b42b9cde438f65ea7a56d267618cb3f2ec0a91b1819caf7d6bcc9"
       }
     ],
-    review: "Intentional encoded-byte migration; source projects and PNG frames remain unchanged."
+    review: "Intentional wire migration: embedded static PNGs were removed; source projects, motion units, and PNG source frames remain unchanged."
   },
   compiler,
   toolchain: reviewedToolchain,
@@ -88,6 +86,7 @@ async function fixtureRecord(fixture) {
   const sourceFrames = await sourceFrameRecords(project);
   const assetPath = resolve(outputRoot, fixture.name);
   const asset = new Uint8Array(await readFile(assetPath));
+  await chmod(assetPath, 0o644);
   const report = JSON.parse(
     await readFile(`${assetPath}.build.json`, "utf8")
   );
@@ -122,17 +121,6 @@ async function fixtureRecord(fixture) {
         );
         return { ...blob };
       }),
-      staticFrames: frontIndex.staticBlobs.map((blob) => {
-        require(
-          sha256(asset.subarray(blob.offset, blob.offset + blob.length)) === blob.sha256,
-          `${fixture.name} static blob digest mismatch`
-        );
-        return { ...blob };
-      }),
-      stateStatics: frontIndex.manifest.states.map(({ id, staticFrame }) => ({
-        state: id,
-        staticFrame
-      })),
       normalization: report.buildDetails.sources.map((source) => ({
         source: source.id,
         probe: {

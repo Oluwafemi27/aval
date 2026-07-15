@@ -1,18 +1,18 @@
-export class RenderedMotionEnvironmentError extends Error {
-  public constructor(message = "rendered-motion requires a browser custom-element environment") {
+export class AvalEnvironmentError extends Error {
+  public constructor(message = "aval-player requires a browser custom-element environment") {
     super(message);
     this.name = "NotSupportedError";
   }
 }
 
-export class RenderedMotionNotReadyError extends Error {
-  public constructor(message = "rendered-motion is not ready") {
+export class AvalNotReadyError extends Error {
+  public constructor(message = "aval-player is not ready") {
     super(message);
     this.name = "NotReadyError";
   }
 }
 
-export function renderedMotionAbortError(message = "rendered-motion operation was aborted"): Error {
+export function avalAbortError(message = "aval-player operation was aborted"): Error {
   const error = new Error(message);
   error.name = "AbortError";
   return error;

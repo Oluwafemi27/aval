@@ -110,7 +110,7 @@ function configuration(
   override: Partial<ElementConfiguration> = {}
 ): Readonly<ElementConfiguration> {
   return Object.freeze({
-    src: "asset.rma",
+    src: "asset.avl",
     integrity: "",
     crossOrigin: "anonymous",
     motion: "auto",

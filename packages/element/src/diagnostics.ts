@@ -2,22 +2,22 @@ import type {
   BindingV01,
   RuntimeReadiness,
   StaticReason
-} from "@rendered-motion/player-web";
+} from "@aval/player-web";
 
 import type { BrowserRuntimePlayerSnapshot } from "./browser-runtime-factory.js";
 import type { ElementTrace } from "./element-trace.js";
 import { addElementCount } from "./element-sequence.js";
 import type {
-  RenderedMotionAutoplay,
-  RenderedMotionDiagnostics,
-  RenderedMotionDiagnosticsCounters,
-  RenderedMotionElementOwnershipSnapshot,
-  RenderedMotionCleanupReceipt,
-  RenderedMotionFit,
-  RenderedMotionMode,
-  RenderedMotionMotion,
-  RenderedMotionPublicFailure,
-  RenderedMotionTerminalCleanupProof
+  AvalAutoplay,
+  AvalDiagnostics,
+  AvalDiagnosticsCounters,
+  AvalElementOwnershipSnapshot,
+  AvalCleanupReceipt,
+  AvalFit,
+  AvalMode,
+  AvalMotion,
+  AvalPublicFailure,
+  AvalTerminalCleanupProof
 } from "./public-types.js";
 
 export interface ElementDiagnosticState {
@@ -30,7 +30,7 @@ export interface ElementDiagnosticState {
   readonly connected: boolean;
   readonly finalDisposed: boolean;
   readonly readiness: RuntimeReadiness;
-  readonly mode: RenderedMotionMode;
+  readonly mode: AvalMode;
   readonly assurance: "best-effort" | null;
   readonly staticReason: StaticReason | null;
   readonly requestedState: string | null;
@@ -41,11 +41,11 @@ export interface ElementDiagnosticState {
   readonly stateNames: readonly string[];
   readonly eventNames: readonly string[];
   readonly inputBindings: readonly Readonly<BindingV01>[];
-  readonly configuredMotion: RenderedMotionMotion;
+  readonly configuredMotion: AvalMotion;
   readonly hostReducedMotion: boolean | null;
-  readonly autoplay: RenderedMotionAutoplay;
+  readonly autoplay: AvalAutoplay;
   readonly manualPlaying: boolean;
-  readonly fit: RenderedMotionFit | null;
+  readonly fit: AvalFit | null;
   readonly visibility: Readonly<{
     documentVisible: boolean;
     intersecting: boolean;
@@ -54,11 +54,11 @@ export interface ElementDiagnosticState {
     observerSupported: boolean;
   }>;
   readonly box: Readonly<{ width: number; height: number }>;
-  readonly lastFailure: Readonly<RenderedMotionPublicFailure> | null;
-  readonly counters: Readonly<RenderedMotionDiagnosticsCounters>;
-  readonly cleanup: Readonly<RenderedMotionCleanupReceipt> | null;
-  readonly elementOwnership: Readonly<RenderedMotionElementOwnershipSnapshot>;
-  readonly terminalCleanup: Readonly<RenderedMotionTerminalCleanupProof> | null;
+  readonly lastFailure: Readonly<AvalPublicFailure> | null;
+  readonly counters: Readonly<AvalDiagnosticsCounters>;
+  readonly cleanup: Readonly<AvalCleanupReceipt> | null;
+  readonly elementOwnership: Readonly<AvalElementOwnershipSnapshot>;
+  readonly terminalCleanup: Readonly<AvalTerminalCleanupProof> | null;
   readonly runtime: Readonly<BrowserRuntimePlayerSnapshot> | null;
   readonly trace: ElementTrace;
 }
@@ -66,7 +66,7 @@ export interface ElementDiagnosticState {
 export function createElementDiagnostics(
   state: Readonly<ElementDiagnosticState>,
   trace: boolean
-): Readonly<RenderedMotionDiagnostics> {
+): Readonly<AvalDiagnostics> {
   const runtime = state.runtime;
   const cleanup = state.cleanup;
   const outstanding = Object.freeze({
@@ -79,7 +79,7 @@ export function createElementDiagnostics(
     bytes: runtime?.pageTrackedBytes ?? cleanup?.participantLogicalBytes ?? 0
   });
   const geometry = runtime?.presentation.geometry ?? null;
-  const diagnostics: RenderedMotionDiagnostics = {
+  const diagnostics: AvalDiagnostics = {
     elementGeneration: state.elementGeneration,
     sourceGeneration: state.sourceGeneration,
     inputGeneration: state.inputGeneration,
@@ -181,11 +181,7 @@ export function createElementDiagnostics(
       effectiveDprX: geometry?.effectiveDevicePixelRatio.x ?? 0,
       effectiveDprY: geometry?.effectiveDevicePixelRatio.y ?? 0,
       resolutionScale: geometry?.resolutionScale ?? 0,
-      clampReasons: Object.freeze([...(geometry?.clampReasons ?? [])]),
-      staticAnimatedMappingEqual: geometry === null || mappingsEqual(
-        geometry.planes.static,
-        geometry.planes.animated
-      )
+      clampReasons: Object.freeze([...(geometry?.clampReasons ?? [])])
     }),
     ...(trace
       ? {
@@ -197,23 +193,4 @@ export function createElementDiagnostics(
       : {})
   };
   return Object.freeze(diagnostics);
-}
-
-function mappingsEqual(
-  left: Readonly<{
-    sourceRect: Readonly<Record<"x" | "y" | "width" | "height", number>>;
-    destinationCssRect: Readonly<Record<"x" | "y" | "width" | "height", number>>;
-    destinationBackingRect: Readonly<Record<"x" | "y" | "width" | "height", number>>;
-  }>,
-  right: Readonly<{
-    sourceRect: Readonly<Record<"x" | "y" | "width" | "height", number>>;
-    destinationCssRect: Readonly<Record<"x" | "y" | "width" | "height", number>>;
-    destinationBackingRect: Readonly<Record<"x" | "y" | "width" | "height", number>>;
-  }>
-): boolean {
-  const names = ["x", "y", "width", "height"] as const;
-  return (["sourceRect", "destinationCssRect", "destinationBackingRect"] as const)
-    .every((rectangle) => names.every((name) =>
-      left[rectangle][name] === right[rectangle][name]
-    ));
 }

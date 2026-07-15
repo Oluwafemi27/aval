@@ -1,7 +1,7 @@
 export interface DisplayPatternDefinition {
   readonly bitWidth: 16;
   readonly calibrationPatchIds: readonly ["black", "white", "red", "green", "blue"];
-  readonly markerKind: "rendered-motion-display";
+  readonly markerKind: "aval-display";
   readonly markerVersion: "1.0";
   readonly modulus: 65_535;
   readonly parity: "xor-fold-v1";
@@ -9,10 +9,10 @@ export interface DisplayPatternDefinition {
 
 export function validateDisplayPattern(input: unknown): DisplayPatternDefinition {
   const value = exactRecord(input, ["bitWidth", "calibrationPatchIds", "markerKind", "markerVersion", "modulus", "parity"], "$pattern");
-  if (value.bitWidth !== 16 || value.markerKind !== "rendered-motion-display" || value.markerVersion !== "1.0" || value.modulus !== 65_535 || value.parity !== "xor-fold-v1") throw new TypeError("$pattern uses an unsupported marker contract");
+  if (value.bitWidth !== 16 || value.markerKind !== "aval-display" || value.markerVersion !== "1.0" || value.modulus !== 65_535 || value.parity !== "xor-fold-v1") throw new TypeError("$pattern uses an unsupported marker contract");
   const patches = value.calibrationPatchIds;
   if (!Array.isArray(patches) || patches.length !== 5 || patches.some((patch, index) => patch !== ["black", "white", "red", "green", "blue"][index])) throw new TypeError("$pattern calibration patches are invalid");
-  return Object.freeze({ bitWidth: 16, calibrationPatchIds: Object.freeze(["black", "white", "red", "green", "blue"] as const), markerKind: "rendered-motion-display", markerVersion: "1.0", modulus: 65_535, parity: "xor-fold-v1" });
+  return Object.freeze({ bitWidth: 16, calibrationPatchIds: Object.freeze(["black", "white", "red", "green", "blue"] as const), markerKind: "aval-display", markerVersion: "1.0", modulus: 65_535, parity: "xor-fold-v1" });
 }
 
 export function displayMarkerFields(value: number, pattern: DisplayPatternDefinition): Readonly<{ readonly value: number; readonly complement: number; readonly parity: number }> {

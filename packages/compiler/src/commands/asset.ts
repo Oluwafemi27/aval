@@ -2,7 +2,7 @@ import type {
   AvcParameterSetSummary,
   AvcUnitInspection,
   ValidatedAssetLayout
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { throwIfAborted } from "../cancellation.js";
 import {
@@ -41,10 +41,8 @@ export interface AssetInspection {
   }[];
   readonly accessUnits: number;
   readonly samples: readonly InspectedAccessUnitRange[];
-  readonly staticFrames: readonly string[];
   readonly digestClaim: "all-internal-and-whole-file";
   readonly avcClaim: "syntax-and-dependency-inspected" | "not-applicable";
-  readonly staticPngClaim: "strict-profile-fully-decoded";
   readonly avc: readonly AvcRenditionSummary[];
 }
 
@@ -68,10 +66,8 @@ export interface AssetValidationReport {
   readonly sha256: string;
   readonly accessUnits: number;
   readonly unitBlobs: number;
-  readonly staticBlobs: number;
   readonly digestClaim: "all-internal-and-whole-file";
   readonly avcClaim: "syntax-and-dependency-inspected" | "not-applicable";
-  readonly staticPngClaim: "strict-profile-fully-decoded";
 }
 
 export async function inspectAssetFile(
@@ -124,14 +120,10 @@ export async function inspectAssetFile(
     units: Object.freeze(units),
     accessUnits: front.records.length,
     samples: describeAccessUnits(bytes, front, signal),
-    staticFrames: Object.freeze(
-      front.manifest.staticFrames.map(({ id }) => id)
-    ),
     digestClaim: "all-internal-and-whole-file",
     avcClaim: validated.avc.length === 0
       ? "not-applicable"
       : "syntax-and-dependency-inspected",
-    staticPngClaim: "strict-profile-fully-decoded",
     avc: Object.freeze(validated.avc.map(({ rendition, inspection }) =>
       Object.freeze({
         rendition,
@@ -166,12 +158,10 @@ export async function validateAssetReport(
     sha256: sha256AssetBytes(bytes, signal),
     accessUnits: layout.frontIndex.records.length,
     unitBlobs: layout.frontIndex.unitBlobs.length,
-    staticBlobs: layout.frontIndex.staticBlobs.length,
     digestClaim: "all-internal-and-whole-file",
     avcClaim: avc.length === 0
       ? "not-applicable"
-      : "syntax-and-dependency-inspected",
-    staticPngClaim: "strict-profile-fully-decoded"
+      : "syntax-and-dependency-inspected"
   });
 }
 

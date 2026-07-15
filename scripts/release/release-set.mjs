@@ -169,8 +169,8 @@ async function readExactRegularFile(path, root) {
 }
 
 function archiveFilename(name) {
-  if (!name.startsWith("@rendered-motion/")) throw new Error(`unexpected release package name: ${name}`);
-  return `rendered-motion-${name.slice("@rendered-motion/".length)}-${RELEASE_VERSION}.tgz`;
+  if (!name.startsWith("@aval/")) throw new Error(`unexpected release package name: ${name}`);
+  return `aval-${name.slice("@aval/".length)}-${RELEASE_VERSION}.tgz`;
 }
 
 function sameArray(left, right) {

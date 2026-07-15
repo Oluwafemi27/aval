@@ -177,15 +177,11 @@ function cloneState(
   const id = expectIdentifier(input.id, `${path}.id`);
   addUnique(stateIds, id, `${path}.id`, "state ID");
 
-  const staticFrameId = expectIdentifier(
-    input.staticFrameId,
-    `${path}.staticFrameId`
-  );
   const body = cloneBody(input.body, `${path}.body`);
   reserveUnit(reservedUnitIds, body.unitId, `${path}.body.unitId`);
 
   if (input.initialUnit === undefined) {
-    return Object.freeze({ id, staticFrameId, body });
+    return Object.freeze({ id, body });
   }
   if (id !== initialState) {
     invalid(`${path}.initialUnit is allowed only on the initial state`);
@@ -202,7 +198,7 @@ function cloneState(
   );
   reserveUnit(reservedUnitIds, unitId, `${path}.initialUnit.unitId`);
   const initialUnit = Object.freeze({ unitId, frameCount });
-  return Object.freeze({ id, staticFrameId, body, initialUnit });
+  return Object.freeze({ id, body, initialUnit });
 }
 
 function cloneBody(value: unknown, path: string): GraphBodyDefinition {
@@ -418,11 +414,6 @@ function cloneTransition(
     return Object.freeze({ kind: "locked", unitId, frameCount });
   }
   if (input.kind === "reversible") {
-    if (frameCount > GRAPH_LIMITS.maxReversibleFrames) {
-      invalid(
-        `${path}.frameCount must be at most ${String(GRAPH_LIMITS.maxReversibleFrames)}`
-      );
-    }
     if (input.direction !== "forward" && input.direction !== "reverse") {
       invalid(`${path}.direction must be forward or reverse`);
     }

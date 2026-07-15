@@ -1,3 +1,4 @@
+import { checkedAdd } from "../checked-integer.js";
 import { FormatError } from "../errors.js";
 import { crc32 } from "./crc32.js";
 
@@ -5,8 +6,6 @@ const PNG_SIGNATURE = Object.freeze([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
 ] as const);
 const MAX_CHUNKS = 256;
-const MAX_CHUNK_BYTES = 2 * 1024 * 1024;
-const MAX_IDAT_BYTES = 2 * 1024 * 1024;
 
 interface IdatRange {
   readonly offset: number;
@@ -61,13 +60,31 @@ export function parseRestrictedPngChunks(input: {
     }
     requireRange(png, cursor, 8, "PNG chunk header");
     const length = readUint32Be(png, cursor);
-    if (length > MAX_CHUNK_BYTES) {
-      fail("PNG chunk payload exceeds 2 MiB", cursor);
-    }
-    const dataOffset = cursor + 8;
-    requireRange(png, dataOffset, length + 4, "PNG chunk payload and CRC");
-    const dataEnd = dataOffset + length;
-    const chunkEnd = dataEnd + 4;
+    const dataOffset = checkedAdd(
+      cursor,
+      8,
+      Number.MAX_SAFE_INTEGER,
+      "PNG chunk data offset"
+    );
+    const payloadAndCrcLength = checkedAdd(
+      length,
+      4,
+      Number.MAX_SAFE_INTEGER,
+      "PNG chunk payload and CRC length"
+    );
+    requireRange(
+      png,
+      dataOffset,
+      payloadAndCrcLength,
+      "PNG chunk payload and CRC"
+    );
+    const dataEnd = checkedAdd(
+      dataOffset,
+      length,
+      png.byteLength,
+      "PNG chunk data end"
+    );
+    const chunkEnd = checkedAdd(dataEnd, 4, png.byteLength, "PNG chunk end");
     const expectedCrc = readUint32Be(png, dataEnd);
     if (crc32(png.subarray(cursor + 4, dataEnd)) !== expectedCrc) {
       fail("PNG chunk CRC-32 is invalid", dataEnd);
@@ -102,11 +119,13 @@ export function parseRestrictedPngChunks(input: {
     } else if (type === "IDAT") {
       if (ended) fail("IDAT cannot follow IEND", cursor + 4);
       sawIdat = true;
-      if (idatBytes > MAX_IDAT_BYTES - length) {
-        fail("combined IDAT payload exceeds 2 MiB", cursor);
-      }
       idatRanges.push(Object.freeze({ offset: dataOffset, length }));
-      idatBytes += length;
+      idatBytes = checkedAdd(
+        idatBytes,
+        length,
+        maximumPngBytes,
+        "combined PNG IDAT bytes"
+      );
     } else if (type === "IEND") {
       if (!sawIdat) fail("IEND must follow one or more IDAT chunks", cursor + 4);
       if (length !== 0) fail("IEND payload must be empty", cursor);
@@ -125,11 +144,22 @@ export function parseRestrictedPngChunks(input: {
 
   if (!ended) fail("PNG is missing terminal IEND", cursor);
   if (!sawIdat) fail("PNG must contain at least one IDAT chunk", cursor);
-  const zlibBytes = new Uint8Array(idatBytes);
+  let zlibBytes: Uint8Array;
+  try {
+    zlibBytes = new Uint8Array(idatBytes);
+  } catch {
+    fail(`combined PNG IDAT allocation failed for ${String(idatBytes)} bytes`);
+  }
   let target = 0;
   for (const range of idatRanges) {
-    zlibBytes.set(png.subarray(range.offset, range.offset + range.length), target);
-    target += range.length;
+    const rangeEnd = checkedAdd(
+      range.offset,
+      range.length,
+      png.byteLength,
+      "PNG IDAT range end"
+    );
+    zlibBytes.set(png.subarray(range.offset, rangeEnd), target);
+    target = checkedAdd(target, range.length, idatBytes, "PNG IDAT copy end");
   }
   return Object.freeze({ width, height, zlibBytes, chunkCount });
 }

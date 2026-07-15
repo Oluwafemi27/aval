@@ -11,8 +11,8 @@ import {
   type RuntimeParticipantId,
   type RuntimeReadinessResult,
   type RuntimeVisibilityState,
-  type StaticSurfaceStore
-} from "@rendered-motion/player-web";
+  type StateFallbackStore
+} from "@aval/player-web";
 
 import type {
   BrowserRuntimeMetadata,
@@ -23,7 +23,7 @@ import {
   captureCleanupReceipt,
   settleCleanupOperation
 } from "./cleanup-receipt.js";
-import type { RenderedMotionCleanupReceipt } from "./public-types.js";
+import type { AvalCleanupReceipt } from "./public-types.js";
 import { snapshotRuntimeTrace } from "./runtime-trace-snapshot.js";
 
 /** Active browser player adapter and sole terminal owner after acquisition. */
@@ -36,12 +36,11 @@ export class BrowserRuntimePlayerOwner implements BrowserRuntimePlayer {
   readonly #composition: Readonly<BrowserAvcCandidateComposition>;
   readonly #player: IntegratedPlayer;
   readonly #releaseOwnedPlayer: () => void;
-  readonly #releaseStaticReclaimer: () => void;
-  readonly #staticStore: StaticSurfaceStore | null;
+  readonly #fallbackStore: StateFallbackStore;
   readonly #elementGeneration: number;
   readonly #sourceGeneration: number;
   readonly #participantId: RuntimeParticipantId;
-  readonly #cleanupSink: (receipt: Readonly<RenderedMotionCleanupReceipt>) => void;
+  readonly #cleanupSink: (receipt: Readonly<AvalCleanupReceipt>) => void;
   readonly #diagnosticsSink: (failure: Readonly<RuntimeFailure>) => void;
   readonly #activate: () => void;
   #activated = false;
@@ -66,11 +65,10 @@ export class BrowserRuntimePlayerOwner implements BrowserRuntimePlayer {
     player: IntegratedPlayer;
     metadata: Readonly<BrowserRuntimeMetadata>;
     releaseOwnedPlayer: () => void;
-    releaseStaticReclaimer: () => void;
-    staticStore: StaticSurfaceStore | null;
+    fallbackStore: StateFallbackStore;
     elementGeneration: number;
     sourceGeneration: number;
-    cleanupSink: (receipt: Readonly<RenderedMotionCleanupReceipt>) => void;
+    cleanupSink: (receipt: Readonly<AvalCleanupReceipt>) => void;
     diagnosticsSink: (failure: Readonly<RuntimeFailure>) => void;
     activate: () => void;
   }>) {
@@ -82,8 +80,7 @@ export class BrowserRuntimePlayerOwner implements BrowserRuntimePlayer {
     this.#player = input.player;
     this.metadata = input.metadata;
     this.#releaseOwnedPlayer = input.releaseOwnedPlayer;
-    this.#releaseStaticReclaimer = input.releaseStaticReclaimer;
-    this.#staticStore = input.staticStore;
+    this.#fallbackStore = input.fallbackStore;
     this.#elementGeneration = input.elementGeneration;
     this.#sourceGeneration = input.sourceGeneration;
     this.#participantId = input.participant.snapshot().account.participantId;
@@ -153,7 +150,7 @@ export class BrowserRuntimePlayerOwner implements BrowserRuntimePlayer {
       declaredFileBytes: session.declaredFileBytes,
       metadataBytes: session.metadataBytes,
       verifiedBytes: session.verifiedPayloadBytes,
-      residentBlobBytes: session.unitBlobs.verifiedBytes + session.staticBlobs.verifiedBytes,
+      residentBlobBytes: session.unitBlobs.verifiedBytes,
       activeTransportBodies: session.activeTransportBodies,
       pendingLoads: session.pendingLoads,
       interestedWaiters: session.interestedWaiters,
@@ -197,9 +194,8 @@ export class BrowserRuntimePlayerOwner implements BrowserRuntimePlayer {
       ]);
       await settleCleanupOperation(() => this.#session.dispose(), failures);
       await Promise.all([
-        settleCleanupOperation(() => this.#releaseStaticReclaimer(), failures),
         settleCleanupOperation(() => this.#releaseOwnedPlayer(), failures),
-        settleCleanupOperation(() => this.#staticStore?.dispose(), failures),
+        settleCleanupOperation(() => this.#fallbackStore.dispose(), failures),
         settleCleanupOperation(() => this.#planes.dispose(), failures)
       ]);
       const receipt = captureCleanupReceipt({
@@ -216,7 +212,7 @@ export class BrowserRuntimePlayerOwner implements BrowserRuntimePlayer {
       });
       try { this.#cleanupSink(receipt); } catch (error) { failures.push(error); }
       if (failures.length > 0) throw failures[0];
-      if (!receipt.completed) throw new Error("rendered-motion runtime cleanup was incomplete");
+      if (!receipt.completed) throw new Error("aval-player runtime cleanup was incomplete");
     })();
     this.#disposal = operation;
     void operation.catch(() => {

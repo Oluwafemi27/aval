@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("rapid replacement, real disconnect, reconnect, and final disposal retire ownership", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?lifecycle");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => diagnostics(page), { timeout: 20_000 }).toMatchObject({
     readiness: expect.stringMatching(/^(interactiveReady|staticReady)$/u),
     sourceGeneration: 1
@@ -130,7 +130,7 @@ test("rapid replacement, real disconnect, reconnect, and final disposal retire o
 
 test("one batched source/config transaction reaches only the newest generation", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?batched-source-config");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => diagnostics(page), { timeout: 20_000 }).toMatchObject({
     readiness: "interactiveReady",
     sourceGeneration: 1
@@ -142,6 +142,7 @@ test("one batched source/config transaction reaches only the newest generation",
       motion: string;
       fit: string | null;
       autoplay: string;
+      bindings: string;
       readiness: string;
       getDiagnostics(): {
         sourceGeneration: number;
@@ -162,6 +163,7 @@ test("one batched source/config transaction reaches only the newest generation",
     node.motion = "reduce";
     node.fit = "cover";
     node.autoplay = "manual";
+    node.bindings = "none";
     node.src = "/__m8__/asset?fixture=user-states&session=m8-batch-final";
     const deadline = performance.now() + 20_000;
     while (node.readiness !== "staticReady") {
@@ -190,7 +192,7 @@ test("cross-root and cross-document adoption retire and rebind the realm", async
     sourceGeneration: 1
   });
   await page.evaluate(() => {
-    const motion = document.querySelector("rendered-motion") as HTMLElement & {
+    const motion = document.querySelector("aval-player") as HTMLElement & {
       interactionTarget: Element | null;
     };
     motion.interactionTarget = document.querySelector("#m8-interaction");
@@ -266,7 +268,7 @@ async function diagnostics(page: import("@playwright/test").Page): Promise<{
   sourceGeneration: number;
   connected: boolean;
 }> {
-  return page.locator("rendered-motion").evaluate((element) => {
+  return page.locator("aval-player").evaluate((element) => {
     const node = element as unknown as {
       getDiagnostics(): {
         readiness: string;

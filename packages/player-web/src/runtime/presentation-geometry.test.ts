@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  MAX_PRESENTATION_BACKING_DIMENSION,
   computePresentationGeometry,
   rasterizePresentationRect,
   type PresentationGeometryInput
 } from "./presentation-geometry.js";
 
 describe("computePresentationGeometry", () => {
-  it("computes centered contain and shares one mapping between both planes", () => {
+  it("computes centered contain for the animated plane", () => {
     const geometry = computePresentationGeometry(input({
       fit: "contain",
       cssWidth: 100,
@@ -31,7 +30,6 @@ describe("computePresentationGeometry", () => {
       width: 200,
       height: 100
     });
-    expect(geometry.planes.animated).toBe(geometry.planes.static);
     expect(geometry.planes.animated).toEqual({
       sourceRect: geometry.sourceRect,
       destinationCssRect: geometry.destinationCssRect,
@@ -40,7 +38,7 @@ describe("computePresentationGeometry", () => {
     expect(geometry.clampReasons).toEqual([]);
     expect(geometry.byteTerms).toEqual({
       bytesPerPlane: 160_000,
-      totalBackingBytes: 320_000
+      totalBackingBytes: 160_000
     });
   });
 
@@ -120,51 +118,37 @@ describe("computePresentationGeometry", () => {
     );
   });
 
-  it("uses one uniform resolution clamp for device and byte caps", () => {
+  it("preserves exact backings above the former dimension ceiling", () => {
     const geometry = computePresentationGeometry(input({
+      cssWidth: 1_000,
+      cssHeight: 500,
+      devicePixelRatio: 4,
+      maxBackingWidth: 4_000,
+      maxBackingHeight: 2_000,
+      maxBackingBytes: 4_000 * 2_000 * 8
+    }));
+
+    expect(geometry.desiredBacking).toEqual({ width: 4_000, height: 2_000 });
+    expect(geometry.backing).toEqual({ width: 4_000, height: 2_000 });
+    expect(geometry.byteTerms.totalBackingBytes).toBe(32_000_000);
+    expect(geometry.resolutionScale).toBe(1);
+    expect(geometry.clampReasons).toEqual([]);
+  });
+
+  it("rejects an explicit host or device dimension without downscaling", () => {
+    expect(() => computePresentationGeometry(input({
       cssWidth: 1_000,
       cssHeight: 500,
       devicePixelRatio: 4,
       maxBackingWidth: 1_200,
       maxBackingHeight: 900,
-      maxBackingBytes: 1_200 * 600 * 8
-    }));
-
-    expect(geometry.desiredBacking).toEqual({ width: 4_000, height: 2_000 });
-    expect(geometry.backing.width).toBeLessThanOrEqual(1_200);
-    expect(geometry.backing.height).toBeLessThanOrEqual(900);
-    expect(geometry.byteTerms.totalBackingBytes)
-      .toBeLessThanOrEqual(1_200 * 600 * 8);
-    expect(geometry.backing.width / 4_000).toBeCloseTo(
-      geometry.backing.height / 2_000,
-      2
-    );
-    expect(geometry.resolutionScale).toBeLessThan(1);
-    expect(geometry.clampReasons).toEqual([
-      "format-dimension",
-      "device-dimension",
-      "byte-budget"
-    ]);
-  });
-
-  it("always applies the version-zero backing dimension ceiling", () => {
-    const geometry = computePresentationGeometry(input({
-      cssWidth: 2_000,
-      cssHeight: 2_000,
-      devicePixelRatio: 2,
-      maxBackingWidth: 10_000,
-      maxBackingHeight: 10_000,
       maxBackingBytes: 512 * 1024 * 1024
-    }));
-
-    expect(geometry.backing.width).toBe(MAX_PRESENTATION_BACKING_DIMENSION);
-    expect(geometry.backing.height).toBe(MAX_PRESENTATION_BACKING_DIMENSION);
-    expect(geometry.clampReasons).toContain("format-dimension");
+    }))).toThrow("host or device dimensions");
   });
 
-  it("fits extreme aspect ratios into the minimum two-plane byte cap", () => {
+  it("rejects an explicit byte policy without downscaling", () => {
     for (const [width, height] of [[512, 1], [1, 512]] as const) {
-      const geometry = computePresentationGeometry(input({
+      expect(() => computePresentationGeometry(input({
         canvasWidth: width,
         canvasHeight: height,
         cssWidth: width,
@@ -172,14 +156,7 @@ describe("computePresentationGeometry", () => {
         maxBackingWidth: 2_048,
         maxBackingHeight: 2_048,
         maxBackingBytes: 8
-      }));
-
-      expect(geometry.backing).toEqual({ width: 1, height: 1 });
-      expect(geometry.byteTerms).toEqual({
-        bytesPerPlane: 4,
-        totalBackingBytes: 8
-      });
-      expect(geometry.clampReasons).toContain("byte-budget");
+      }))).toThrow("host byte policy");
     }
   });
 

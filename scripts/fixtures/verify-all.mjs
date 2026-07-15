@@ -7,11 +7,11 @@ import { spawnSync } from "node:child_process";
 import { discoverProvenanceFiles, verifyProvenanceFile } from "./verify-provenance.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-// Earlier compiler-side provenance generators intentionally include the exact
-// native tool fingerprint or source runtime that created their reviewed bytes.
-// Re-running those would turn golden verification into regeneration. M7's
-// composition is tool-free and therefore safe in read-only check mode.
+// Earlier compiler-side generators retain the exact native tool fingerprint or
+// source runtime that created their reviewed bytes. M6 and M7 now compose only
+// from checked motion samples, so both are safe in tool-free read-only mode.
 const checkedGenerators = [
+  "fixtures/conformance/m6/update-provenance.mjs",
   "fixtures/conformance/m7/update-provenance.mjs",
   ...(process.argv.includes("--tool-backed")
     ? ["fixtures/conformance/m8/update-provenance.mjs"]
@@ -26,10 +26,10 @@ async function main() {
     if (result.error !== undefined) throw result.error;
     if (result.status !== 0) throw new Error(`${script} --check failed:\n${result.stderr || result.stdout}`);
   }
-  const rmaPaths = [];
-  await collectRma(join(root, "fixtures", "conformance"), rmaPaths);
+  const avalPaths = [];
+  await collectAval(join(root, "fixtures", "conformance"), avalPaths);
   const formatModule = await import(join(root, "packages/format/dist/index.js"));
-  for (const path of rmaPaths) {
+  for (const path of avalPaths) {
     const bytes = new Uint8Array(await readFile(path));
     formatModule.validateCompleteAsset({ bytes });
   }
@@ -38,18 +38,18 @@ async function main() {
   process.stdout.write(`${JSON.stringify({
     status: "passed",
     provenance,
-    completeAssets: rmaPaths.map((path) => relative(root, path)),
+    completeAssets: avalPaths.map((path) => relative(root, path)),
     m8,
     starter,
     generatorChecks: checkedGenerators
   }, null, 2)}\n`);
 }
 
-async function collectRma(directory, output) {
+async function collectAval(directory, output) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory() && entry.name !== "malformed") await collectRma(path, output);
-    else if (entry.isFile() && entry.name.endsWith(".rma")) output.push(path);
+    if (entry.isDirectory() && entry.name !== "malformed") await collectAval(path, output);
+    else if (entry.isFile() && entry.name.endsWith(".avl")) output.push(path);
   }
 }
 
@@ -60,8 +60,8 @@ async function verifyM8Semantics(formatModule) {
     throw new Error("M8 provenance must describe exactly two conformance fixtures");
   }
   const expectedPaths = [
-    "fixtures/conformance/m8/one-state-partial-loop.rma",
-    "fixtures/conformance/m8/user-states-all-routes-alpha.rma"
+    "fixtures/conformance/m8/one-state-partial-loop.avl",
+    "fixtures/conformance/m8/user-states-all-routes-alpha.avl"
   ];
   const actualPaths = document.fixtures.map(({ path }) => path).sort();
   if (JSON.stringify(actualPaths) !== JSON.stringify([...expectedPaths].sort())) {
@@ -92,7 +92,7 @@ async function verifyM8Semantics(formatModule) {
 }
 
 async function verifyStarter() {
-  const temporary = await mkdtemp(join(tmpdir(), "rma-starter-drift-"));
+  const temporary = await mkdtemp(join(tmpdir(), "aval-starter-drift-"));
   try {
     const { runInitCommand } = await import(
       join(root, "packages/compiler/dist/commands/init.js")

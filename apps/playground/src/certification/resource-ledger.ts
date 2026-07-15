@@ -1,4 +1,4 @@
-import type { RenderedMotionDiagnostics } from "@rendered-motion/element";
+import type { AvalDiagnostics } from "@aval/element";
 
 export interface ResourceSnapshot {
   readonly ordinal: number;
@@ -23,7 +23,7 @@ export class BrowserResourceLedger {
     this.#limit = limit;
   }
 
-  public append(phase: string, diagnostics: Readonly<RenderedMotionDiagnostics>): void {
+  public append(phase: string, diagnostics: Readonly<AvalDiagnostics>): void {
     if (this.#snapshots.length >= this.#limit) throw new RangeError("resource ledger limit exceeded");
     if (phase.length < 1 || phase.length > 128) throw new RangeError("resource phase is invalid");
     const runtime = diagnostics.runtime;

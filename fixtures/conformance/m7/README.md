@@ -1,8 +1,8 @@
 # M7 loader, integrity, and resource fixture
 
-`reference-packed.rma` is byte-identical to the reviewed M6
-`packed-alpha-all-routes.rma` compiler output. M7 reuses those canonical 0.1
-bytes so transport, sparse residency, internal digests, static-first order,
+`reference-packed.avl` is byte-identical to the reviewed M6
+`packed-alpha-all-routes.avl` compiler output. M7 reuses those canonical 0.1
+bytes so transport, sparse residency, internal digests, bootstrap-unit order,
 and page-budget behavior can be tested without introducing a second encoder or
 hand-edited binary.
 
@@ -20,4 +20,4 @@ node fixtures/conformance/m7/update-provenance.mjs --check
 ```
 
 Binary and provenance changes must be reviewed together. Do not hand-edit the
-`.rma` file or persist mutated scenario copies.
+`.avl` file or persist mutated scenario copies.

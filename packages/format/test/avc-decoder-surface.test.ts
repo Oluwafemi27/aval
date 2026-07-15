@@ -12,8 +12,10 @@ describe("AVC decoder surface reserve", () => {
     expect(maximumAvcDecodedRgbaBytes(32, 32)).toBe(64 * 64 * 4);
   });
 
-  it("rejects dimensions outside the frozen AVC profile", () => {
+  it("accepts larger representable dimensions and rejects unsafe arithmetic", () => {
     expect(() => maximumAvcDecoderSurfaceDimension(0)).toThrow();
-    expect(() => maximumAvcDecoderSurfaceDimension(2_049)).toThrow();
+    expect(maximumAvcDecoderSurfaceDimension(2_049)).toBe(2_096);
+    expect(() => maximumAvcDecoderSurfaceDimension(Number.MAX_SAFE_INTEGER))
+      .toThrow(/safe-integer/u);
   });
 });

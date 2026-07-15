@@ -1,11 +1,9 @@
 import {
-  adler32,
-  crc32,
   encodeReferenceFrame,
   writeCanonicalAsset,
   type CanonicalAssetInputV01,
   type RenditionV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 const DIGEST = "0".repeat(64);
 
@@ -21,6 +19,9 @@ const DELTA_ACCESS_UNIT = Object.freeze([
 export interface OpaqueTestAssetOptions {
   readonly corruptIntroDelta?: boolean;
   readonly pixelAspect?: readonly [number, number];
+  readonly profile?:
+    | "avc-annexb-opaque-v0"
+    | "avc-annexb-opaque-v1";
 }
 
 export function opaqueTestRendition(
@@ -48,7 +49,10 @@ export function opaqueTestRendition(
 export function createOpaqueTestAsset(
   options: OpaqueTestAssetOptions = {}
 ): Uint8Array {
-  const rendition = opaqueTestRendition();
+  const baseRendition = opaqueTestRendition();
+  const rendition = options.profile === "avc-annexb-opaque-v1"
+    ? { ...baseRendition, profile: options.profile }
+    : baseRendition;
   const samples = [{ rendition: rendition.id, sha256: DIGEST }];
   const input: CanonicalAssetInputV01 = {
     manifest: {
@@ -79,16 +83,12 @@ export function createOpaqueTestAsset(
           samples
         }
       ],
-      staticFrames: [
-        { id: "idle", width: 64, height: 64, sha256: DIGEST }
-      ],
       initialState: "idle",
       states: [
         {
           id: "idle",
           bodyUnit: "body",
-          initialUnit: "intro",
-          staticFrame: "idle"
+          initialUnit: "intro"
         }
       ],
       edges: [],
@@ -97,10 +97,6 @@ export function createOpaqueTestAsset(
         policy: "all-routes",
         bootstrapUnits: ["body", "intro"],
         immediateEdges: []
-      },
-      fallback: {
-        unsupported: "per-state-static",
-        reducedMotion: "per-state-static"
       },
       limits: {
         maxCompiledBytes: 64 * 1024,
@@ -122,9 +118,6 @@ export function createOpaqueTestAsset(
           ? [0, 0, 0, 1, 9, 48, 0, 0, 1, 97]
           : DELTA_ACCESS_UNIT
       )
-    ],
-    staticPayloads: [
-      { staticFrame: "idle", bytes: strictTestPng(64, 64) }
     ]
   };
 
@@ -201,22 +194,16 @@ export function createIntegratedOpaqueTestAsset(
       frameRate: { numerator: 30, denominator: 1 },
       renditions,
       units,
-      staticFrames: [
-        { id: "hover-static", width: 64, height: 64, sha256: DIGEST },
-        { id: "idle-static", width: 64, height: 64, sha256: DIGEST }
-      ],
       initialState: "idle",
       states: [
         {
           id: "hover",
-          bodyUnit: "hover-body",
-          staticFrame: "hover-static"
+          bodyUnit: "hover-body"
         },
         {
           id: "idle",
           bodyUnit: "idle-body",
-          initialUnit: "intro",
-          staticFrame: "idle-static"
+          initialUnit: "intro"
         }
       ],
       edges: [
@@ -251,10 +238,6 @@ export function createIntegratedOpaqueTestAsset(
         bootstrapUnits: ["hover-body", "idle-body", "intro"],
         immediateEdges: ["idle-hover"]
       },
-      fallback: {
-        unsupported: "per-state-static",
-        reducedMotion: "per-state-static"
-      },
       limits: {
         maxCompiledBytes: 128 * 1024,
         maxRuntimeBytes: 8 * 1024 * 1024,
@@ -263,11 +246,7 @@ export function createIntegratedOpaqueTestAsset(
         runtimeWorkingSetBytes: 2 * 1024 * 1024
       }
     },
-    accessUnits,
-    staticPayloads: [
-      { staticFrame: "hover-static", bytes: strictTestPng(64, 64) },
-      { staticFrame: "idle-static", bytes: strictTestPng(64, 64) }
-    ]
+    accessUnits
   });
 }
 
@@ -316,15 +295,8 @@ export function createIntegratedPathTestAsset(): Uint8Array {
     .map((id) => ({
       id,
       bodyUnit: `${id}-body`,
-      ...(id === "idle" ? { initialUnit: "intro" } : {}),
-      staticFrame: `${id}-static`
+      ...(id === "idle" ? { initialUnit: "intro" } : {})
     }));
-  const staticFrames = states.map(({ id, staticFrame }) => ({
-    id: staticFrame,
-    width: 64,
-    height: 64,
-    sha256: DIGEST
-  }));
 
   return writeCanonicalAsset({
     manifest: {
@@ -340,7 +312,6 @@ export function createIntegratedPathTestAsset(): Uint8Array {
       frameRate: { numerator: 30, denominator: 1 },
       renditions: [rendition],
       units,
-      staticFrames,
       initialState: "idle",
       states,
       edges: [
@@ -387,10 +358,6 @@ export function createIntegratedPathTestAsset(): Uint8Array {
         bootstrapUnits: units.map(({ id }) => id),
         immediateEdges: ["idle-hover", "idle-loading", "idle-archive"]
       },
-      fallback: {
-        unsupported: "per-state-static",
-        reducedMotion: "per-state-static"
-      },
       limits: {
         maxCompiledBytes: 256 * 1024,
         maxRuntimeBytes: 8 * 1024 * 1024,
@@ -399,11 +366,7 @@ export function createIntegratedPathTestAsset(): Uint8Array {
         runtimeWorkingSetBytes: 2 * 1024 * 1024
       }
     },
-    accessUnits,
-    staticPayloads: staticFrames.map(({ id }) => ({
-      staticFrame: id,
-      bytes: strictTestPng(64, 64)
-    }))
+    accessUnits
   });
 }
 
@@ -415,7 +378,7 @@ export function createReferenceOnlyTestAsset(): Uint8Array {
   > = {
     id: "reference",
     profile: "reference-rgba-v0",
-    codec: "rma.reference-rgba",
+    codec: "aval.reference-rgba",
     codedWidth: 2,
     codedHeight: 2,
     alphaLayout: { type: "straight-rgba-v0" },
@@ -444,21 +407,14 @@ export function createReferenceOnlyTestAsset(): Uint8Array {
         ports: [{ id: "default", entryFrame: 0, portalFrames: [0, 1] }],
         samples
       }],
-      staticFrames: [
-        { id: "idle-static", width: 2, height: 2, sha256: DIGEST }
-      ],
       initialState: "idle",
-      states: [{ id: "idle", bodyUnit: "body", staticFrame: "idle-static" }],
+      states: [{ id: "idle", bodyUnit: "body" }],
       edges: [],
       bindings: [],
       readiness: {
         policy: "all-routes",
         bootstrapUnits: ["body"],
         immediateEdges: []
-      },
-      fallback: {
-        unsupported: "per-state-static",
-        reducedMotion: "per-state-static"
       },
       limits: {
         maxCompiledBytes: 64 * 1024,
@@ -474,10 +430,7 @@ export function createReferenceOnlyTestAsset(): Uint8Array {
       frameIndex,
       key: true,
       bytes: encodeReferenceFrame({ width: 2, height: 2, frameIndex, rgba })
-    })),
-    staticPayloads: [
-      { staticFrame: "idle-static", bytes: strictTestPng(2, 2) }
-    ]
+    }))
   });
 }
 
@@ -582,83 +535,4 @@ function deltaAccessUnit(frameNum: number): readonly number[] {
     }
   }
   return [0, 0, 0, 1, 9, 48, 0, 0, 1, 97, ...slice];
-}
-
-export function strictTestPng(width: number, height: number): Uint8Array {
-  const stride = width * 4;
-  const filtered = new Uint8Array(height * (stride + 1));
-  for (let row = 0; row < height; row += 1) {
-    const rowStart = row * (stride + 1) + 1;
-    for (let pixel = 0; pixel < width; pixel += 1) {
-      filtered[rowStart + pixel * 4 + 3] = 0xff;
-    }
-  }
-  const zlib = storedZlib(filtered);
-  const ihdr = new Uint8Array(13);
-  writeUint32Be(ihdr, 0, width);
-  writeUint32Be(ihdr, 4, height);
-  ihdr.set([8, 6, 0, 0, 0], 8);
-  return concatenate([
-    Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a),
-    pngChunk("IHDR", ihdr),
-    pngChunk("sRGB", Uint8Array.of(0)),
-    pngChunk("IDAT", zlib),
-    pngChunk("IEND", new Uint8Array())
-  ]);
-}
-
-function storedZlib(bytes: Uint8Array): Uint8Array {
-  const blockCount = Math.max(1, Math.ceil(bytes.byteLength / 65_535));
-  const result = new Uint8Array(2 + blockCount * 5 + bytes.byteLength + 4);
-  result.set([0x78, 0x01], 0);
-  let source = 0;
-  let target = 2;
-  for (let block = 0; block < blockCount; block += 1) {
-    const length = Math.min(65_535, bytes.byteLength - source);
-    result[target] = block === blockCount - 1 ? 1 : 0;
-    result[target + 1] = length & 0xff;
-    result[target + 2] = (length >>> 8) & 0xff;
-    const complement = (~length) & 0xffff;
-    result[target + 3] = complement & 0xff;
-    result[target + 4] = (complement >>> 8) & 0xff;
-    target += 5;
-    result.set(bytes.subarray(source, source + length), target);
-    source += length;
-    target += length;
-  }
-  writeUint32Be(result, target, adler32(bytes));
-  return result;
-}
-
-function pngChunk(type: string, payload: Uint8Array): Uint8Array {
-  const result = new Uint8Array(payload.byteLength + 12);
-  writeUint32Be(result, 0, payload.byteLength);
-  for (let index = 0; index < 4; index += 1) {
-    result[4 + index] = type.charCodeAt(index);
-  }
-  result.set(payload, 8);
-  writeUint32Be(
-    result,
-    8 + payload.byteLength,
-    crc32(result.subarray(4, 8 + payload.byteLength))
-  );
-  return result;
-}
-
-function concatenate(parts: readonly Uint8Array[]): Uint8Array {
-  const length = parts.reduce((total, part) => total + part.byteLength, 0);
-  const result = new Uint8Array(length);
-  let offset = 0;
-  for (const part of parts) {
-    result.set(part, offset);
-    offset += part.byteLength;
-  }
-  return result;
-}
-
-function writeUint32Be(bytes: Uint8Array, offset: number, value: number): void {
-  bytes[offset] = Math.floor(value / 0x100_0000) & 0xff;
-  bytes[offset + 1] = Math.floor(value / 0x1_0000) & 0xff;
-  bytes[offset + 2] = Math.floor(value / 0x100) & 0xff;
-  bytes[offset + 3] = value & 0xff;
 }

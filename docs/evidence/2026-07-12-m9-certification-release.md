@@ -15,7 +15,7 @@ not the still-uncreated protected candidate identity.
 
 ## Implemented independent certification authority
 
-- Private `@rendered-motion/certification` package with the closed result
+- Private `@aval/certification` package with the closed result
   vocabulary, bounded canonical JSON, exact runtime/display report separation,
   environment normalization, public-safe profile IDs, attachment verification,
   conformance runner, runtime/display criteria, benchmark statistics, ownership
@@ -49,12 +49,12 @@ format package, checked both M8 semantic summaries, and reproduced the exact
 29-file starter:
 
 ```text
-M4: reference-graph.rma, reference-loop.rma
-M5: opaque-loop.rma, opaque-path.rma, opaque-reversible.rma
-M5.5: opaque-all-routes.rma
-M6: opaque-odd.rma, packed-alpha-all-routes.rma, packed-alpha-loop.rma
-M7: reference-packed.rma
-M8: one-state-partial-loop.rma, user-states-all-routes-alpha.rma
+M4: reference-graph.avl, reference-loop.avl
+M5: opaque-loop.avl, opaque-path.avl, opaque-reversible.avl
+M5.5: opaque-all-routes.avl
+M6: opaque-odd.avl, packed-alpha-all-routes.avl, packed-alpha-loop.avl
+M7: reference-packed.avl
+M8: one-state-partial-loop.avl, user-states-all-routes-alpha.avl
 ```
 
 Golden verification does not invoke FFmpeg. Native-tool regeneration remains a

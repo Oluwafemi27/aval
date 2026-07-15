@@ -5,17 +5,17 @@ test("shadow layers are ordered, inert, and preserve the author fallback", async
   const result = await page.evaluate(async () => {
     const apiPath = "/src/m8-element-browser-api.ts";
     const api = await import(apiPath);
-    api.defineRenderedMotionElement();
-    const element = document.createElement("rendered-motion");
+    api.defineAvalElement();
+    const element = document.createElement("aval-player");
     const fallback = document.createElement("span");
     fallback.slot = "fallback";
     fallback.textContent = "fallback";
     element.append(fallback);
     document.body.append(element);
     const layers = [...element.shadowRoot!.children]
-      .filter((node) => node instanceof HTMLElement && node.dataset.rmaLayer)
+      .filter((node) => node instanceof HTMLElement && node.dataset.avalLayer)
       .map((node) => ({
-        layer: (node as HTMLElement).dataset.rmaLayer,
+        layer: (node as HTMLElement).dataset.avalLayer,
         hidden: (node as HTMLElement).hidden,
         ariaHidden: (node as HTMLElement).getAttribute("aria-hidden")
       }));
@@ -38,7 +38,7 @@ test("shadow layers are ordered, inert, and preserve the author fallback", async
   expect(result.preMetadataBox.width).toBeGreaterThan(0);
   expect(result.preMetadataBox.height).toBeGreaterThan(0);
   expect(result.layers.map(({ layer }) => layer)).toEqual([
-    "fallback", "static", "animated"
+    "fallback", "animated"
   ]);
   expect(result.layers.find(({ layer }) => layer === "fallback")?.hidden).toBe(false);
 });
@@ -51,11 +51,11 @@ test("missing constructed stylesheet support leaves the fallback usable and neve
     });
   });
   await page.goto("/m8-no-js.html");
-  const result = await page.locator("rendered-motion").evaluate(async (element) => {
+  const result = await page.locator("aval-player").evaluate(async (element) => {
     element.removeAttribute("src");
     const apiPath = "/src/m8-element-browser-api.ts";
     const api = await import(apiPath);
-    api.defineRenderedMotionElement();
+    api.defineAvalElement();
     const node = element as unknown as {
       src: string;
       readiness: string;

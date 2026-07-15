@@ -1,4 +1,4 @@
-import type { MotionGraphResult } from "@rendered-motion/graph";
+import type { MotionGraphResult } from "@aval/graph";
 import { describe, expect, it } from "vitest";
 
 import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
@@ -8,7 +8,7 @@ import {
   type IntegratedCandidateAttempt,
   type IntegratedCandidateFactory,
   type IntegratedPlaybackSession,
-  type IntegratedStaticSurfaceStore
+  type IntegratedFallbackStore
 } from "./integrated-player.js";
 
 describe("IntegratedPlayer terminal disposal", () => {
@@ -18,7 +18,7 @@ describe("IntegratedPlayer terminal disposal", () => {
     let diagnostics = 0;
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => store,
+      createFallbackStore: () => store,
       candidateFactory: factory,
       diagnosticsSink: (_failure: Readonly<RuntimeFailure>) => {
         diagnostics += 1;
@@ -68,7 +68,7 @@ describe("IntegratedPlayer terminal disposal", () => {
     const factory = new ThrowingCandidateFactory();
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => store,
+      createFallbackStore: () => store,
       candidateFactory: factory,
       timers: new IdleTimers()
     });
@@ -95,7 +95,7 @@ describe("IntegratedPlayer terminal disposal", () => {
     const store = new GatedSettlementStore();
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => store,
+      createFallbackStore: () => store,
       candidateFactory: new ThrowingCandidateFactory(),
       timers: new IdleTimers()
     });
@@ -127,7 +127,7 @@ describe("IntegratedPlayer terminal disposal", () => {
         : new ThrowingCandidateFactory();
       const player = new IntegratedPlayer({
         bytes: createIntegratedOpaqueTestAsset(),
-        createStaticStore: () => store,
+        createFallbackStore: () => store,
         candidateFactory: factory,
         timers: new IdleTimers()
       });
@@ -159,7 +159,7 @@ describe("IntegratedPlayer terminal disposal", () => {
     const factory = new GatedReentryCandidateFactory(order);
     const player = new IntegratedPlayer({
       bytes: createIntegratedOpaqueTestAsset(),
-      createStaticStore: () => store,
+      createFallbackStore: () => store,
       candidateFactory: factory,
       motionPolicy: "reduce",
       timers: new IdleTimers()
@@ -247,7 +247,7 @@ class DisposalPlaybackSession implements IntegratedPlaybackSession {
   }
 }
 
-class ThrowingStaticStore implements IntegratedStaticSurfaceStore {
+class ThrowingStaticStore implements IntegratedFallbackStore {
   public throwDispose = false;
   public disposeCalls = 0;
   #state = "idle";

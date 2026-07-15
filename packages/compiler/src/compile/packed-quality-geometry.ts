@@ -1,4 +1,4 @@
-import type { AvcRenditionGeometry, Rect } from "@rendered-motion/format";
+import type { AvcRenditionGeometry, Rect } from "@aval/format";
 
 import { CompilerError } from "../diagnostics.js";
 import { revalidateAvcRenditionGeometry } from "./validated-rendition-geometry.js";
@@ -27,7 +27,10 @@ export interface PackedQualityGeometry {
 export function packedQualityGeometry(
   geometry: Readonly<AvcRenditionGeometry>
 ): Readonly<PackedQualityGeometry> {
-  if (geometry?.profile !== "avc-annexb-packed-alpha-v0") {
+  if (
+    geometry?.profile !== "avc-annexb-packed-alpha-v0" &&
+    geometry?.profile !== "avc-annexb-packed-alpha-v1"
+  ) {
     throw invalid();
   }
   const validated = revalidateAvcRenditionGeometry(geometry, {

@@ -1,11 +1,11 @@
-# Rendered Motion
+# AVAL
 
-Rendered Motion is a web-only format and runtime for short pre-rendered motion
+AVAL is a web-only format and runtime for short prerendered animation
 with continuous partial loops, user-defined states, authored triggers, bounded
-transitions, packed transparency, and strict static fallback.
+transitions, packed transparency, and host-owned fallback markup.
 
 The central idea is simple: encode independently decodable motion units and a
-small deterministic state graph in one `.rma` asset. The browser keeps a
+small deterministic state graph in one `.avl` asset. The browser keeps a
 decoder timeline moving forward across a loop instead of seeking a video file
 at every seam. Hover, focus, application state, reversals, portals, finite
 bodies, and held states are graph routes rather than hand-timed media seeks.
@@ -13,9 +13,9 @@ bodies, and held states are graph routes rather than hand-timed media seeks.
 ## Five-minute start
 
 ```sh
-npm install @rendered-motion/element@1.0.0
-npm install --save-dev @rendered-motion/compiler@1.0.0
-npx rma init my-motion
+npm install @aval/element@1.0.0
+npm install --save-dev @aval/compiler@1.0.0
+npx avl init my-motion
 cd my-motion
 npm install
 npm run dev
@@ -29,37 +29,51 @@ after you publish or copy a compiled asset into your application:
 ```html
 <script type="module" src="/motion.js"></script>
 
-<rendered-motion src="/my-motion.rma" width="320" height="320">
+<aval-player src="/my-motion.avl" width="320" height="320">
   <img slot="fallback" src="/my-motion.png" alt="">
-</rendered-motion>
+</aval-player>
 ```
 
 ```js
 // motion.js, resolved by your package-aware web build
-import { defineRenderedMotionElement } from "@rendered-motion/element";
-defineRenderedMotionElement();
+import { defineAvalElement } from "@aval/element";
+defineAvalElement();
 ```
 
 A one-state asset loops with no seeking code. Multi-state assets keep their
 own names and triggers; applications can set any authored state:
 
 ```ts
-const motion = document.querySelector("rendered-motion");
+const motion = document.querySelector("aval-player");
 await motion?.setState("success");
 ```
 
+## Local end-user playground
+
+To check the consumer experience from this repository with a real interactive
+asset, run:
+
+```sh
+npm install
+npm run playground
+```
+
+Open the printed loopback URL. The permanent example uses workspace packages,
+includes its compiled asset and fallback image, and does not require FFmpeg at
+runtime. Hover, focus, or use the toggle to move between its authored states.
+
 The element package is SSR-safe. Its root exports an explicit definition
-helper; the opt-in `@rendered-motion/element/auto` entry is the only automatic
+helper; the opt-in `@aval/element/auto` entry is the only automatic
 registration side effect.
 
 ## What is included
 
-- `@rendered-motion/graph`: deterministic latest-wins state and route engine;
-- `@rendered-motion/format`: strict wire `0.1` parser, validator, and writer;
-- `@rendered-motion/compiler`: project `0.2` authoring and CLI;
-- `@rendered-motion/player-web`: bounded web loader, decoder scheduler,
-  renderer, static fallback, and page resource manager; and
-- `@rendered-motion/element`: markup-first public browser component.
+- `@aval/graph`: deterministic latest-wins state and route engine;
+- `@aval/format`: strict wire `0.1` parser, validator, and writer;
+- `@aval/compiler`: project `0.3` authoring and CLI;
+- `@aval/player-web`: bounded web loader, decoder scheduler,
+  renderer, fallback-state signaling, and page resource manager; and
+- `@aval/element`: markup-first public browser component.
 
 The compiler uses caller-installed FFmpeg/FFprobe and libx264; it never bundles
 or downloads native codec tools. Codec, patent, source-media, and distribution
@@ -78,7 +92,7 @@ npm run test:browser:reference
 ```
 
 Browser animation is capability-probed. Unsupported WebCodecs/WebGL/AVC
-configurations must still pass the strict per-state static path.
+configurations leave the element's optional host-owned fallback slot visible.
 
 ## Documentation
 
@@ -86,6 +100,7 @@ configurations must still pass the strict per-state static path.
 - [States and triggers](docs/states-and-triggers.md)
 - [Element API](docs/element-api.md)
 - [Compiler](docs/compiler.md)
+- [Preparing video and authoring states](docs/compiler/authoring-video-and-states.md)
 - [Network and integrity](docs/network-and-integrity.md)
 - [Accessibility and reduced motion](docs/accessibility-and-motion.md)
 - [Performance and budgets](docs/performance-and-budgets.md)

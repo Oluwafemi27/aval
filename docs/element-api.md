@@ -1,9 +1,10 @@
 # Element API
 
-`rendered-motion` supports these reflected attributes: `src`, `integrity`,
+`aval-player` supports these reflected attributes: `src`, `integrity`,
 `crossorigin`, `motion`, `autoplay`, `fit`, `bindings`, `state`,
-`interaction-for`, `width`, and `height`. It has no external image URL;
-verified asset statics enhance the author-owned fallback slot.
+`interaction-for`, `width`, and `height`. It has no image URL property; an
+optional fallback slot belongs to the host document and is not embedded in the
+asset.
 
 Core methods are `prepare()`, `setState()`, `send()`, `readyFor()`, `pause()`,
 `resume()`, `getDiagnostics()`, and terminal `dispose()`. Runtime state is read

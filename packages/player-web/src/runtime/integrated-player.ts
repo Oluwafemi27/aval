@@ -1,4 +1,4 @@
-import { MotionGraphEngine, type MotionGraphResult } from "@rendered-motion/graph";
+import { MotionGraphEngine, type MotionGraphResult } from "@aval/graph";
 import { RuntimeAssetCatalog } from "./asset-catalog.js";
 import { IntegratedPlayerAssetBinding } from "./integrated-player-asset-session.js";
 import { IntegratedPlayerParticipantController } from "./integrated-player-participant-controller.js";
@@ -11,16 +11,18 @@ import { IntegratedPlaybackInvariantError, PlaybackFallbackError,
   type IntegratedContentTickResult, type IntegratedPlaybackTraceState,
   type IntegratedPlayerTrace, type IntegratedPlayerOptions,
   type IntegratedRealtimeDriverOptions, type IntegratedPlayerSnapshot,
-  type IntegratedPrepareOptions, type IntegratedStaticSurfaceStore,
+  type IntegratedPrepareOptions, type IntegratedFallbackStore,
   type IntegratedTimerHost } from "./integrated-player-contracts.js";
 import {
+  DEFAULT_INTEGRATED_PREPARATION_TIMEOUT_MS,
   DEFAULT_INTEGRATED_TIMERS, defaultIntegratedNow,
-  disposeInvalidIntegratedStaticStore, snapshotIntegratedRealtimeOptions,
+  disposeInvalidIntegratedFallbackStore, snapshotIntegratedRealtimeOptions,
   integratedRealtimeDeadlineUs as realtimeDeadlineUs,
   integratedAbortError as abortError, integratedDisposedError as disposedError,
   validateIntegratedPlayerOptions as validateOptions,
   validateIntegratedPlaybackTraceState as validatePlaybackTraceState,
-  validateIntegratedStaticStore as validateStaticStore
+  validateIntegratedFallbackStore as validateFallbackStore,
+  validatePreparationTimeout
 } from "./integrated-player-support.js";
 import { IntegratedAnimatedPreparation } from "./integrated-animated-preparation.js";
 import { IntegratedPlayerActivationCoordinator } from "./integrated-player-activation-coordinator.js";
@@ -38,7 +40,7 @@ import type { MotionPolicy, MotionPolicySnapshot } from "./motion-policy.js";
 import { RealtimeDriver, type RealtimeDriverSnapshot } from "./realtime-driver.js";
 import { RequestPromises } from "./request-promises.js";
 import { admitIntegratedPlayerAssetSource } from "./integrated-player-resource-admission.js";
-import type { RuntimeCanvasResourceLease } from "./static-resource-plan.js";
+import type { RuntimeCanvasResourceLease } from "./canvas-resource-plan.js";
 import { IntegratedContentTicker } from "./integrated-content-ticker.js";
 export * from "./integrated-player-contracts.js";
 export type { RuntimeVisibilitySnapshot, RuntimeVisibilityState } from "./model.js";
@@ -55,7 +57,7 @@ export class IntegratedPlayer {
   readonly #graph = new MotionGraphEngine();
   readonly #requests = new RequestPromises();
   readonly #effects: EffectHost;
-  readonly #staticStore: IntegratedStaticSurfaceStore;
+  readonly #fallbackStore: IntegratedFallbackStore;
   readonly #diagnostics: (failure: Readonly<RuntimeFailure>) => void;
   readonly #now: () => number;
   readonly #timers: IntegratedTimerHost;
@@ -72,11 +74,12 @@ export class IntegratedPlayer {
   readonly #realtime: RealtimeDriver | null;
   readonly #operationGate = new IntegratedOperationGate();
   readonly #contentTicker: IntegratedContentTicker;
-  readonly #staticResourceLease: RuntimeCanvasResourceLease | null;
+  readonly #canvasResourceLease: RuntimeCanvasResourceLease | null;
   #selectedRendition: string | null = null;
   #activeCandidate: IntegratedCandidateAttempt | null = null;
   #preparePromise: Promise<RuntimeReadinessResult> | null = null;
   #initialPreparationGeneration = 0n;
+  #preparationTimeoutMs: number = DEFAULT_INTEGRATED_PREPARATION_TIMEOUT_MS;
   #readyResult: Readonly<RuntimeReadinessResult> | null = null;
   #disposePromise: Promise<void> | null = null;
   #terminalOwnerCallbackDepth = 0;
@@ -86,9 +89,9 @@ export class IntegratedPlayer {
   public constructor(options: IntegratedPlayerOptions) {
     const assetSource = validateOptions(options);
     // Host option objects are capability boundaries. Snapshot every value the
-    // constructor will need before acquiring catalog, canvas, or static-store
+    // constructor will need before acquiring catalog, canvas, or fallback-store
     // ownership so a hostile or time-varying getter cannot strand them.
-    const createStaticStore = options.createStaticStore;
+    const createFallbackStore = options.createFallbackStore;
     const candidateFactory = options.candidateFactory;
     const candidateAvailability = candidateFactory.availability;
     const contextTarget = candidateFactory.contextTarget;
@@ -120,8 +123,8 @@ export class IntegratedPlayer {
     this.#catalog = admission.catalog;
     this.#assetBinding = sourceAdmission.binding;
     const hostMaxRuntimeBytes = admission.hostMaxRuntimeBytes;
-    const staticResourceLease = admission.staticResourceLease;
-    let staticStoreCandidate: unknown = null;
+    const canvasResourceLease = admission.canvasResourceLease;
+    let fallbackStoreCandidate: unknown = null;
     let contextCandidate: IntegratedPlayerContextBinding | null = null;
     let participantCandidate: IntegratedPlayerParticipantController | null = null;
     try {
@@ -137,10 +140,10 @@ export class IntegratedPlayer {
               })
             })
       });
-      staticStoreCandidate = createStaticStore.call(options, this.#catalog);
-      this.#staticStore = staticStoreCandidate as IntegratedStaticSurfaceStore;
-      validateStaticStore(this.#staticStore);
-      this.#staticResourceLease = staticResourceLease;
+      fallbackStoreCandidate = createFallbackStore.call(options, this.#catalog);
+      this.#fallbackStore = fallbackStoreCandidate as IntegratedFallbackStore;
+      validateFallbackStore(this.#fallbackStore);
+      this.#canvasResourceLease = canvasResourceLease;
       this.#diagnostics = diagnosticsSink ?? (() => undefined);
       this.#now = now ?? defaultIntegratedNow;
       this.#timers = timers ?? DEFAULT_INTEGRATED_TIMERS;
@@ -154,19 +157,18 @@ export class IntegratedPlayer {
         catalog: this.#catalog,
         graph: this.#graph,
         effects: this.#effects,
-        staticStore: this.#staticStore,
+        fallbackStore: this.#fallbackStore,
         installResult: this.#installResult,
         lifecycleSignal: this.#lifecycleController.signal,
         now: this.#now,
         timers: this.#timers,
-        residency: this.#assetBinding,
         stageReadyResult: (result) => this.#stageStaticReadyResult(result)
       });
       this.#recovery = new IntegratedRecoveryCoordinator({
         catalog: this.#catalog,
         graph: this.#graph,
         effects: this.#effects,
-        staticStore: this.#staticStore,
+        fallbackStore: this.#fallbackStore,
         trace: this.#trace,
         getActiveCandidate: () => this.#activeCandidate,
         detachActiveCandidate: (candidate) => {
@@ -183,7 +185,7 @@ export class IntegratedPlayer {
       this.#activation = new IntegratedPlayerActivationCoordinator({
         graph: this.#graph,
         effects: this.#effects,
-        staticStore: this.#staticStore,
+        fallbackStore: this.#fallbackStore,
         trace: this.#trace,
         operationGate: this.#operationGate,
         state: {
@@ -250,7 +252,10 @@ export class IntegratedPlayer {
         commitResourcePressureState: (state) =>
           this.#activation.commitResourcePressureState(state),
         failReduction: (error) => this.#activation.failReduction(error),
-        prepareFull: (signal) => this.#animatedPreparation.reenter({ signal }),
+        prepareFull: (signal) => this.#animatedPreparation.reenter({
+          signal,
+          timeoutMs: this.#preparationTimeoutMs
+        }),
         rejectReentry: (error, result) =>
           this.#activation.rejectAnimatedReentry(error, result),
         reportTransitionFailure: (error, transition) =>
@@ -335,9 +340,9 @@ export class IntegratedPlayer {
     } catch (error) {
       void contextCandidate?.dispose();
       participantCandidate?.dispose();
-      disposeInvalidIntegratedStaticStore(staticStoreCandidate);
+      disposeInvalidIntegratedFallbackStore(fallbackStoreCandidate);
       try {
-        staticResourceLease?.release();
+        canvasResourceLease?.release();
       } catch {
         // Resource-host cleanup cannot replace the constructor failure.
       }
@@ -444,7 +449,7 @@ export class IntegratedPlayer {
     );
   }
 
-  /** Commit a strict-static resource fallback without changing host policy. */
+  /** Commit a host-owned resource fallback without changing host policy. */
   public reclaimForPagePressure(): Promise<boolean> {
     if (this.#disposed) return Promise.reject(disposedError());
     const operation = this.#motion.reclaimForResourcePressure();
@@ -514,9 +519,19 @@ export class IntegratedPlayer {
     }
     if (this.#preparePromise !== null) return this.#preparePromise;
 
+    const signal = options.signal;
+    const timeoutMs = validatePreparationTimeout(
+      options.timeoutMs ?? DEFAULT_INTEGRATED_PREPARATION_TIMEOUT_MS
+    );
+    const capturedOptions = Object.freeze({
+      ...(signal === undefined ? {} : { signal }),
+      timeoutMs
+    });
+    this.#preparationTimeoutMs = timeoutMs;
+
     this.#participant.markPreparing();
     const operation = Promise.resolve().then(() =>
-      this.#prepareLatestMotionMode(options)
+      this.#prepareLatestMotionMode(capturedOptions)
     );
     this.#preparePromise = operation;
     void operation.finally(() => {
@@ -891,25 +906,25 @@ export class IntegratedPlayer {
         ));
       }
       try {
-        this.#staticStore.dispose();
+        this.#fallbackStore.dispose();
       } catch (error) {
         this.#reportFailure(normalizeRuntimeFailure(
           "disposed",
           error,
-          { operation: "static-store-disposal" }
+          { operation: "fallback-store-disposal" }
         ));
       }
       try {
-        await this.#invokeTerminalOwner(() => this.#staticStore.settled());
+        await this.#invokeTerminalOwner(() => this.#fallbackStore.settled());
       } catch (error) {
         this.#reportFailure(normalizeRuntimeFailure(
           "disposed",
           error,
-          { operation: "static-store-settlement" }
+          { operation: "fallback-store-settlement" }
         ));
       }
       try {
-        this.#staticResourceLease?.release();
+        this.#canvasResourceLease?.release();
       } catch {
         this.#reportFailure(normalizeRuntimeFailure(
           "disposed",

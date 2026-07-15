@@ -3,7 +3,7 @@ import {
   deriveAvcRenditionGeometry,
   type AvcRenditionGeometry,
   type Rect
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { CompilerError, type CompilerErrorDetails } from "../diagnostics.js";
 
@@ -27,7 +27,8 @@ export function revalidateAvcRenditionGeometry(
   let validated: Readonly<AvcRenditionGeometry>;
   try {
     validated = deriveAvcRenditionGeometry(
-      geometry.profile === "avc-annexb-opaque-v0"
+      geometry.profile === "avc-annexb-opaque-v0" ||
+        geometry.profile === "avc-annexb-opaque-v1"
         ? {
             profile: geometry.profile,
             canvasWidth: geometry.visibleColorRect[2],
@@ -36,7 +37,8 @@ export function revalidateAvcRenditionGeometry(
             codedHeight: geometry.codedHeight,
             colorRect: geometry.visibleColorRect
           }
-        : geometry.profile === "avc-annexb-packed-alpha-v0" &&
+        : (geometry.profile === "avc-annexb-packed-alpha-v0" ||
+            geometry.profile === "avc-annexb-packed-alpha-v1") &&
             isRect(geometry.visibleAlphaRect)
           ? {
               profile: geometry.profile,

@@ -14,11 +14,11 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const MAX_REFERENCE_BYTES = 1024 * 1024 * 1024;
 const PACKAGE_ARTIFACT_PATHS = new Set([
-  "packages/rendered-motion-graph-1.0.0.tgz",
-  "packages/rendered-motion-format-1.0.0.tgz",
-  "packages/rendered-motion-player-web-1.0.0.tgz",
-  "packages/rendered-motion-element-1.0.0.tgz",
-  "packages/rendered-motion-compiler-1.0.0.tgz"
+  "packages/aval-graph-1.0.0.tgz",
+  "packages/aval-format-1.0.0.tgz",
+  "packages/aval-player-web-1.0.0.tgz",
+  "packages/aval-element-1.0.0.tgz",
+  "packages/aval-compiler-1.0.0.tgz"
 ]);
 const REQUIRED_CANDIDATE_ROLES = new Set([
   "package", "package-index", "package-inspection", "sbom", "api-report",

@@ -39,7 +39,7 @@ describe("player resource account", () => {
     const account = new PlayerResourceAccount(manager);
 
     expect(() => account.reserveForAllocation(
-      "png-scratch",
+      "frame-staging",
       12,
       () => {
         throw new Error("allocation failed");
@@ -56,7 +56,7 @@ describe("player resource account", () => {
     const manager = testManager();
     const account = new PlayerResourceAccount(manager);
     const allocation = account.reserveForAllocation(
-      "current-static-surface",
+      "decoder-output",
       10,
       () => Object.freeze({ surface: true })
     );
@@ -98,7 +98,7 @@ describe("player resource account", () => {
     const manager = testManager();
     const first = new PlayerResourceAccount(manager);
     const second = new PlayerResourceAccount(manager);
-    const lease = first.reserve("incoming-static-surface", 32);
+    const lease = first.reserve("worker-transfer", 32);
     const hostile = Object.defineProperty({}, "snapshot", {
       get() {
         throw new Error("must not inspect forged facade");
@@ -108,10 +108,10 @@ describe("player resource account", () => {
     reclassifyPlayerResourceLease(
       first,
       lease,
-      "current-static-surface"
+      "decoder-output"
     );
     expect(lease.snapshot()).toMatchObject({
-      category: "current-static-surface",
+      category: "decoder-output",
       bytes: 32
     });
     shrinkPlayerResourceLease(first, lease, 12);
@@ -126,19 +126,19 @@ describe("player resource account", () => {
     expect(() => reclassifyPlayerResourceLease(
       second,
       lease,
-      "decoded-static-cache"
+      "persistent-animation"
     )).toThrow(TypeError);
     expect(() => reclassifyPlayerResourceLease(
       first,
       hostile,
-      "decoded-static-cache"
+      "persistent-animation"
     )).toThrow(TypeError);
 
     lease.release();
     expect(() => reclassifyPlayerResourceLease(
       first,
       lease,
-      "decoded-static-cache"
+      "persistent-animation"
     )).toThrowError(expect.objectContaining({ code: "disposed" }));
     first.dispose();
     second.dispose();

@@ -12,7 +12,6 @@ import type {
   CompiledManifestV01,
   FormatHeader,
   FormatOptions,
-  StaticBlobRange,
   UnitBlobRange
 } from "./model.js";
 import {
@@ -24,7 +23,6 @@ import {
 export interface CanonicalAssetLayout {
   readonly frontIndexRange: ByteRange;
   readonly unitBlobs: readonly UnitBlobRange[];
-  readonly staticBlobs: readonly StaticBlobRange[];
   readonly paddingRanges: readonly ByteRange[];
   readonly fileRange: ByteRange;
 }
@@ -39,7 +37,6 @@ export interface CanonicalAssetPlan extends CanonicalAssetLayout {
   readonly indexOffset: number;
   readonly indexLength: number;
   readonly records: readonly AccessUnitRecord[];
-  readonly staticOffsets: readonly number[];
 }
 
 function fail(
@@ -73,13 +70,35 @@ function checkedEnd(
 /**
  * Produce the sole legal version-0.1 layout from bounded payload descriptors.
  * This is the canonical owner of header/index geometry, sample order, unit
- * alignment, static alignment, and final file length.
+ * alignment and final file length.
  */
 export function planCanonicalAssetLayout(
   manifestLength: number,
   manifest: CompiledManifestV01,
   samples: readonly SamplePayloadShape[],
-  staticLengths: readonly number[],
+  options?: FormatOptions
+): Readonly<CanonicalAssetPlan> {
+  const sampleCount = safeArrayLength(samples);
+  try {
+    return planCanonicalAssetLayoutUnchecked(
+      manifestLength,
+      manifest,
+      samples,
+      options
+    );
+  } catch (error) {
+    if (isFormatError(error)) throw error;
+    throw new FormatError(
+      "LAYOUT_INVALID",
+      `canonical layout allocation for ${sampleCount} samples failed`
+    );
+  }
+}
+
+function planCanonicalAssetLayoutUnchecked(
+  manifestLength: number,
+  manifest: CompiledManifestV01,
+  samples: readonly SamplePayloadShape[],
   options?: FormatOptions
 ): Readonly<CanonicalAssetPlan> {
   const budgets = resolveFormatBudgets(options);
@@ -91,15 +110,13 @@ export function planCanonicalAssetLayout(
   );
   validateCanonicalSampleSpans(samplePlan, manifest.units);
 
-  if (samples.length !== samplePlan.slots.length) {
+  if (samples.length !== samplePlan.recordCount) {
     fail(
-      `sample payload count must be ${String(samplePlan.slots.length)}, received ${String(samples.length)}`
+      `sample payload count must be ${String(samplePlan.recordCount)}, received ${String(samples.length)}`
     );
   }
-  if (staticLengths.length !== manifest.staticFrames.length) {
-    fail("static payload count must match the manifest");
-  }
-  if (samplePlan.spans.length + staticLengths.length > budgets.maxBlobRanges) {
+  const blobRangeCount = samplePlan.spans.length;
+  if (blobRangeCount > budgets.maxBlobRanges) {
     throw new FormatError(
       "BUDGET_EXCEEDED",
       "canonical blob range count exceeds the active budget"
@@ -126,7 +143,7 @@ export function planCanonicalAssetLayout(
   const indexLength = checkedAdd(
     ACCESS_UNIT_INDEX_HEADER_LENGTH,
     checkedMultiply(
-      samplePlan.slots.length,
+      samplePlan.recordCount,
       ACCESS_UNIT_RECORD_LENGTH,
       budgets.maxIndexBytes,
       "access-unit records length"
@@ -161,11 +178,11 @@ export function planCanonicalAssetLayout(
     const spanEnd = checkedAdd(
       span.sampleStart,
       span.sampleCount,
-      samplePlan.slots.length,
+      samplePlan.recordCount,
       "sample span end"
     );
     for (let ordinal = span.sampleStart; ordinal < spanEnd; ordinal += 1) {
-      const slot = samplePlan.slots[ordinal];
+      const slot = samplePlan.recordAt(ordinal);
       const sample = samples[ordinal];
       if (slot === undefined || sample === undefined) {
         fail("canonical sample payload is missing");
@@ -212,41 +229,6 @@ export function planCanonicalAssetLayout(
     }));
   }
 
-  const staticOffsets: number[] = [];
-  const staticBlobs: StaticBlobRange[] = [];
-  for (let index = 0; index < manifest.staticFrames.length; index += 1) {
-    const frame = manifest.staticFrames[index];
-    const length = staticLengths[index];
-    if (frame === undefined || length === undefined) {
-      fail("canonical static payload is missing");
-    }
-    if (!Number.isSafeInteger(length) || length < 1) {
-      fail("static payload length must be a positive safe integer");
-    }
-    if (length > budgets.maxStaticPngBytes) {
-      throw new FormatError(
-        "BUDGET_EXCEEDED",
-        `static payload length exceeds the active limit of ${String(budgets.maxStaticPngBytes)}`
-      );
-    }
-    const aligned = align8(cursor, budgets.maxFileBytes, "static frame offset");
-    addPaddingRange(paddingRanges, cursor, aligned);
-    cursor = aligned;
-    staticOffsets.push(cursor);
-    staticBlobs.push(Object.freeze({
-      staticFrame: frame.id,
-      sha256: frame.sha256,
-      offset: cursor,
-      length
-    }));
-    cursor = checkedEnd(
-      cursor,
-      length,
-      budgets.maxFileBytes,
-      "static frame end"
-    );
-  }
-
   if (cursor > manifest.limits.maxCompiledBytes) {
     throw new FormatError(
       "BUDGET_EXCEEDED",
@@ -259,13 +241,22 @@ export function planCanonicalAssetLayout(
     indexOffset,
     indexLength,
     records: Object.freeze(records),
-    staticOffsets: Object.freeze(staticOffsets),
     frontIndexRange: freezeRange(0, frontIndexEnd),
     unitBlobs: Object.freeze(unitBlobs),
-    staticBlobs: Object.freeze(staticBlobs),
     paddingRanges: Object.freeze(paddingRanges),
     fileRange: freezeRange(0, cursor)
   });
+}
+
+function safeArrayLength(value: unknown): string {
+  try {
+    const length = (value as { readonly length?: unknown })?.length;
+    return typeof length === "number" && Number.isSafeInteger(length) && length >= 0
+      ? String(length)
+      : "an unknown number of";
+  } catch {
+    return "an unknown number of";
+  }
 }
 
 /** Derive and validate the one legal version-0.1 byte layout. */
@@ -281,7 +272,6 @@ export function deriveCanonicalAssetLayout(
       header.manifestLength,
       manifest,
       records,
-      manifest.staticFrames.map(({ length }) => length),
       options
     );
 
@@ -321,21 +311,9 @@ export function deriveCanonicalAssetLayout(
         });
       }
     }
-    for (let index = 0; index < manifest.staticFrames.length; index += 1) {
-      const frame = manifest.staticFrames[index];
-      const expectedOffset = plan.staticOffsets[index];
-      if (frame === undefined || frame.offset !== expectedOffset) {
-        fail("static frame offset is not canonical", {
-          path: `staticFrames[${String(index)}].offset`,
-          ...(frame === undefined ? {} : { offset: frame.offset })
-        });
-      }
-    }
-
     return Object.freeze({
       frontIndexRange: plan.frontIndexRange,
       unitBlobs: plan.unitBlobs,
-      staticBlobs: plan.staticBlobs,
       paddingRanges: plan.paddingRanges,
       fileRange: plan.fileRange
     });

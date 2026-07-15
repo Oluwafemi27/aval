@@ -6,49 +6,33 @@ export interface DirectCanvas {
   readonly height: number;
 }
 
-/** Validate an explicit canvas or infer the largest exact 16-aligned fit. */
+const PNG_DIMENSION_MAX = 0xffff_ffff;
+
+/** Validate an explicit canvas or preserve native source geometry exactly. */
 export function resolveDirectCanvas(
   probe: Pick<MediaProbe, "width" | "height">,
   requested?: readonly [number, number],
-  requireExplicit = false
+  _requireExplicit = false
 ): Readonly<DirectCanvas> {
   if (requested !== undefined) {
     const [width, height] = requested;
     validateCanvas(width, height, probe);
     return Object.freeze({ width, height });
   }
-  if (requireExplicit) {
+  if (
+    !Number.isSafeInteger(probe.width) ||
+    !Number.isSafeInteger(probe.height) ||
+    probe.width < 1 ||
+    probe.height < 1 ||
+    probe.width > PNG_DIMENSION_MAX ||
+    probe.height > PNG_DIMENSION_MAX
+  ) {
     throw new CompilerError(
       "INPUT_INVALID",
-      "Direct PNG compilation requires an explicit --canvas"
+      "Source geometry is outside the supported unsigned 32-bit range"
     );
   }
-  let selected: DirectCanvas | undefined;
-  for (let width = 16; width <= 512; width += 16) {
-    for (let height = 16; height <= 512; height += 16) {
-      if (
-        width <= probe.width &&
-        height <= probe.height &&
-        width * probe.height === height * probe.width &&
-        (
-          selected === undefined ||
-          width * height > selected.width * selected.height ||
-          (width * height === selected.width * selected.height &&
-            width > selected.width)
-        )
-      ) {
-        selected = { width, height };
-      }
-    }
-  }
-  if (selected === undefined) {
-    throw new CompilerError(
-      "SOURCE_LIMIT",
-      "No exact non-upscaled 16-aligned canvas can be inferred",
-      { hint: "Provide an aspect-preserving --canvas widthxheight." }
-    );
-  }
-  return Object.freeze(selected);
+  return Object.freeze({ width: probe.width, height: probe.height });
 }
 
 function validateCanvas(
@@ -59,19 +43,18 @@ function validateCanvas(
   if (
     !Number.isSafeInteger(width) ||
     !Number.isSafeInteger(height) ||
-    width < 16 ||
-    height < 16 ||
-    width > 512 ||
-    height > 512 ||
-    width % 16 !== 0 ||
-    height % 16 !== 0 ||
+    width < 1 ||
+    height < 1 ||
+    width > PNG_DIMENSION_MAX ||
+    height > PNG_DIMENSION_MAX ||
     width > probe.width ||
     height > probe.height ||
-    width * probe.height !== height * probe.width
+    BigInt(width) * BigInt(probe.height) !==
+      BigInt(height) * BigInt(probe.width)
   ) {
     throw new CompilerError(
       "SOURCE_LIMIT",
-      "Canvas must be 16-aligned, at most 512, non-upscaled, and preserve source aspect"
+      "Canvas must be positive, non-upscaled, and preserve source aspect"
     );
   }
 }

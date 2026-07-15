@@ -6,7 +6,7 @@ const change = JSON.parse(await readFile("config/release/api-changes.json", "utf
 const failures = [];
 if (change.releaseVersion !== "1.0.0" || change.changeKind !== "initial-stable-release") failures.push("API change classification does not identify the initial 1.0 stable release");
 for (const [name, packageConfig] of Object.entries(config.packages)) {
-  const short = name.slice("@rendered-motion/".length);
+  const short = name.slice("@aval/".length);
   const reportPath = `etc/api/${short}.api.md`;
   let report;
   try { report = await readFile(reportPath, "utf8"); }

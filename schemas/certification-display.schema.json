@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rendered-motion.dev/schemas/certification-display.schema.json",
-  "title": "Rendered Motion observed-display certification report",
+  "$id": "https://aval.dev/schemas/certification-display.schema.json",
+  "title": "AVAL observed-display certification report",
   "type": "object",
   "additionalProperties": false,
   "required": [

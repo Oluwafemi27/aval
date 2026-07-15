@@ -161,11 +161,19 @@ describe("strict restricted PNG profile", () => {
       expectedWidth: 3,
       expectedHeight: 2
     }));
+  });
+
+  it("rejects unrepresentable IHDR products with checked arithmetic", () => {
+    const png = makeTestPng({ width: 1, height: 1 });
+    writeUint32Be(png, 16, 0xffff_ffff);
+    writeUint32Be(png, 20, 0xffff_ffff);
+    rewriteChunkCrc(png, 8);
+
     expectPngError(() => validatePngProfile({
-      png: makeTestPng({ width: 2, height: 2 }),
-      expectedWidth: 513,
-      expectedHeight: 2
-    }));
+      png,
+      expectedWidth: 0xffff_ffff,
+      expectedHeight: 0xffff_ffff
+    }), "INTEGER_UNSAFE");
   });
 
   it("rejects invalid zlib method/window/check/dictionary and a missing trailer", () => {
@@ -192,14 +200,14 @@ describe("strict restricted PNG profile", () => {
     })));
   });
 
-  it("honors the exact 2 MiB/lower budget and validates checksum authorities", () => {
+  it("honors a caller-lowered byte budget and validates checksum authorities", () => {
     const png = makeTestPng({ width: 2, height: 2 });
     expectPngError(
       () => validatePngProfile({
         png,
         expectedWidth: 2,
         expectedHeight: 2,
-        options: { budgets: { maxStaticPngBytes: png.byteLength - 1 } }
+        options: { budgets: { maxPngBytes: png.byteLength - 1 } }
       }),
       "BUDGET_EXCEEDED"
     );

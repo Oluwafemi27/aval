@@ -17,8 +17,7 @@ import type {
   CanonicalAssetInputV01,
   CompiledManifestV01,
   FormatBudgets,
-  FormatOptions,
-  StaticPayloadInputV01
+  FormatOptions
 } from "./model.js";
 import {
   createCanonicalSamplePlan,
@@ -29,7 +28,9 @@ import {
 const RENDITION_PROFILES = [
   "reference-rgba-v0",
   "avc-annexb-opaque-v0",
-  "avc-annexb-packed-alpha-v0"
+  "avc-annexb-packed-alpha-v0",
+  "avc-annexb-opaque-v1",
+  "avc-annexb-packed-alpha-v1"
 ] as const;
 const RENDITION_CAPABILITIES = ["webcodecs", "webgl2"] as const;
 const BINDING_SOURCES = [
@@ -51,20 +52,17 @@ const MANIFEST_INPUT_KEYS = [
   "frameRate",
   "renditions",
   "units",
-  "staticFrames",
   "initialState",
   "states",
   "edges",
   "bindings",
   "readiness",
-  "fallback",
   "limits"
 ] as const;
 
 export interface NormalizedWriterInput {
   readonly manifest: CompiledManifestV01;
   readonly accessUnits: readonly AccessUnitInputV01[];
-  readonly staticPayloads: readonly StaticPayloadInputV01[];
 }
 
 /** Clone, canonicalize, and validate writer metadata without copying payloads. */
@@ -75,19 +73,13 @@ export function normalizeWriterInput(
   try {
     const budgets = resolveFormatBudgets(options);
     const root = record(input, "writer input");
-    exactKeys(root, ["manifest", "accessUnits", "staticPayloads"], "writer input");
+    exactKeys(root, ["manifest", "accessUnits"], "writer input");
     const sourceManifest = record(root.manifest, "manifest input");
     exactKeys(sourceManifest, MANIFEST_INPUT_KEYS, "manifest input");
     const sourceUnits = boundedInputArray(
       sourceManifest.units,
       "manifest.units",
       budgets.maxUnits,
-      1
-    );
-    const sourceStaticFrames = boundedInputArray(
-      sourceManifest.staticFrames,
-      "manifest.staticFrames",
-      budgets.maxStaticFrames,
       1
     );
     const sourceRenditions = boundedInputArray(
@@ -112,8 +104,7 @@ export function normalizeWriterInput(
       "manifest.bindings",
       budgets.maxBindings
     );
-    const blobCount =
-      sourceUnits.length * sourceRenditions.length + sourceStaticFrames.length;
+    const blobCount = sourceUnits.length * sourceRenditions.length;
     if (!Number.isSafeInteger(blobCount) || blobCount > budgets.maxBlobRanges) {
       budget("blob range count");
     }
@@ -124,32 +115,8 @@ export function normalizeWriterInput(
       budgets.maxSampleRecords,
       1
     );
-    const staticInputs = boundedInputArray(
-      root.staticPayloads,
-      "staticPayloads",
-      budgets.maxStaticFrames,
-      1
-    );
-
     const renditions = sortById(sourceRenditions, "renditions");
     const normalizedRenditions = normalizeRenditions(renditions);
-    const staticPayloads = normalizeStaticPayloads(staticInputs, budgets.maxStaticPngBytes);
-    const staticFrames = sortById(sourceStaticFrames, "staticFrames").map(
-      (value, index) => {
-        exactKeys(
-          value,
-          ["id", "width", "height", "sha256"],
-          `staticFrames[${String(index)}]`
-        );
-        const id = identifier(value.id, `staticFrames[${String(index)}].id`);
-        const payload = staticPayloads.get(id);
-        if (payload === undefined) invalid(`missing payload for static frame ${id}`);
-        return { ...value, offset: 0, length: payload.bytes.byteLength };
-      }
-    );
-    if (staticPayloads.size !== staticFrames.length) {
-      invalid("staticPayloads contains an unknown or duplicate static frame");
-    }
 
     const unitInputs = sortById(sourceUnits, "units");
     const samplePlan = createCanonicalSamplePlan(
@@ -186,7 +153,6 @@ export function normalizeWriterInput(
       ...sourceManifest,
       renditions: normalizedRenditions,
       units,
-      staticFrames,
       states: sortById(sourceStates, "states"),
       edges: sortById(sourceEdges, "edges"),
       bindings: normalizeBindings(sourceBindings),
@@ -199,16 +165,9 @@ export function normalizeWriterInput(
       samplePlan,
       budgets.maxSampleBytes
     );
-    const orderedStaticPayloads = manifest.staticFrames.map((frame) => {
-      const payload = staticPayloads.get(frame.id);
-      if (payload === undefined) invalid(`missing payload for static frame ${frame.id}`);
-      return payload;
-    });
-
     return Object.freeze({
       manifest,
-      accessUnits: Object.freeze(accessUnits),
-      staticPayloads: Object.freeze(orderedStaticPayloads)
+      accessUnits: Object.freeze(accessUnits)
     });
   } catch (error) {
     if (isFormatError(error)) {
@@ -447,36 +406,6 @@ function normalizeReadiness(
   return { ...readiness, bootstrapUnits, immediateEdges };
 }
 
-function normalizeStaticPayloads(
-  values: readonly unknown[],
-  maxBytes: number
-): Map<string, StaticPayloadInputV01> {
-  const result = new Map<string, StaticPayloadInputV01>();
-  for (let index = 0; index < values.length; index += 1) {
-    const payloadRecord = record(
-      values[index],
-      `staticPayloads[${String(index)}]`
-    );
-    exactKeys(
-      payloadRecord,
-      ["staticFrame", "bytes"],
-      `staticPayloads[${String(index)}]`
-    );
-    const id = identifier(
-      payloadRecord.staticFrame,
-      `staticPayloads[${String(index)}].staticFrame`
-    );
-    const bytes = byteArray(
-      payloadRecord.bytes,
-      maxBytes,
-      `static payload ${id}`
-    );
-    if (result.has(id)) invalid(`duplicate static payload ${id}`);
-    result.set(id, Object.freeze({ staticFrame: id, bytes }));
-  }
-  return result;
-}
-
 function normalizeAccessUnits(
   values: readonly unknown[],
   plan: Readonly<CanonicalSamplePlan>,
@@ -525,7 +454,7 @@ function normalizeAccessUnits(
   }
 
   const ordered: AccessUnitInputV01[] = [];
-  for (const slot of plan.slots) {
+  for (const slot of plan.records()) {
     const key = accessKey(slot.renditionId, slot.unitId, slot.frameIndex);
     const payload = supplied.get(key);
     if (payload === undefined) invalid(`missing access unit ${key}`);

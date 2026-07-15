@@ -1,11 +1,9 @@
-import type { CompiledManifestV01, UnitV01 } from "@rendered-motion/format";
+import type { CompiledManifestV01, UnitV01 } from "@aval/format";
 import { describe, expect, it } from "vitest";
 
 import type { RuntimeFrameKey } from "./model.js";
 import {
   MAX_INTERACTION_CACHE_LAYERS,
-  MAX_REVERSIBLE_CLIP_BYTES,
-  MAX_REVERSIBLE_ENDPOINT_PAIR_BYTES,
   createInteractionCachePlan,
   createInteractionCachePlanFromSemanticSequences,
   type InteractionCacheSemanticInput,
@@ -139,7 +137,7 @@ describe("generalized interaction cache plan", () => {
   it("accepts a valid asset with zero persistent layers", () => {
     const manifest = routeManifest({
       units: [body("plain-body", "loop", 2)],
-      states: [{ id: "plain", bodyUnit: "plain-body", staticFrame: "static" }],
+      states: [{ id: "plain", bodyUnit: "plain-body" }],
       edges: [],
       initialState: "plain"
     });
@@ -158,38 +156,8 @@ describe("generalized interaction cache plan", () => {
     expect(plan.cutRunways).toEqual([]);
   });
 
-  it("accepts exact reversible clip and endpoint-pair byte boundaries", () => {
+  it("accepts clip and endpoint media above the former byte boundaries", () => {
     const clip = semanticPlan({
-      width: 512,
-      height: 512,
-      reversibleClips: [{
-        unit: "clip",
-        sourceEndpoint: endpoint("source", repeated(frame("source", 0), 6)),
-        clip: frames("clip", 24),
-        targetEndpoint: endpoint("target", repeated(frame("target", 0), 6))
-      }],
-      deviceLimits: device(512, 128)
-    });
-    expect(clip.reversibleClips[0]?.clipBytes)
-      .toBe(MAX_REVERSIBLE_CLIP_BYTES);
-
-    const pair = semanticPlan({
-      width: 1_024,
-      height: 512,
-      reversibleClips: [{
-        unit: "pair",
-        sourceEndpoint: endpoint("source", frames("source", 12)),
-        clip: [frame("clip", 0)],
-        targetEndpoint: endpoint("target", frames("target", 12))
-      }],
-      deviceLimits: device(1_024, 128)
-    });
-    expect(pair.reversibleClips[0]?.endpointPairBytes)
-      .toBe(MAX_REVERSIBLE_ENDPOINT_PAIR_BYTES);
-  });
-
-  it("rejects the first values above clip and endpoint-pair byte caps", () => {
-    expect(() => semanticPlan({
       width: 513,
       height: 512,
       reversibleClips: [{
@@ -199,9 +167,11 @@ describe("generalized interaction cache plan", () => {
         targetEndpoint: endpoint("target", repeated(frame("target", 0), 6))
       }],
       deviceLimits: device(513, 128)
-    })).toThrow("clip bytes exceed the 24 MiB cap");
+    });
+    expect(clip.reversibleClips[0]?.clipBytes)
+      .toBeGreaterThan(24 * 1024 * 1024);
 
-    expect(() => semanticPlan({
+    const pair = semanticPlan({
       width: 1_025,
       height: 512,
       reversibleClips: [{
@@ -211,19 +181,21 @@ describe("generalized interaction cache plan", () => {
         targetEndpoint: endpoint("target", frames("target", 12))
       }],
       deviceLimits: device(1_025, 128)
-    })).toThrow("endpoint pair bytes exceed the 48 MiB cap");
+    });
+    expect(pair.reversibleClips[0]?.endpointPairBytes)
+      .toBeGreaterThan(48 * 1024 * 1024);
   });
 
-  it("accepts exactly 128 unique layers and rejects layer 129", () => {
+  it("uses the actual device layer limit without a fixed 128-layer cap", () => {
     const exact = Array.from({ length: 11 }, (_, index) => cut(
       `cut-${String(index).padStart(2, "0")}`,
       `unit-${String(index).padStart(2, "0")}`,
       index === 10 ? 8 : 12
     ));
     expect(exact.reduce((total, runway) => total + runway.frames.length, 0))
-      .toBe(MAX_INTERACTION_CACHE_LAYERS);
+      .toBe(128);
     expect(semanticPlan({ reversibleClips: [], cutRunways: exact }).layerCount)
-      .toBe(MAX_INTERACTION_CACHE_LAYERS);
+      .toBe(128);
     expect(() => semanticPlan({
       reversibleClips: [],
       cutRunways: [...exact, cut("cut-extra", "extra", 1)]
@@ -231,8 +203,14 @@ describe("generalized interaction cache plan", () => {
 
     const over = [...exact];
     over[10] = cut("cut-10", "unit-10", 9);
+    expect(semanticPlan({
+      reversibleClips: [],
+      cutRunways: over,
+      deviceLimits: device(4_096, 129)
+    }).layerCount).toBe(129);
     expect(() => semanticPlan({ reversibleClips: [], cutRunways: over }))
       .toThrow("layer count 129 exceeds layer limit 128");
+    expect(MAX_INTERACTION_CACHE_LAYERS).toBe(Number.MAX_SAFE_INTEGER);
   });
 
   it("enforces exact device dimensions and device layer limits", () => {
@@ -264,7 +242,7 @@ describe("generalized interaction cache plan", () => {
     expect(() => semanticPlan({ width: Number.MAX_SAFE_INTEGER,
       height: Number.MAX_SAFE_INTEGER,
       deviceLimits: device(Number.MAX_SAFE_INTEGER, 128)
-    })).toThrow("clip bytes exceed the 24 MiB cap");
+    })).toThrow("exceeds JavaScript's safe-integer range");
     expect(() => createInteractionCachePlanFromSemanticSequences(
       null as unknown as InteractionCacheSemanticInput
     )).toThrow("semantic input must be an object");
@@ -406,19 +384,11 @@ function routeManifest(overrides: Partial<CompiledManifestV01> = {}): CompiledMa
       capabilities: ["webcodecs", "webgl2"]
     }],
     units,
-    staticFrames: [{
-      id: "static",
-      offset: 1,
-      length: 1,
-      width: 64,
-      height: 64,
-      sha256: "0".repeat(64)
-    }],
     initialState: "a",
     states: [
-      { id: "a", bodyUnit: "a-body", staticFrame: "static" },
-      { id: "b", bodyUnit: "b-body", staticFrame: "static" },
-      { id: "c", bodyUnit: "c-body", staticFrame: "static" }
+      { id: "a", bodyUnit: "a-body" },
+      { id: "b", bodyUnit: "b-body" },
+      { id: "c", bodyUnit: "c-body" }
     ],
     edges: [
       {
@@ -466,10 +436,6 @@ function routeManifest(overrides: Partial<CompiledManifestV01> = {}): CompiledMa
       policy: "all-routes",
       bootstrapUnits: ["a-body"],
       immediateEdges: ["a-b"]
-    },
-    fallback: {
-      unsupported: "per-state-static",
-      reducedMotion: "per-state-static"
     },
     limits: {
       maxCompiledBytes: 32 * MEBIBYTE,

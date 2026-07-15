@@ -1,6 +1,6 @@
-import type { RuntimeTraceRecord } from "@rendered-motion/player-web";
+import type { RuntimeTraceRecord } from "@aval/player-web";
 
-import type { RenderedMotionRuntimeTraceRecord } from "./public-types.js";
+import type { AvalRuntimeTraceRecord } from "./public-types.js";
 
 type Graph = NonNullable<RuntimeTraceRecord["graph"]>;
 type Presentation = NonNullable<Graph["presentation"]>;
@@ -9,7 +9,7 @@ type Cursor = NonNullable<RuntimeTraceRecord["scheduler"]["sourceCursor"]>;
 /** Copy the complete public, handle-free runtime trace into JSON-safe frozen data. */
 export function snapshotRuntimeTrace(
   records: readonly Readonly<RuntimeTraceRecord>[]
-): readonly Readonly<RenderedMotionRuntimeTraceRecord>[] {
+): readonly Readonly<AvalRuntimeTraceRecord>[] {
   return Object.freeze(records.slice(-512).map((record) => Object.freeze({
     index: record.index,
     kind: record.kind,
@@ -35,7 +35,7 @@ export function snapshotRuntimeTrace(
       settledRequests: record.counters.settledRequests,
       cleanedFrames: record.counters.cleanedFrames
     })
-  }))) as readonly Readonly<RenderedMotionRuntimeTraceRecord>[];
+  }))) as readonly Readonly<AvalRuntimeTraceRecord>[];
 }
 
 function copyGraph(graph: Readonly<Graph>): Readonly<Record<string, unknown>> {
@@ -44,6 +44,7 @@ function copyGraph(graph: Readonly<Graph>): Readonly<Record<string, unknown>> {
     snapshot: Object.freeze({
       readiness: graph.snapshot.readiness,
       phase: graph.snapshot.phase,
+      initialUnitPending: graph.snapshot.initialUnitPending,
       requestedState: graph.snapshot.requestedState,
       visualState: graph.snapshot.visualState,
       prospectiveState: graph.snapshot.prospectiveState,
@@ -116,7 +117,6 @@ function copyMedia(
     return Object.freeze({
       kind: media.kind,
       state: media.state,
-      staticFrame: media.staticFrame,
       drawSource: media.drawSource
     });
   }

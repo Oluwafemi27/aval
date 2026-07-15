@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import {
   serializeCanonicalJsonWithLimits,
   type CanonicalJsonValue
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { boundedUtf8Text } from "../bounded-text.js";
 import type { CompileCliArguments } from "../cli-args.js";
@@ -97,8 +97,16 @@ export function buildReportInvocation(
       ...(arguments_.fps === undefined ? {} : { frameRate: arguments_.fps }),
       ...(arguments_.canvas === undefined ? {} : { canvas: arguments_.canvas }),
       ...(arguments_.bitrate === undefined ? {} : { bitrate: arguments_.bitrate }),
+      ...(arguments_.crf === undefined ? {} : { crf: arguments_.crf }),
+      ...(arguments_.maxBitrate === undefined
+        ? {}
+        : { maxBitrate: arguments_.maxBitrate }),
+      ...(arguments_.preset === undefined ? {} : { preset: arguments_.preset }),
       ...(arguments_.alpha === undefined ? {} : { alpha: arguments_.alpha }),
       ...(arguments_.frames === undefined ? {} : { frames: arguments_.frames }),
+      ...(arguments_.mediaTimeoutMs === undefined
+        ? {}
+        : { mediaTimeoutMs: arguments_.mediaTimeoutMs }),
       normalizeVfr:
         arguments_.normalizeVfr ||
         (arguments_.fps !== undefined && !project && !inputPath.includes("%"))
@@ -134,7 +142,7 @@ async function publishPair(input: {
       label: "asset",
       expected: input.output,
       workspace: assetWorkspace,
-      stageName: "asset.rma",
+      stageName: "asset.avl",
       staged: undefined,
       backupPath: undefined,
       backupIdentity: undefined,
@@ -322,7 +330,7 @@ function buildReportBytes(
     return serializeCanonicalJsonWithLimits(canonicalReportValue({
       reportVersion: "0.1",
       compiler: {
-        package: "@rendered-motion/compiler",
+        package: "@aval/compiler",
         packageVersion: "0.0.0",
         projectVersion: COMPILER_PROJECT_VERSION,
         nodeMajor: Number(process.versions.node.split(".")[0]),
@@ -362,9 +370,9 @@ function buildReportBytes(
       buildDetails: artifact.buildDetails,
       warnings: artifact.warnings.map(reportText)
     }), {
-      maxBytes: 32 * 1024 * 1024,
+      maxBytes: Number.MAX_SAFE_INTEGER,
       maxDepth: 128,
-      maxNodes: 1_000_000,
+      maxNodes: Number.MAX_SAFE_INTEGER,
       maxStringBytes: 32 * 1024 * 1024
     });
   } catch (error) {

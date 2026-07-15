@@ -6,7 +6,6 @@ import type {
   ReadinessV01,
   RenditionV01,
   StateV01,
-  StaticFrameV01,
   UnitV01
 } from "./model.js";
 
@@ -14,7 +13,6 @@ export interface ManifestRelationInput {
   readonly initialState: string;
   readonly renditions: readonly RenditionV01[];
   readonly units: readonly UnitV01[];
-  readonly staticFrames: readonly StaticFrameV01[];
   readonly states: readonly StateV01[];
   readonly edges: readonly EdgeV01[];
   readonly bindings: readonly BindingV01[];
@@ -23,9 +21,6 @@ export interface ManifestRelationInput {
 
 export function validateManifestRelations(input: ManifestRelationInput): void {
   const unitsById = new Map(input.units.map((unit) => [unit.id, unit]));
-  const staticFramesById = new Map(
-    input.staticFrames.map((frame) => [frame.id, frame])
-  );
   const statesById = new Map(input.states.map((state) => [state.id, state]));
   const edgesById = new Map(input.edges.map((edge) => [edge.id, edge]));
   if (!statesById.has(input.initialState)) {
@@ -33,7 +28,6 @@ export function validateManifestRelations(input: ManifestRelationInput): void {
   }
 
   const unitUseCount = new Map(input.units.map((unit) => [unit.id, 0]));
-  const staticUseCount = new Map(input.staticFrames.map((frame) => [frame.id, 0]));
   for (let index = 0; index < input.states.length; index += 1) {
     const state = input.states[index]!;
     const path = `states[${String(index)}]`;
@@ -42,10 +36,6 @@ export function validateManifestRelations(input: ManifestRelationInput): void {
       invalid(`${path}.bodyUnit`, "must reference a body unit");
     }
     incrementUse(unitUseCount, body.id);
-    if (!staticFramesById.has(state.staticFrame)) {
-      invalid(`${path}.staticFrame`, "does not reference a static frame");
-    }
-    incrementUse(staticUseCount, state.staticFrame);
     if (state.initialUnit !== undefined) {
       if (state.id !== input.initialState) {
         invalid(`${path}.initialUnit`, "is allowed only on the initial state");
@@ -75,11 +65,6 @@ export function validateManifestRelations(input: ManifestRelationInput): void {
 
   validateReversibleGroups(reversibleEdges, unitsById);
   validateUseCounts(input.units, unitUseCount);
-  for (const frame of input.staticFrames) {
-    if (staticUseCount.get(frame.id) === 0) {
-      invalid("staticFrames", `static frame ${quote(frame.id)} is unreferenced`);
-    }
-  }
   for (let index = 0; index < input.bindings.length; index += 1) {
     if (!eventNames.has(input.bindings[index]!.event)) {
       invalid(
@@ -100,25 +85,20 @@ export function validateManifestRelations(input: ManifestRelationInput): void {
 export function validateBlobCount(
   units: readonly UnitV01[],
   renditions: readonly RenditionV01[],
-  staticFrames: readonly StaticFrameV01[],
   budgets: FormatBudgets
 ): void {
-  rejectBlobCount(units.length * renditions.length + staticFrames.length, budgets);
+  rejectBlobCount(units.length * renditions.length, budgets);
 }
 
 export function validateRawBlobCount(
   units: unknown,
-  staticFrames: unknown,
   renditionCount: number,
   budgets: FormatBudgets
 ): void {
   if (!Array.isArray(units)) {
     invalid("units", "must be an array");
   }
-  if (!Array.isArray(staticFrames)) {
-    invalid("staticFrames", "must be an array");
-  }
-  rejectBlobCount(units.length * renditionCount + staticFrames.length, budgets);
+  rejectBlobCount(units.length * renditionCount, budgets);
 }
 
 function rejectBlobCount(count: number, budgets: FormatBudgets): void {

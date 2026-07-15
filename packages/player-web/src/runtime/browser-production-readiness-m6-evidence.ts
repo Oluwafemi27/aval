@@ -6,17 +6,13 @@ import {
   MotionPolicyCoordinator,
   type MotionPolicySnapshot
 } from "./motion-policy.js";
-import {
-  BrowserStaticSurfaceDecoder,
-  type BrowserStaticSurfaceDecoderSnapshot,
-  type BrowserDecodedStaticSurface,
-  type StaticPngInflatePath
-} from "./strict-static-decoder.js";
 
 export interface BrowserProductionProfileEvidence {
   readonly profile:
     | "avc-annexb-opaque-v0"
-    | "avc-annexb-packed-alpha-v0";
+    | "avc-annexb-packed-alpha-v0"
+    | "avc-annexb-opaque-v1"
+    | "avc-annexb-packed-alpha-v1";
   readonly visibleColorRect: readonly [number, number, number, number];
   readonly visibleAlphaRect:
     | readonly [number, number, number, number]
@@ -39,18 +35,6 @@ export interface BrowserProductionProfileEvidence {
   /** Alpha/pixel quality is certified only by the real browser readback proof. */
   readonly pixelEvidence: "not-claimed-by-readiness-rehearsal";
   readonly passed: boolean;
-}
-
-export interface BrowserProductionStrictStaticEvidence {
-  readonly passed: boolean;
-  readonly uniqueStaticFrames: number;
-  readonly decodedStaticFrames: number;
-  readonly inflatePaths: readonly StaticPngInflatePath[];
-  readonly decode: Readonly<BrowserStaticSurfaceDecoderSnapshot>;
-  /** The strict decoder starts from validated PNG bytes, never a PNG Blob. */
-  readonly browserPngDecoderUsed: false;
-  /** Static decode does not make an alpha/compositor pixel-quality claim. */
-  readonly pixelEvidence: "not-claimed-by-readiness-rehearsal";
 }
 
 export interface BrowserProductionMotionPhaseEvidence {
@@ -86,7 +70,8 @@ export function createProductionProfileEvidence(input: Readonly<Pick<
 >>): Readonly<BrowserProductionProfileEvidence> {
   const { geometry, rendition } = input.context.candidate;
   const renderer = input.renderer.snapshot();
-  const packed = rendition.profile === "avc-annexb-packed-alpha-v0";
+  const packed = rendition.profile === "avc-annexb-packed-alpha-v0" ||
+    rendition.profile === "avc-annexb-packed-alpha-v1";
   const alphaRect = geometry.visibleAlphaRect ?? null;
   const alphaPaneAvailable = alphaRect !== null;
   const rendererEvidence = Object.freeze({
@@ -121,59 +106,6 @@ export function createProductionProfileEvidence(input: Readonly<Pick<
     uploadReady,
     pixelEvidence: "not-claimed-by-readiness-rehearsal",
     passed: profileReady && uploadReady
-  });
-}
-
-export async function collectProductionStrictStaticEvidence(
-  input: Readonly<Pick<
-    AvcCandidateReadinessSessionInput,
-    "context" | "signal"
-  >>,
-  decoder: BrowserStaticSurfaceDecoder = new BrowserStaticSurfaceDecoder()
-): Promise<Readonly<BrowserProductionStrictStaticEvidence>> {
-  const paths: StaticPngInflatePath[] = [];
-  let decodedStaticFrames = 0;
-  for (const descriptor of input.context.catalog.manifest.staticFrames) {
-    throwIfAborted(input.signal);
-    let surface: BrowserDecodedStaticSurface | null = null;
-    try {
-      surface = await decoder.decode(
-        input.context.catalog.copyStaticPng(descriptor.id),
-        {
-          signal: input.signal,
-          expectedWidth: descriptor.width,
-          expectedHeight: descriptor.height
-        }
-      );
-      paths.push(surface.inflatePath);
-      decodedStaticFrames += 1;
-    } finally {
-      surface?.close();
-    }
-  }
-  const snapshot = decoder.snapshot();
-  const attempts = snapshot.nativeAttempts + snapshot.pureAttempts;
-  const successes = snapshot.nativeSuccesses + snapshot.pureSuccesses;
-  const uniqueStaticFrames = input.context.catalog.manifest.staticFrames.length;
-  const passed =
-    uniqueStaticFrames > 0 &&
-    decodedStaticFrames === uniqueStaticFrames &&
-    attempts === uniqueStaticFrames &&
-    successes === uniqueStaticFrames &&
-    snapshot.errors === 0 &&
-    snapshot.bitmapCloses === uniqueStaticFrames &&
-    snapshot.peakPngCopyBytes > 0 &&
-    snapshot.peakZlibBytes > 0 &&
-    snapshot.peakFilteredBytes > 0 &&
-    snapshot.peakRgbaBytes > 0;
-  return Object.freeze({
-    passed,
-    uniqueStaticFrames,
-    decodedStaticFrames,
-    inflatePaths: Object.freeze(paths),
-    decode: snapshot,
-    browserPngDecoderUsed: false,
-    pixelEvidence: "not-claimed-by-readiness-rehearsal"
   });
 }
 
@@ -255,11 +187,4 @@ function freezeMotionPhase(
     staticOrigin: snapshot.staticOrigin,
     stickyFailure: snapshot.stickyFailure
   });
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (!signal.aborted) return;
-  throw signal.reason instanceof Error
-    ? signal.reason
-    : new DOMException("production readiness static decode aborted", "AbortError");
 }

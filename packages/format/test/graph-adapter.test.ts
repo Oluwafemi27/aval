@@ -17,7 +17,6 @@ describe("adaptManifestToMotionGraph", () => {
       states: [
         {
           id: "a-a",
-          staticFrameId: "static-a",
           body: {
             unitId: "body-a",
             kind: "loop",
@@ -30,7 +29,6 @@ describe("adaptManifestToMotionGraph", () => {
         },
         {
           id: "a-b",
-          staticFrameId: "static-b",
           body: {
             unitId: "body-b",
             kind: "finite",
@@ -40,7 +38,6 @@ describe("adaptManifestToMotionGraph", () => {
         },
         {
           id: "a-c",
-          staticFrameId: "static-c",
           body: {
             unitId: "body-c",
             kind: "held",
@@ -136,22 +133,6 @@ describe("adaptManifestToMotionGraph", () => {
     expect(Object.isFrozen(graph.definition)).toBe(true);
     expect(Object.isFrozen(graph.definition.states[0]?.body.ports[0]?.portalFrames)).toBe(true);
     expect(Object.isFrozen(graph.definition.edges[4]?.transition)).toBe(true);
-  });
-
-  it("preserves one shared static descriptor across multiple states", () => {
-    const source = structuredClone(validManifest()) as any;
-    source.states[1].staticFrame = "static-a";
-    source.states[2].staticFrame = "static-a";
-    source.staticFrames = [source.staticFrames[0]];
-
-    const graph = adaptManifestToMotionGraph(
-      validateCompiledManifestV01(source)
-    );
-    expect(graph.definition.states.map((state) => state.staticFrameId)).toEqual([
-      "static-a",
-      "static-a",
-      "static-a"
-    ]);
   });
 
   it("wraps M3 geometry and ambiguity failures as GRAPH_INVALID", () => {

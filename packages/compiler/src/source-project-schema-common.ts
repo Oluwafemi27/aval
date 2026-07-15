@@ -2,7 +2,7 @@ import {
   FORMAT_DEFAULT_BUDGETS,
   type PortV01,
   type ResidencyEndpointV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import type {
   SourceDescriptorV01,
@@ -87,15 +87,13 @@ export function cloneSourceDescriptors(
       ],
       path
     );
-    const digits = integer(input.digits, `${path}.digits`, 1, 9);
+    const digits = integer(input.digits, `${path}.digits`, 1, 12);
     const firstNumber = integer(input.firstNumber, `${path}.firstNumber`, 0);
-    const frameCount = integer(
-      input.frameCount,
-      `${path}.frameCount`,
-      1,
-      1_800
-    );
-    if (firstNumber + frameCount - 1 >= 10 ** digits) {
+    const frameCount = integer(input.frameCount, `${path}.frameCount`, 1);
+    if (
+      BigInt(firstNumber) + BigInt(frameCount) - 1n >=
+      10n ** BigInt(digits)
+    ) {
       invalid(path, "PNG frame numbers do not fit the declared digit width");
     }
     return Object.freeze({
@@ -142,8 +140,11 @@ export function cloneSourceUnits(
     const source = identifier(input.source, `${path}.source`);
     if (!sourceIds.has(source)) invalid(`${path}.source`, "does not reference a source");
     const rangeInput = tuple(input.range, 2, `${path}.range`);
-    const start = integer(rangeInput[0], `${path}.range[0]`, 0, 1_799);
-    const end = integer(rangeInput[1], `${path}.range[1]`, start + 1, 1_800);
+    const start = integer(rangeInput[0], `${path}.range[0]`, 0);
+    const end = integer(rangeInput[1], `${path}.range[1]`, start + 1);
+    if (totalFrames > Number.MAX_SAFE_INTEGER - (end - start)) {
+      invalid("units", "total unit frames exceed safe integer representation");
+    }
     totalFrames += end - start;
     if (totalFrames > FORMAT_DEFAULT_BUDGETS.maxTotalUnitFrames) {
       invalid("units", "total unit frames exceed the format budget");
@@ -246,8 +247,7 @@ function cloneResidency(
 
 export function cloneSourceStates(
   value: unknown,
-  units: readonly SourceUnitV01[],
-  sources: readonly SourceDescriptorV01[]
+  units: readonly SourceUnitV01[]
 ): readonly SourceStateV01[] {
   const inputs = boundedArray(
     value,
@@ -261,33 +261,20 @@ export function cloneSourceStates(
   const oneShotIds = new Set(
     units.filter(({ kind }) => kind === "one-shot").map(({ id }) => id)
   );
-  const sourceIds = new Set(sources.map(({ id }) => id));
   return sortUniqueById(inputs.map((entry, index) => {
     const path = `states[${String(index)}]`;
     const input = record(entry, path);
-    exactKeys(input, ["id", "bodyUnit"], path, ["initialUnit", "poster"]);
+    exactKeys(input, ["id", "bodyUnit"], path, ["initialUnit"]);
     const bodyUnit = identifier(input.bodyUnit, `${path}.bodyUnit`);
     if (!bodyIds.has(bodyUnit)) invalid(`${path}.bodyUnit`, "must reference a body unit");
     const initialUnit = optionalIdentifier(input.initialUnit, `${path}.initialUnit`);
     if (initialUnit !== undefined && !oneShotIds.has(initialUnit)) {
       invalid(`${path}.initialUnit`, "must reference a one-shot unit");
     }
-    let poster: SourceStateV01["poster"];
-    if (input.poster !== undefined) {
-      const posterInput = record(input.poster, `${path}.poster`);
-      exactKeys(posterInput, ["source", "frame"], `${path}.poster`);
-      const source = identifier(posterInput.source, `${path}.poster.source`);
-      if (!sourceIds.has(source)) invalid(`${path}.poster.source`, "does not reference a source");
-      poster = Object.freeze({
-        source,
-        frame: integer(posterInput.frame, `${path}.poster.frame`, 0, 1_799)
-      });
-    }
     return Object.freeze({
       id: identifier(input.id, `${path}.id`),
       bodyUnit,
-      ...(initialUnit === undefined ? {} : { initialUnit }),
-      ...(poster === undefined ? {} : { poster })
+      ...(initialUnit === undefined ? {} : { initialUnit })
     });
   }), "states");
 }
@@ -343,9 +330,6 @@ export function validateSourceReferences(input: {
     }
   }
   const usedSources = new Set(input.units.map(({ source }) => source));
-  for (const state of input.states) {
-    if (state.poster !== undefined) usedSources.add(state.poster.source);
-  }
   for (const source of input.sources) {
     if (!usedSources.has(source.id)) invalid(`sources.${source.id}`, "is unused");
   }

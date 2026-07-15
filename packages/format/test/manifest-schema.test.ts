@@ -27,7 +27,7 @@ describe("validateCompiledManifestV01", () => {
       {
         id: "b-opaque",
         profile: "avc-annexb-opaque-v0",
-        codec: "avc1.42E020",
+        codec: "avc1.42E028",
         codedWidth: 16,
         codedHeight: 16,
         alphaLayout: { type: "opaque-v0", colorRect: [0, 0, 2, 2] },
@@ -37,6 +37,30 @@ describe("validateCompiledManifestV01", () => {
       {
         id: "c-packed",
         profile: "avc-annexb-packed-alpha-v0",
+        codec: "avc1.42E020",
+        codedWidth: 16,
+        codedHeight: 16,
+        alphaLayout: {
+          type: "stacked-v0",
+          colorRect: [0, 0, 2, 2],
+          alphaRect: [0, 10, 2, 2]
+        },
+        bitrate: { average: 2_000, peak: 2_000 },
+        capabilities: ["webcodecs", "webgl2"]
+      },
+      {
+        id: "d-opaque-v1",
+        profile: "avc-annexb-opaque-v1",
+        codec: "avc1.42E028",
+        codedWidth: 16,
+        codedHeight: 16,
+        alphaLayout: { type: "opaque-v0", colorRect: [0, 0, 2, 2] },
+        bitrate: { average: 1_000, peak: 2_000 },
+        capabilities: ["webcodecs", "webgl2"]
+      },
+      {
+        id: "e-packed-v1",
+        profile: "avc-annexb-packed-alpha-v1",
         codec: "avc1.42E020",
         codedWidth: 16,
         codedHeight: 16,
@@ -60,11 +84,21 @@ describe("validateCompiledManifestV01", () => {
     }
 
     const mixed = mutableManifest();
-    mixed.renditions = [reference("a-reference"), ...production];
+    mixed.renditions = [reference("a-reference"), ...production.slice(0, 2)];
     rebuildSamples(mixed);
     mixed.limits.decodedPixelBytes = 1_024;
     mixed.limits.runtimeWorkingSetBytes = 1_024;
     expectProfileInvalid(mixed, "renditions");
+
+    const mixedVersions = mutableManifest();
+    mixedVersions.renditions = [
+      opaqueRendition("a-v0", 2),
+      { ...opaqueRendition("b-v1", 2), profile: "avc-annexb-opaque-v1" }
+    ];
+    rebuildSamples(mixedVersions);
+    mixedVersions.limits.decodedPixelBytes = 1_024;
+    mixedVersions.limits.runtimeWorkingSetBytes = 1_024;
+    expectProfileInvalid(mixedVersions, "renditions");
 
     const outside = mutableManifest();
     outside.renditions = [{
@@ -88,10 +122,6 @@ describe("validateCompiledManifestV01", () => {
       const manifest = mutableManifest();
       manifest.canvas.width = 16;
       manifest.canvas.height = 16;
-      for (const frame of manifest.staticFrames) {
-        frame.width = 16;
-        frame.height = 16;
-      }
       manifest.renditions = renditions;
       rebuildSamples(manifest);
       manifest.limits.decodedPixelBytes = 3_072;
@@ -99,6 +129,44 @@ describe("validateCompiledManifestV01", () => {
 
       expect(validateCompiledManifestV01(manifest).renditions.map(({ id }) => id))
         .toEqual(["a-small", "b-large"]);
+    }
+  });
+
+  it("requires reference renditions to fit their uint16 dimensions and uint32 sample", () => {
+    for (const [width, height] of [
+      [0x1_0000, 1],
+      [0x8000, 0x8000]
+    ] as const) {
+      const manifest = mutableManifest();
+      manifest.canvas.width = width;
+      manifest.canvas.height = height;
+      manifest.renditions[0].codedWidth = width;
+      manifest.renditions[0].codedHeight = height;
+      expectInvalid(manifest, "renditions[0]");
+    }
+  });
+
+  it("validates declared AVC level dimensions and macroblock rate", () => {
+    const cases = [
+      { codedWidth: 464, codedHeight: 16, frameRate: 30 },
+      { codedWidth: 160, codedHeight: 160, frameRate: 1 },
+      { codedWidth: 112, codedHeight: 112, frameRate: 31 }
+    ] as const;
+    for (const testCase of cases) {
+      const manifest = mutableManifest();
+      manifest.renditions = [{
+        id: "video",
+        profile: "avc-annexb-opaque-v0",
+        codec: "avc1.42E00A",
+        codedWidth: testCase.codedWidth,
+        codedHeight: testCase.codedHeight,
+        alphaLayout: { type: "opaque-v0", colorRect: [0, 0, 2, 2] },
+        bitrate: { average: 1_000, peak: 2_000 },
+        capabilities: ["webcodecs", "webgl2"]
+      }];
+      manifest.frameRate = { numerator: testCase.frameRate, denominator: 1 };
+      rebuildSamples(manifest);
+      expectInvalid(manifest, "renditions[0]");
     }
   });
 
@@ -145,35 +213,19 @@ describe("validateCompiledManifestV01", () => {
     expectInvalid(badCount, "units[1].samples[0].sampleCount");
 
     const digest = mutableManifest();
-    digest.staticFrames[0]!.sha256 = "A".repeat(64);
-    expectInvalid(digest, "staticFrames[0].sha256");
+    digest.units[0]!.samples[0]!.sha256 = "A".repeat(64);
+    expectInvalid(digest, "units[0].samples[0].sha256");
   });
 
-  it("validates typed references, exclusive unit use, and static sharing", () => {
+  it("validates typed references and exclusive unit use", () => {
     const wrongNamespace = mutableManifest();
-    wrongNamespace.states[0]!.bodyUnit = "static-a";
+    wrongNamespace.states[0]!.bodyUnit = "missing-body";
     expectInvalid(wrongNamespace, "states[0].bodyUnit");
 
     const nonInitial = mutableManifest();
     nonInitial.states[1]!.initialUnit = "intro-a";
     expectInvalid(nonInitial, "states[1].initialUnit");
 
-    const unusedStatic = mutableManifest();
-    unusedStatic.staticFrames.push({
-      id: "static-z",
-      offset: 1_216,
-      length: 68,
-      width: 2,
-      height: 2,
-      sha256: "0".repeat(64)
-    });
-    expectInvalid(unusedStatic, "staticFrames");
-
-    const sharedStatic = mutableManifest();
-    sharedStatic.states[1]!.staticFrame = "static-a";
-    sharedStatic.states[2]!.staticFrame = "static-a";
-    sharedStatic.staticFrames = [sharedStatic.staticFrames[0]!];
-    expect(() => validateCompiledManifestV01(sharedStatic)).not.toThrow();
   });
 
   it("validates reversible residency, inverse metadata, and cut runways", () => {
@@ -194,7 +246,7 @@ describe("validateCompiledManifestV01", () => {
     expectInvalid(runway, "edges[1].targetRunwayFrames");
   });
 
-  it("validates bindings, readiness closure, fallback, and declared estimates", () => {
+  it("validates bindings, readiness closure, and declared estimates", () => {
     const binding = mutableManifest();
     binding.bindings[0]!.event = "unused";
     expectInvalid(binding, "bindings[0].event");
@@ -209,10 +261,6 @@ describe("validateCompiledManifestV01", () => {
     );
     expectInvalid(bootstrap, "readiness.bootstrapUnits");
 
-    const fallback = mutableManifest();
-    fallback.fallback.unsupported = "poster";
-    expectInvalid(fallback, "fallback.unsupported");
-
     const decoded = mutableManifest();
     decoded.limits.decodedPixelBytes = 15;
     expectInvalid(decoded, "limits.decodedPixelBytes");
@@ -224,9 +272,8 @@ describe("validateCompiledManifestV01", () => {
       ["maxEdges", 4],
       ["maxUnits", 5],
       ["maxRenditions", 0],
-      ["maxStaticFrames", 2],
       ["maxBindings", 1],
-      ["maxBlobRanges", 8],
+      ["maxBlobRanges", 5],
       ["maxTotalUnitFrames", 17],
       ["maxSampleRecords", 17],
       ["maxPortsPerBody", 0],
@@ -241,14 +288,27 @@ describe("validateCompiledManifestV01", () => {
     }
   });
 
-  it("accepts the exact 32/64/96/32/900/128 ceilings and four renditions", () => {
+  it("accepts reversible units and authored byte policies above former ceilings", () => {
+    const manifest = mutableManifest();
+    const reversible = reversibleUnit(manifest);
+    reversible.frameCount = 25;
+    reversible.samples[0].sampleCount = 25;
+    manifest.limits.maxCompiledBytes = 64 * 1024 * 1024;
+    manifest.limits.maxRuntimeBytes = 128 * 1024 * 1024;
+
+    const validated = validateCompiledManifestV01(manifest);
+    expect(reversibleUnit(validated).frameCount).toBe(25);
+    expect(validated.limits.maxCompiledBytes).toBe(64 * 1024 * 1024);
+    expect(validated.limits.maxRuntimeBytes).toBe(128 * 1024 * 1024);
+  });
+
+  it("keeps graph/blob ceilings and accepts the 900-frame fixture", () => {
     const limit = validateCompiledManifestV01(limitManifest());
     expect(limit.states).toHaveLength(32);
     expect(limit.edges).toHaveLength(64);
     expect(limit.units).toHaveLength(96);
-    expect(limit.staticFrames).toHaveLength(32);
     expect(limit.units.reduce((sum, unit) => sum + unit.frameCount, 0)).toBe(900);
-    expect(limit.units.length * limit.renditions.length + limit.staticFrames.length).toBe(128);
+    expect(limit.units.length * limit.renditions.length).toBe(96);
 
     const four = mutableManifest();
     four.renditions = Array.from({ length: 4 }, (_, index) =>
@@ -258,7 +318,7 @@ describe("validateCompiledManifestV01", () => {
     expect(validateCompiledManifestV01(four).renditions).toHaveLength(4);
   });
 
-  it("rejects the normative count boundaries above 32/64/96/4/900/128", () => {
+  it("rejects graph/blob count boundaries while allowing more than 900 frames", () => {
     const states = structuredClone(limitManifest()) as any;
     states.states.push(states.states[0]);
     expectInvalid(states, "states");
@@ -269,7 +329,6 @@ describe("validateCompiledManifestV01", () => {
 
     const units = structuredClone(limitManifest()) as any;
     units.units.push(units.units[0]);
-    units.staticFrames.pop();
     expectInvalid(units, "units");
 
     const renditions = mutableManifest();
@@ -279,12 +338,29 @@ describe("validateCompiledManifestV01", () => {
     expectInvalid(renditions, "renditions");
 
     const frames = structuredClone(limitManifest()) as any;
-    frames.units[0]!.frameCount = 2;
-    expectInvalid(frames, "units");
+    frames.units.at(-1)!.frameCount += 1;
+    rebuildSamples(frames);
+    expect(validateCompiledManifestV01(frames).units.reduce(
+      (sum, unit) => sum + unit.frameCount,
+      0
+    )).toBe(901);
 
     const blobs = structuredClone(limitManifest()) as any;
-    blobs.staticFrames.push({ ...blobs.staticFrames[0], id: "static-32" });
+    blobs.renditions.push({ ...blobs.renditions[0], id: "reference-2" });
+    rebuildSamples(blobs);
     expectInvalid(blobs, "manifest");
+  });
+
+  it("rejects every removed embedded-poster field", () => {
+    for (const mutate of [
+      (manifest: any) => { manifest.staticFrames = []; },
+      (manifest: any) => { manifest.fallback = { unsupported: "per-state-static", reducedMotion: "per-state-static" }; },
+      (manifest: any) => { manifest.states[0].staticFrame = "legacy-static"; }
+    ]) {
+      const manifest = mutableManifest();
+      mutate(manifest);
+      expectInvalid(manifest, mutate.toString().includes("states") ? "states[0]" : "manifest");
+    }
   });
 });
 
@@ -309,7 +385,7 @@ function reference(id: string): any {
   return {
     id,
     profile: "reference-rgba-v0",
-    codec: "rma.reference-rgba",
+    codec: "aval.reference-rgba",
     codedWidth: 2,
     codedHeight: 2,
     alphaLayout: { type: "straight-rgba-v0" },

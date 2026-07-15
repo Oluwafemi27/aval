@@ -18,6 +18,7 @@ export interface ParsedSliceHeader {
   readonly deltaPicOrderCntBottom: number;
   readonly deltaPicOrderCnt0: number;
   readonly deltaPicOrderCnt1: number;
+  readonly sliceQpDelta: number;
 }
 export function parseSliceHeader(
   nal: AnnexBNalUnit,
@@ -118,7 +119,14 @@ export function parseSliceHeader(
     );
   }
 
-  reader.readSignedExpGolomb("slice_qp_delta", -87, 77);
+  const sliceQpDelta = reader.readSignedExpGolomb("slice_qp_delta", -87, 77);
+  const finalQp = 26 + pps.picInitQpMinus26 + sliceQpDelta;
+  requireAvc(
+    finalQp >= 0 && finalQp <= 51,
+    path,
+    "final slice QP is outside the 8-bit AVC range",
+    nal.offset + 1 + Math.floor(reader.bitOffset / 8)
+  );
   if (pps.deblockingFilterControlPresent) {
     const disableDeblockingFilterIdc = reader.readUnsignedExpGolomb(
       "disable_deblocking_filter_idc",
@@ -147,7 +155,8 @@ export function parseSliceHeader(
     picOrderCntLsb,
     deltaPicOrderCntBottom,
     deltaPicOrderCnt0,
-    deltaPicOrderCnt1
+    deltaPicOrderCnt1,
+    sliceQpDelta
   });
 }
 

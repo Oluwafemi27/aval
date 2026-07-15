@@ -19,13 +19,7 @@ export const RUNTIME_RESOURCE_FIELD_CATEGORIES = Object.freeze({
   persistentAllocationBytes: "persistent-animation",
   streamingAllocationBytes: "streaming-texture",
   frameStagingBytes: "frame-staging",
-  staticDecodePngCopyBytes: "png-copy",
-  staticDecodeOwnedZlibBytes: "png-zlib",
-  staticDecodeWorkingPeakBytes: "png-scratch",
-  currentStaticSurfaceAllocationBytes: "current-static-surface",
-  incomingStaticSurfaceAllocationBytes: "incoming-static-surface",
-  animatedCanvasBackingAllocationBytes: "animated-canvas-backing",
-  staticCanvasBackingAllocationBytes: "static-canvas-backing"
+  animatedCanvasBackingAllocationBytes: "animated-canvas-backing"
 } as const satisfies Readonly<
   Record<RuntimeResourceAllocationField, RuntimeByteCategory>
 >);

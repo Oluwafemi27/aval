@@ -6,7 +6,7 @@
 
 ## Outcome
 
-Add a pure `@rendered-motion/graph` workspace package whose validated graph,
+Add a pure `@aval/graph` workspace package whose validated graph,
 explicit inputs, and consecutive ticks produce deterministic presentations,
 effects, and settlement descriptors for every version-0 route phase.
 

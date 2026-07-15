@@ -8,18 +8,14 @@ import { compileDirectInput } from "../src/compile/direct-compiler.js";
 import { compileProjectFile } from "../src/compile/project-compiler.js";
 import { encodeAvcUnit } from "../src/ffmpeg/encode-unit.js";
 import { probeMedia } from "../src/ffmpeg/probe.js";
-import {
-  DEFAULT_MEDIA_TIMEOUT_MS,
-  DEFAULT_PROBE_TIMEOUT_MS
-} from "../src/model.js";
 
-describe("lowerable operation timeouts", () => {
+describe("configurable operation timeouts", () => {
   let directory = "";
   let hangingTool = "";
   let yuvPath = "";
 
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), "rma-timeout-tool-"));
+    directory = await mkdtemp(join(tmpdir(), "aval-timeout-tool-"));
     hangingTool = join(directory, "hang");
     yuvPath = join(directory, "frame.yuv");
     await writeFile(
@@ -58,18 +54,27 @@ describe("lowerable operation timeouts", () => {
       endFrame: 1,
       codedWidth: 32,
       codedHeight: 32,
-      bitrate: { average: 100_000, peak: 200_000 },
+      encoding: {
+        codec: "h264",
+        preset: "medium",
+        legacyZeroLatency: true,
+        rateControl: {
+          mode: "abr",
+          averageBitrate: 100_000,
+          maxBitrate: 200_000
+        }
+      },
       executable: hangingTool,
       timeoutMs: 20
     })).rejects.toMatchObject({ code: "PROCESS_TIMEOUT" });
   });
 
-  it("threads lower-only timeout options through both public compiler entries", async () => {
+  it("threads positive timeout validation through both public compiler entries", async () => {
     await expect(compileDirectInput({
       inputPath: "/input/never-opened.mov",
-      outputPath: "/output/never-written.rma",
+      outputPath: "/output/never-written.avl",
       loop: [0, 1],
-      probeTimeoutMs: DEFAULT_PROBE_TIMEOUT_MS + 1,
+      probeTimeoutMs: 0,
       mediaTimeoutMs: 20
     })).rejects.toMatchObject({
       code: "INPUT_INVALID",
@@ -78,9 +83,9 @@ describe("lowerable operation timeouts", () => {
 
     await expect(compileProjectFile({
       projectPath: "/input/never-opened.json",
-      outputPath: "/output/never-written.rma",
+      outputPath: "/output/never-written.avl",
       probeTimeoutMs: 20,
-      mediaTimeoutMs: DEFAULT_MEDIA_TIMEOUT_MS + 1
+      mediaTimeoutMs: 0
     })).rejects.toMatchObject({
       code: "INPUT_INVALID",
       message: expect.stringContaining("Media timeout")

@@ -172,7 +172,7 @@ function reference(path, bytes, id) {
 }
 function render(index) {
   const rows = index.profiles.length === 0 ? ["| No named profiles | not run | not run | not measured |"] : index.profiles.map((profile) => `| ${escapeCell(profile.profileId)} | ${profile.staticFallback} | ${profile.runtimeScheduling} | ${profile.observedDisplay === "not-run" ? "not measured" : profile.observedDisplay} |`);
-  return ["# Rendered Motion 1.0.0 certification index", "", `Release status: **${index.releaseStatus}**`, "", "| Profile | Static fallback | Runtime scheduling | Observed display |", "| --- | --- | --- | --- |", ...rows, "", "Runtime scheduling and observed-display evidence are separate claim layers.", ""].join("\n");
+  return ["# AVAL 1.0.0 certification index", "", `Release status: **${index.releaseStatus}**`, "", "| Profile | Static fallback | Runtime scheduling | Observed display |", "| --- | --- | --- | --- |", ...rows, "", "Runtime scheduling and observed-display evidence are separate claim layers.", ""].join("\n");
 }
 function requireCanonical(bytes, value, label) {
   if (Buffer.compare(bytes, certification.canonicalJsonBytes(value)) !== 0) throw new Error(`${label} is not canonical JSON`);

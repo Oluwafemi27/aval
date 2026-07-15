@@ -1,4 +1,4 @@
-import type { GraphEdgeDefinition, GraphPresentation } from "@rendered-motion/graph";
+import type { GraphEdgeDefinition, GraphPresentation } from "@aval/graph";
 import {
   FRAME_STREAMING_SLOT_COUNT,
   type RenderFrameHandle,
@@ -363,12 +363,23 @@ export class BrowserNormalRouteOwner {
     if (next.kind !== "frame") {
       throw new Error(`browser scheduler produced ${next.kind}`);
     }
-    const handle = await this.#candidate.renderer.uploadStreaming(
-      this.#selectStreamingSlot(next.media.intendedPresentationOrdinal),
-      next.media.generation,
-      next.frame
-    );
-    if (handle === null) throw new Error("browser streaming upload became stale");
+    let handle: Readonly<StreamingFrameHandle> | null;
+    try {
+      handle = await this.#candidate.renderer.uploadStreaming(
+        this.#selectStreamingSlot(next.media.intendedPresentationOrdinal),
+        next.media.generation,
+        next.frame
+      );
+    } catch (error) {
+      this.#scheduler.discardPreparedPresentation();
+      if (!next.frame.closed) next.frame.close();
+      throw error;
+    }
+    if (handle === null) {
+      this.#scheduler.discardPreparedPresentation();
+      if (!next.frame.closed) next.frame.close();
+      throw new Error("browser streaming upload became stale");
+    }
     return Object.freeze({
       media: next.media,
       handle,

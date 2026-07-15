@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Vite exposes the checked-in binary as a data URL in tests.
-import packedFixtureDataUrl from "../../../../fixtures/conformance/m7/reference-packed.rma?url&inline";
+import packedFixtureDataUrl from "../../../../fixtures/conformance/m7/reference-packed.avl?url&inline";
 
 import * as api from "../index.js";
 
@@ -12,6 +12,7 @@ const PUBLIC_M7_RUNTIME_EXPORTS = Object.freeze([
   "PlayerWebPageRuntime",
   "PlayerResourceAccount",
   "RuntimeSessionLifecycle",
+  "StateFallbackStore",
   "VisibilityPolicyCoordinator",
   "createPlayerRuntimeAssetSessionResources",
   "createPlayerWebRuntimeResources",
@@ -100,9 +101,7 @@ describe("M7 player-web public boundary", () => {
       "assetSession",
       "candidate",
       "canvasBacking",
-      "participant",
-      "staticDecoder",
-      "staticSurfaces"
+      "participant"
     ]);
     expect(Object.isFrozen(resources)).toBe(true);
     expect(Object.keys(resources).sort()).toEqual([
@@ -117,12 +116,10 @@ describe("M7 player-web public boundary", () => {
       resources,
       generation: lifecycle.current().generation
     });
-    const staticFrame = session.catalog.staticFrames.keys()[0];
     const rendition = session.catalog.renditions.keys()[0];
-    if (staticFrame === undefined || rendition === undefined) {
-      throw new Error("M7 public fixture has no static or rendition");
+    if (rendition === undefined) {
+      throw new Error("M7 public fixture has no rendition");
     }
-    await session.ensureStatic(staticFrame);
     await session.ensureAllUnits(rendition);
     const renditionRecord = session.catalog.records.values().find((record) =>
       record.rendition === rendition

@@ -4,43 +4,44 @@ import { join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { RELEASE_PACKAGE_NAMES } from "./release-set-model.mjs";
+import { ensureCompilerCliExecutable } from "./compiler-cli-mode.mjs";
 
 const BUILD_INFO = Object.freeze({
-  "@rendered-motion/graph": new Set(["graph.tsbuildinfo"]),
-  "@rendered-motion/format": new Set(["format.tsbuildinfo"]),
-  "@rendered-motion/player-web": new Set(["player-web.release.tsbuildinfo"]),
-  "@rendered-motion/element": new Set(["element.release.tsbuildinfo"]),
-  "@rendered-motion/compiler": new Set(["compiler.tsbuildinfo"])
+  "@aval/graph": new Set(["graph.tsbuildinfo"]),
+  "@aval/format": new Set(["format.tsbuildinfo"]),
+  "@aval/player-web": new Set(["player-web.release.tsbuildinfo"]),
+  "@aval/element": new Set(["element.release.tsbuildinfo"]),
+  "@aval/compiler": new Set(["compiler.tsbuildinfo"])
 });
 const SOURCE_MAP_PACKAGES = new Set([
-  "@rendered-motion/graph",
-  "@rendered-motion/format",
-  "@rendered-motion/compiler"
+  "@aval/graph",
+  "@aval/format",
+  "@aval/compiler"
 ]);
 const RELEASE_CONFIG = Object.freeze({
-  "@rendered-motion/graph": "tsconfig.json",
-  "@rendered-motion/format": "tsconfig.json",
-  "@rendered-motion/player-web": "tsconfig.release.json",
-  "@rendered-motion/element": "tsconfig.release.json",
-  "@rendered-motion/compiler": "tsconfig.json"
+  "@aval/graph": "tsconfig.json",
+  "@aval/format": "tsconfig.json",
+  "@aval/player-web": "tsconfig.release.json",
+  "@aval/element": "tsconfig.release.json",
+  "@aval/compiler": "tsconfig.json"
 });
 
 export async function buildFreshPublicDistributions(root) {
   const repository = resolve(root);
-  const lockPath = join(repository, ".git", "rendered-motion-release-build.lock");
+  const lockPath = join(repository, ".git", "aval-release-build.lock");
   const lock = await open(lockPath, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL, 0o600).catch((error) => {
     if (error?.code === "EEXIST") throw new Error("another fresh public distribution build is active");
     throw error;
   });
   let temporary;
-  try { temporary = await mkdtemp(join(repository, ".rendered-motion-public-build-")); }
+  try { temporary = await mkdtemp(join(repository, ".aval-public-build-")); }
   catch (error) { await lock.close().catch(() => undefined); await rm(lockPath, { force: true }); throw error; }
   try {
     await lock.writeFile(`${String(process.pid)}\n`);
     await lock.sync();
     const staged = new Map();
     for (const name of RELEASE_PACKAGE_NAMES) {
-      const short = name.slice("@rendered-motion/".length);
+      const short = name.slice("@aval/".length);
       const distribution = join(temporary, "dist", short);
       await mkdir(distribution, { recursive: true });
       const config = join(temporary, `tsconfig.${short}.json`);
@@ -48,6 +49,9 @@ export async function buildFreshPublicDistributions(root) {
       const result = spawnSync(process.execPath, [resolve(repository, "node_modules/typescript/bin/tsc"), "-p", config, "--pretty", "false"], { cwd: repository, stdio: "inherit", timeout: 5 * 60_000 });
       if (result.error !== undefined) throw result.error;
       if (result.status !== 0) throw new Error(`private fresh public build failed for ${name}`);
+      if (name === "@aval/compiler") {
+        await ensureCompilerCliExecutable(join(distribution, "cli.js"));
+      }
       await assertDistributionDerived({ source: packageDirectory(repository, name, "src"), distribution, packageName: name });
       staged.set(name, distribution);
     }
@@ -66,7 +70,7 @@ export async function installVerifiedDistributions({ root, staged, backupRoot, r
   const installed = [];
   try {
     for (const name of RELEASE_PACKAGE_NAMES) {
-      const short = name.slice("@rendered-motion/".length);
+      const short = name.slice("@aval/".length);
       const target = packageDirectory(root, name, "dist");
       const backup = join(backupRoot, short);
       const source = staged.get(name);
@@ -92,7 +96,7 @@ export async function installVerifiedDistributions({ root, staged, backupRoot, r
 
 function privateBuildConfig(root, name, distribution, staged) {
   const source = packageDirectory(root, name, "src");
-  const short = name.slice("@rendered-motion/".length);
+  const short = name.slice("@aval/".length);
   const buildInfo = [...BUILD_INFO[name]][0];
   const paths = Object.fromEntries([...staged].map(([packageName, path]) => [packageName, [join(path, "index.d.ts")]]));
   return {
@@ -157,4 +161,4 @@ async function collectFiles(root, directory = root, output = []) {
 }
 
 function isReleaseSource(path) { return path.endsWith(".ts") && !/\.(?:test|compile)\.ts$/u.test(path) && !/test-support\.ts$/u.test(path); }
-function packageDirectory(root, name, child) { return resolve(root, "packages", name.slice("@rendered-motion/".length), child); }
+function packageDirectory(root, name, child) { return resolve(root, "packages", name.slice("@aval/".length), child); }

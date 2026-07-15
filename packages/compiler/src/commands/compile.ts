@@ -80,6 +80,9 @@ export async function runCompileCommand(
         ...(arguments_.ffprobePath === undefined
           ? {}
           : { ffprobePath: arguments_.ffprobePath }),
+        ...(arguments_.mediaTimeoutMs === undefined
+          ? {}
+          : { mediaTimeoutMs: arguments_.mediaTimeoutMs }),
         ...(options.signal === undefined ? {} : { signal: options.signal })
       })
     : await dependencies.buildDirectArtifact(directOptions(
@@ -125,6 +128,11 @@ function directOptions(
       arguments_.normalizeVfr ||
       (arguments_.fps !== undefined && !inputPath.includes("%")),
     ...(arguments_.bitrate === undefined ? {} : { bitrate: arguments_.bitrate }),
+    ...(arguments_.crf === undefined ? {} : { crf: arguments_.crf }),
+    ...(arguments_.maxBitrate === undefined
+      ? {}
+      : { maxBitrate: arguments_.maxBitrate }),
+    ...(arguments_.preset === undefined ? {} : { preset: arguments_.preset }),
     ...(arguments_.alpha === undefined ? {} : { alpha: arguments_.alpha }),
     ...(arguments_.ffmpegPath === undefined
       ? {}
@@ -132,6 +140,9 @@ function directOptions(
     ...(arguments_.ffprobePath === undefined
       ? {}
       : { ffprobePath: arguments_.ffprobePath }),
+    ...(arguments_.mediaTimeoutMs === undefined
+      ? {}
+      : { mediaTimeoutMs: arguments_.mediaTimeoutMs }),
     ...(signal === undefined ? {} : { signal }),
     ...(arguments_.canvas === undefined ? {} : { canvas: arguments_.canvas }),
     ...(arguments_.frames === undefined ? {} : { frames: arguments_.frames })

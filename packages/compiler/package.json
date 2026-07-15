@@ -1,13 +1,13 @@
 {
-  "name": "@rendered-motion/compiler",
+  "name": "@aval/compiler",
   "version": "1.0.0",
-  "description": "CLI and compiler for deterministic web rendered motion assets.",
+  "description": "CLI and compiler for deterministic AVAL assets.",
   "keywords": ["animation", "compiler", "cli", "motion"],
   "private": false,
   "type": "module",
   "sideEffects": false,
   "bin": {
-    "rma": "./dist/cli.js"
+    "avl": "./dist/cli.js"
   },
   "exports": {
     ".": {
@@ -19,13 +19,13 @@
   "license": "MIT",
   "engines": { "node": ">=22.12.0" },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node ../../scripts/release/compiler-cli-mode.mjs dist/cli.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@rendered-motion/element": "1.0.0",
-    "@rendered-motion/format": "1.0.0",
-    "@rendered-motion/graph": "1.0.0",
-    "@rendered-motion/player-web": "1.0.0"
+    "@aval/element": "1.0.0",
+    "@aval/format": "1.0.0",
+    "@aval/graph": "1.0.0",
+    "@aval/player-web": "1.0.0"
   }
 }

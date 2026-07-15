@@ -220,6 +220,7 @@ export interface SliceFixtureOptions {
   readonly referenceListModification?: boolean;
   readonly adaptiveMarking?: boolean;
   readonly longTermReference?: boolean;
+  readonly sliceQpDelta?: number;
 }
 
 export function makeSlice(options: SliceFixtureOptions): Uint8Array {
@@ -244,7 +245,7 @@ export function makeSlice(options: SliceFixtureOptions): Uint8Array {
   } else {
     writer.bit(options.adaptiveMarking === true);
   }
-  writer.se(0).ue(0).se(0).se(0);
+  writer.se(options.sliceQpDelta ?? 0).ue(0).se(0).se(0);
   // One opaque fixture bit stands in for CAVLC slice_data; the inspector does
   // not attempt to entropy-decode macroblocks.
   writer.bit(true).trailing();
@@ -301,6 +302,7 @@ export interface MutableInspectionInput {
     peakBitrate: number;
     cpbBufferBits: number;
     requireBt709LimitedRange: true;
+    quantizationPolicy: "fixed-qp26-v0" | "bounded-qp-v1";
   };
   units: Array<{
     id: string;
@@ -310,6 +312,8 @@ export interface MutableInspectionInput {
 
 export function validInspectionInput(options: {
   readonly spsOptions?: SpsFixtureOptions;
+  readonly ppsOptions?: PpsFixtureOptions;
+  readonly quantizationPolicy?: "fixed-qp26-v0" | "bounded-qp-v1";
   readonly requireBt709LimitedRange?: boolean;
   readonly units?: AvcRenditionInspectionInput["units"];
 } = {}): MutableInspectionInput {
@@ -318,7 +322,7 @@ export function validInspectionInput(options: {
     compatibility: options.spsOptions?.compatibility ?? 0xe0,
     bt709Limited: options.spsOptions?.bt709Limited ?? true
   });
-  const pps = makePps();
+  const pps = makePps(options.ppsOptions);
   return {
     profile: {
       codedWidth: (options.spsOptions?.widthInMacroblocks ?? 4) * 16,
@@ -327,7 +331,8 @@ export function validInspectionInput(options: {
       averageBitrate: 1_000_000,
       peakBitrate: 2_000_000,
       cpbBufferBits: 2_000_000,
-      requireBt709LimitedRange: true
+      requireBt709LimitedRange: true,
+      quantizationPolicy: options.quantizationPolicy ?? "fixed-qp26-v0"
     },
     units: (options.units ?? [
         {

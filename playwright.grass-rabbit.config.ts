@@ -1,0 +1,36 @@
+import { defineConfig } from "@playwright/test";
+
+const port = process.env.AVL_GRASS_RABBIT_PORT ?? "4176";
+const baseURL = `http://127.0.0.1:${port}`;
+
+export default defineConfig({
+  testDir: "./tests/grass-rabbit",
+  fullyParallel: false,
+  workers: 1,
+  timeout: 90_000,
+  expect: { timeout: 15_000 },
+  reporter: [["list"]],
+  use: {
+    baseURL,
+    deviceScaleFactor: 2,
+    trace: "off",
+    screenshot: "only-on-failure",
+    viewport: { width: 1280, height: 720 }
+  },
+  webServer: {
+    command: `npm run grass-rabbit -- --port ${port} --strictPort`,
+    url: baseURL,
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000
+  },
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        deviceScaleFactor: 2,
+        headless: false,
+        viewport: { width: 1280, height: 720 }
+      }
+    }
+  ]
+});

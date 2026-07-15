@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-test("packed-alpha public element keeps static and animated geometry identical through fractional sizing", async ({ page }) => {
+test("packed-alpha public element keeps exact animated geometry through fractional sizing", async ({ page }) => {
   await page.goto("/certification.html");
-  await page.waitForFunction(() => customElements.get("rendered-motion") !== undefined);
+  await page.waitForFunction(() => customElements.get("aval-player") !== undefined);
   const report = await page.evaluate(async () => {
     const host = document.querySelector<HTMLElement>("[data-certification-stage]")!;
-    const element = document.createElement("rendered-motion") as HTMLElement & {
+    const element = document.createElement("aval-player") as HTMLElement & {
       src: string;
       fit: string;
       prepare(): Promise<unknown>;
@@ -18,7 +18,6 @@ test("packed-alpha public element keeps static and animated geometry identical t
           backingWidth: number;
           backingHeight: number;
           fit: string | null;
-          staticAnimatedMappingEqual: boolean;
         };
         outstanding: Record<string, number>;
       };
@@ -48,7 +47,6 @@ test("packed-alpha public element keeps static and animated geometry identical t
   expect(report.mode).toBe("animated");
   expect(report.presentations.map(({ fit }) => fit)).toEqual(["contain", "cover", "fill", "none"]);
   for (const presentation of report.presentations) {
-    expect(presentation).toMatchObject({ staticAnimatedMappingEqual: true });
     expect(presentation.cssWidth).toBeCloseTo(213.5, 0);
     expect(presentation.cssHeight).toBeCloseTo(127.25, 0);
     expect(presentation.backingWidth).toBeGreaterThan(0);

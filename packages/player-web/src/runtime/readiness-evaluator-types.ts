@@ -1,5 +1,5 @@
-import type { CompiledManifestV01 } from "@rendered-motion/format";
-import type { ValidatedMotionGraph } from "@rendered-motion/graph";
+import type { CompiledManifestV01 } from "@aval/format";
+import type { ValidatedMotionGraph } from "@aval/graph";
 
 import type { ReadinessMetricsReport } from "./readiness-metrics.js";
 

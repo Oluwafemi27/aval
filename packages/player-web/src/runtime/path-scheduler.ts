@@ -2,7 +2,7 @@ import type {
   GraphBodyDefinition,
   GraphEdgeDefinition,
   GraphStartPolicy
-} from "@rendered-motion/graph";
+} from "@aval/graph";
 
 import type { DecoderWorkerLimits } from "../decoder-worker/protocol.js";
 import type { RuntimeMediaPresentation } from "./model.js";
@@ -65,6 +65,13 @@ import type {
   StartResidentRunwayInput,
   StartScheduledBodyInput
 } from "./path-scheduler-model.js";
+
+interface PathSchedulerReplacementActivation {
+  readonly retiredGeneration: number;
+  readonly generation: number;
+  readonly serial: number;
+  readonly activation: Promise<void>;
+}
 
 export type {
   PathSchedulerClock,
@@ -285,7 +292,11 @@ export class PathScheduler {
     ) {
       throw new RangeError("resident body checkpoint is invalid");
     }
-    await this.#activateReplacementGeneration(input.path, input.signal);
+    const replacement = this.#beginReplacementGeneration(
+      input.path,
+      input.signal
+    );
+    await this.#settleReplacementGeneration(replacement, input.signal);
     this.#routeOwner.clear();
     this.#residentTarget = null;
     this.#build = this.#cursorLedger.replaceSource({
@@ -700,7 +711,7 @@ export class PathScheduler {
       );
     }
     const checkpoint = reservedSource ?? displayed;
-    await this.#activateReplacementGeneration(
+    const replacement = this.#beginReplacementGeneration(
       path,
       signal,
       preserveReservedSource
@@ -714,13 +725,14 @@ export class PathScheduler {
       checkpoint,
       firstPresentationOrdinal
     });
+    await this.#settleReplacementGeneration(replacement, signal);
   }
 
-  async #activateReplacementGeneration(
+  #beginReplacementGeneration(
     path: string,
     signal?: AbortSignal,
     preserveReservation = false
-  ): Promise<number> {
+  ): Readonly<PathSchedulerReplacementActivation> {
     if (signal?.aborted === true) throw signal.reason;
     if (this.#residentRunwayOwner.locked) {
       throw new RangeError(
@@ -732,24 +744,37 @@ export class PathScheduler {
     if (!preserveReservation) this.#reservationOwner.discard();
     const serial = checkedPathSchedulerSerial(this.#replacementSerial);
     this.#replacementSerial = serial;
-    const activation = this.#generationOwner.replace(path);
-    const generation = this.#generationOwner.current;
-    if (generation === null) {
-      throw new RangeError("replacement generation was not installed");
-    }
-    await abortablePathSchedulerActivation(activation, signal);
+    const committed = this.#generationOwner.commitReplacement(
+      this.#generationOwner.planReplacement(path)
+    );
+    return Object.freeze({
+      retiredGeneration: oldGeneration,
+      generation: committed.generation,
+      serial,
+      activation: committed.activateWorker()
+    });
+  }
+
+  async #settleReplacementGeneration(
+    replacement: Readonly<PathSchedulerReplacementActivation>,
+    signal?: AbortSignal
+  ): Promise<void> {
+    await abortablePathSchedulerActivation(replacement.activation, signal);
     if (
-      serial !== this.#replacementSerial ||
-      generation !== this.#generationOwner.current
+      replacement.serial !== this.#replacementSerial ||
+      replacement.generation !== this.#generationOwner.current
     ) {
       throw new DOMException(
         "path scheduler activation was superseded",
         "AbortError"
       );
     }
-    this.#trace("generation-retire", null, String(oldGeneration));
+    this.#trace(
+      "generation-retire",
+      null,
+      String(replacement.retiredGeneration)
+    );
     this.#trace("activate", null, null);
-    return generation;
   }
 
   async #fail(error: unknown): Promise<void> {

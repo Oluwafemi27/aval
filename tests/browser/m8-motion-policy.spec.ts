@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("live reduce freezes loops and full re-enters the same semantic state", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?motion");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -49,7 +49,7 @@ test("live reduce freezes loops and full re-enters the same semantic state", asy
 test("a real prefers-reduced-motion media change updates auto policy live", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/m8-dev-entry.html?live-media-motion");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");

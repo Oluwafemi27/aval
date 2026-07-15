@@ -1,4 +1,4 @@
-import type { RenderedMotionElement } from "@rendered-motion/element";
+import type { AvalElement } from "@aval/element";
 
 export interface ContextStressReport {
   readonly status: "passed" | "failed" | "unsupported";
@@ -9,7 +9,7 @@ export interface ContextStressReport {
 }
 
 export async function runContextStress(
-  element: RenderedMotionElement,
+  element: AvalElement,
   losses: number
 ): Promise<ContextStressReport> {
   if (!Number.isSafeInteger(losses) || losses < 1 || losses > 100) throw new RangeError("context losses must be in 1..100");

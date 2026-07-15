@@ -1,7 +1,7 @@
 {
-  "name": "@rendered-motion/format",
+  "name": "@aval/format",
   "version": "1.0.0",
-  "description": "Canonical parser, validator, and types for rendered motion assets.",
+  "description": "Canonical parser, validator, and types for AVAL assets.",
   "keywords": ["animation", "binary-format", "motion"],
   "private": false,
   "type": "module",
@@ -20,6 +20,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@rendered-motion/graph": "1.0.0"
+    "@aval/graph": "1.0.0"
   }
 }

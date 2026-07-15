@@ -1,1 +1,1 @@
-{"bitWidth":16,"calibrationPatchIds":["black","white","red","green","blue"],"markerKind":"rendered-motion-display","markerVersion":"1.0","modulus":65535,"parity":"xor-fold-v1"}
+{"bitWidth":16,"calibrationPatchIds":["black","white","red","green","blue"],"markerKind":"aval-display","markerVersion":"1.0","modulus":65535,"parity":"xor-fold-v1"}

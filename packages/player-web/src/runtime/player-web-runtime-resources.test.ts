@@ -17,17 +17,18 @@ describe("player web runtime resource composition", () => {
       "assetSession",
       "candidate",
       "canvasBacking",
-      "participant",
-      "staticDecoder",
-      "staticSurfaces"
+      "participant"
     ]);
     expect(resources.candidate).toBe(
       resources.participant.candidateResourceAuthority
     );
     const body = await resources.assetSession.response.reserve(5);
-    const png = await resources.staticDecoder.reserve("png-copy", 7);
+    const canvas = await resources.canvasBacking.beginTransition({
+      animatedAllocationBytes: 7
+    });
+    canvas.commit();
     expect(manager.snapshot().physicalBytes).toBe(12);
-    png.release();
+    resources.canvasBacking.release();
     body.release();
     account.dispose();
     decoders.dispose();

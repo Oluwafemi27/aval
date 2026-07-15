@@ -80,7 +80,7 @@ describe("certification report validation", () => {
       observationLedgerDigest: digest,
       captureProvenance: {
         rawCaptureDigest: "e".repeat(64),
-        extractor: { tool: "rma-display-extractor", version: "1.0.0" },
+        extractor: { tool: "aval-display-extractor", version: "1.0.0" },
         operatorRole: "qualified-display-capture-operator",
         reviewerIds: ["display-reviewer-1"]
       },

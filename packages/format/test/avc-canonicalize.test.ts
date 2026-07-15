@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalizeAvcConstraintSet2,
+  inspectAvcAnnexBEncoderCandidateRendition,
   inspectAvcAnnexBRendition
 } from "../src/avc/index.js";
 import { FormatError } from "../src/errors.js";
@@ -42,6 +43,28 @@ describe("AVC constraint_set2 canonicalization", () => {
     expect(canonical).toEqual(source);
     expect(canonical).not.toBe(source);
     expect(canonical.buffer).not.toBe(source.buffer);
+  });
+
+  it("promotes libx264 Level 1b D0 to canonical Level 1.1 E0", () => {
+    const input = validInspectionInput({
+      spsOptions: { compatibility: 0xd0, levelIdc: 11 }
+    });
+    input.profile.averageBitrate = 80_000;
+    input.profile.peakBitrate = 100_000;
+    input.profile.cpbBufferBits = 100_000;
+
+    expect(() => inspectAvcAnnexBEncoderCandidateRendition(input)).not.toThrow();
+    expectProfileError(() => inspectAvcAnnexBRendition(input));
+    for (const unit of input.units) {
+      for (const accessUnit of unit.accessUnits) {
+        accessUnit.bytes = canonicalizeAvcConstraintSet2(accessUnit.bytes);
+      }
+    }
+
+    expect(inspectAvcAnnexBRendition(input).parameterSet).toMatchObject({
+      levelIdc: 11,
+      constraintSet2: true
+    });
   });
 
   it("rejects a malformed SPS instead of performing an unchecked byte patch", () => {

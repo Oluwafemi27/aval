@@ -60,7 +60,7 @@ export async function loadReleaseAuthorization({ releaseRoot, expectedCandidateD
 
 /** Copy the already-verified in-memory archive bytes into one private immutable staging directory. */
 export async function stageAuthorizedReleaseSet(authorization) {
-  const root = await mkdtemp(join(tmpdir(), "rendered-motion-publish-"));
+  const root = await mkdtemp(join(tmpdir(), "aval-publish-"));
   await chmod(root, 0o700);
   const packages = [];
   try {

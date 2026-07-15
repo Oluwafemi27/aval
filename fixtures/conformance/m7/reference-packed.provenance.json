@@ -3,34 +3,34 @@
   "formatVersion": "0.1",
   "generatedBy": {
     "path": "fixtures/conformance/m7/update-provenance.mjs",
-    "bytes": 7217,
-    "sha256": "5bfa1f46b573e33603c40a950e8e47dc2cb7dd78d9b8191b7102710a5a90ec75"
+    "bytes": 6784,
+    "sha256": "94670fbc12bd5bf60e950a4bd3f8d62fac7956fa85f318ca5dff38a9efd00f8e"
   },
   "networkScenarios": {
     "path": "fixtures/conformance/m7/network-scenarios.json",
-    "bytes": 2419,
-    "sha256": "8e86196102a57aa638fb44b1fe758b56d547ee47366da05695213117a61acbcf"
+    "bytes": 2426,
+    "sha256": "daa0e92a6a77beb2e321b178a7b7ae079a9e2b02e5a9596a986ca8af962db776"
   },
   "source": {
-    "path": "fixtures/conformance/m6/packed-alpha-all-routes.rma",
+    "path": "fixtures/conformance/m6/packed-alpha-all-routes.avl",
     "provenance": {
       "path": "fixtures/conformance/m6/provenance.json",
-      "bytes": 115800,
-      "sha256": "40ba4f3701463025ad54ff191618ba3c17b42f08dd6c93df320d232ec263c8f3"
+      "bytes": 87174,
+      "sha256": "8653cb5fc8be0a5d17004e8cbc6f1d4e3ef3d91ac513cac3d40e92f604949784"
     },
     "compilerProject": {
       "path": "fixtures/compiler/m6/source/packed-all-routes.json",
       "bytes": 5080,
       "sha256": "5d82ef90b04be6c52e06fc8fc0eb7fb215e16706d44dda11034f838bab17346f"
     },
-    "compilerManifestSha256": "37e526bda7a4e0f049d1d6f7ba1e50e45d25a8f4fea8e0b4b4ada355f82cae12"
+    "compilerManifestSha256": "4996769ca181085cde9147b29279e1625242e5e8398ba44155ce112106c4d193"
   },
   "asset": {
-    "path": "fixtures/conformance/m7/reference-packed.rma",
-    "bytes": 37968,
-    "sha256": "aa66fbca787138b692e7fed691cbabec58dd9f9576b63b13d4ed9c69269d9a0f",
-    "externalIntegrity": "sha256-qmb7ynhxOLaS5/7Wkcur7Fjdn5V2tjsT1O2caSadmg8=",
-    "strongEntityTag": "\"m7-aa66fbca787138b692e7fed691cbabec58dd9f9576b63b13d4ed9c69269d9a0f\""
+    "path": "fixtures/conformance/m7/reference-packed.avl",
+    "bytes": 22421,
+    "sha256": "881bf080f55353c3a67a1c85dd6ffda236c5f270444cd8994fb8a2db68a8c1ad",
+    "externalIntegrity": "sha256-iBvwgPVTU8OmehyF3W/9ojbF8nBETNiZT7ii22iowa0=",
+    "strongEntityTag": "\"m7-881bf080f55353c3a67a1c85dd6ffda236c5f270444cd8994fb8a2db68a8c1ad\""
   },
   "metadata": {
     "header": {
@@ -39,11 +39,11 @@
     },
     "frontIndex": {
       "offset": 0,
-      "length": 8520
+      "length": 7880
     },
     "frontIndexTail": {
       "offset": 64,
-      "length": 8456
+      "length": 7816
     }
   },
   "selectedRendition": {
@@ -51,11 +51,14 @@
     "payloadBytes": 9937,
     "storageBytes": 9950
   },
-  "initialStatic": {
-    "staticFrame": "static.02",
-    "offset": 33000,
-    "length": 4968
-  },
+  "bootstrapUnits": [
+    "hover-body",
+    "hover-shift",
+    "idle-body",
+    "intro",
+    "loading-body",
+    "loading-bridge"
+  ],
   "expectedRangePlans": {
     "header": [
       {
@@ -66,31 +69,25 @@
     "frontIndexTail": [
       {
         "offset": 64,
-        "length": 8456
+        "length": 7816
       }
     ],
-    "currentStatic": [
+    "bootstrapUnits": [
       {
-        "offset": 33000,
-        "length": 4968
-      }
-    ],
-    "allStatics": [
-      {
-        "offset": 23061,
-        "length": 14907
+        "offset": 12981,
+        "length": 9440
       }
     ],
     "selectedRendition": [
       {
-        "offset": 13111,
+        "offset": 12471,
         "length": 9950
       }
     ],
     "allPayload": [
       {
-        "offset": 8520,
-        "length": 29448
+        "offset": 7880,
+        "length": 14541
       }
     ]
   },
@@ -102,11 +99,11 @@
       "sampleStart": 0,
       "sampleCount": 1,
       "sha256": "a62735199b2b5e01c6648e704206b73dada13a8f69cf9ecbf2f9b58b8dc9f10b",
-      "offset": 8520,
+      "offset": 7880,
       "length": 311,
-      "paddingOffset": 8520,
+      "paddingOffset": 7880,
       "paddingLength": 0,
-      "storageOffset": 8520,
+      "storageOffset": 7880,
       "storageLength": 311
     },
     {
@@ -116,11 +113,11 @@
       "sampleStart": 1,
       "sampleCount": 8,
       "sha256": "527844f75e9da3854968bae4d2e952ec5f2f6ab5fe21cd3b801479eee360b732",
-      "offset": 8832,
+      "offset": 8192,
       "length": 1068,
-      "paddingOffset": 8831,
+      "paddingOffset": 8191,
       "paddingLength": 1,
-      "storageOffset": 8831,
+      "storageOffset": 8191,
       "storageLength": 1069
     },
     {
@@ -130,11 +127,11 @@
       "sampleStart": 9,
       "sampleCount": 6,
       "sha256": "c4e2b649c0016a763be7a22ce5c6dd50a19b2ece7c521dc0cb746785d0a0ab4d",
-      "offset": 9904,
+      "offset": 9264,
       "length": 809,
-      "paddingOffset": 9900,
+      "paddingOffset": 9260,
       "paddingLength": 4,
-      "storageOffset": 9900,
+      "storageOffset": 9260,
       "storageLength": 813
     },
     {
@@ -144,11 +141,11 @@
       "sampleStart": 15,
       "sampleCount": 8,
       "sha256": "54471f897b9d91f6ea3619b26e17477e300a8fabda238b61d057944886f48e05",
-      "offset": 10720,
+      "offset": 10080,
       "length": 1044,
-      "paddingOffset": 10713,
+      "paddingOffset": 10073,
       "paddingLength": 7,
-      "storageOffset": 10713,
+      "storageOffset": 10073,
       "storageLength": 1051
     },
     {
@@ -158,11 +155,11 @@
       "sampleStart": 23,
       "sampleCount": 3,
       "sha256": "6790a817b37a0bdbf489c686f7e6555674bb027ad1b80c95d0790fce786a9c4d",
-      "offset": 11768,
+      "offset": 11128,
       "length": 508,
-      "paddingOffset": 11764,
+      "paddingOffset": 11124,
       "paddingLength": 4,
-      "storageOffset": 11764,
+      "storageOffset": 11124,
       "storageLength": 512
     },
     {
@@ -172,11 +169,11 @@
       "sampleStart": 26,
       "sampleCount": 3,
       "sha256": "f5c75bb0a2e99a4ae6894607d12f61ea8e2b64fe17fadd25536286eb6bd2156b",
-      "offset": 12280,
+      "offset": 11640,
       "length": 515,
-      "paddingOffset": 12276,
+      "paddingOffset": 11636,
       "paddingLength": 4,
-      "storageOffset": 12276,
+      "storageOffset": 11636,
       "storageLength": 519
     },
     {
@@ -186,11 +183,11 @@
       "sampleStart": 29,
       "sampleCount": 1,
       "sha256": "341c7e67fd75c37aa3f7f257eea6f20fdf496d8e1fb158068ba188243f8bce2a",
-      "offset": 12800,
+      "offset": 12160,
       "length": 311,
-      "paddingOffset": 12795,
+      "paddingOffset": 12155,
       "paddingLength": 5,
-      "storageOffset": 12795,
+      "storageOffset": 12155,
       "storageLength": 316
     },
     {
@@ -200,11 +197,11 @@
       "sampleStart": 30,
       "sampleCount": 1,
       "sha256": "62e3e6e8ccdd60d1dabefea4cadb5549a172d67556b1d3391637599fa1b1f673",
-      "offset": 13112,
+      "offset": 12472,
       "length": 509,
-      "paddingOffset": 13111,
+      "paddingOffset": 12471,
       "paddingLength": 1,
-      "storageOffset": 13111,
+      "storageOffset": 12471,
       "storageLength": 510
     },
     {
@@ -214,11 +211,11 @@
       "sampleStart": 31,
       "sampleCount": 8,
       "sha256": "9e2d1d60ebd962b335f836d3b02692d9657316c38e21e2887d2f825f35e1a2fd",
-      "offset": 13624,
+      "offset": 12984,
       "length": 2526,
-      "paddingOffset": 13621,
+      "paddingOffset": 12981,
       "paddingLength": 3,
-      "storageOffset": 13621,
+      "storageOffset": 12981,
       "storageLength": 2529
     },
     {
@@ -228,11 +225,11 @@
       "sampleStart": 39,
       "sampleCount": 6,
       "sha256": "694b3471afd34f7d6745f217437279d570c1abccc5b37e66b69a8bdf84f929ff",
-      "offset": 16152,
+      "offset": 15512,
       "length": 1940,
-      "paddingOffset": 16150,
+      "paddingOffset": 15510,
       "paddingLength": 2,
-      "storageOffset": 16150,
+      "storageOffset": 15510,
       "storageLength": 1942
     },
     {
@@ -242,11 +239,11 @@
       "sampleStart": 45,
       "sampleCount": 8,
       "sha256": "d56eaf5dbd021ecb8cf3453c9efc3b6bc724909c56b54ab68f34a3e33fd095dc",
-      "offset": 18096,
+      "offset": 17456,
       "length": 2384,
-      "paddingOffset": 18092,
+      "paddingOffset": 17452,
       "paddingLength": 4,
-      "storageOffset": 18092,
+      "storageOffset": 17452,
       "storageLength": 2388
     },
     {
@@ -256,11 +253,11 @@
       "sampleStart": 53,
       "sampleCount": 3,
       "sha256": "6341afd62b0ba46bebb43189dda84dd87c77a7ccc851995b97bbb2b35e3cd9bd",
-      "offset": 20480,
+      "offset": 19840,
       "length": 1182,
-      "paddingOffset": 20480,
+      "paddingOffset": 19840,
       "paddingLength": 0,
-      "storageOffset": 20480,
+      "storageOffset": 19840,
       "storageLength": 1182
     },
     {
@@ -270,11 +267,11 @@
       "sampleStart": 56,
       "sampleCount": 3,
       "sha256": "75e3b693bab9a47597da7f06fe7b4e2dde7a5c4b55b60d54f372d10ae6ab5721",
-      "offset": 21664,
+      "offset": 21024,
       "length": 871,
-      "paddingOffset": 21662,
+      "paddingOffset": 21022,
       "paddingLength": 2,
-      "storageOffset": 21662,
+      "storageOffset": 21022,
       "storageLength": 873
     },
     {
@@ -284,51 +281,16 @@
       "sampleStart": 59,
       "sampleCount": 1,
       "sha256": "73a9c91269b3aae300be1d1eac55a5ec24907cc079b887a10498def8a1a1ec01",
-      "offset": 22536,
+      "offset": 21896,
       "length": 525,
-      "paddingOffset": 22535,
+      "paddingOffset": 21895,
       "paddingLength": 1,
-      "storageOffset": 22535,
+      "storageOffset": 21895,
       "storageLength": 526
-    },
-    {
-      "kind": "static",
-      "staticFrame": "static.00",
-      "sha256": "7f2f68a761a24d9177a2970a69ba8a69c6009578e017bbba22b7a04e7a6c5a8f",
-      "offset": 23064,
-      "length": 4968,
-      "paddingOffset": 23061,
-      "paddingLength": 3,
-      "storageOffset": 23061,
-      "storageLength": 4971
-    },
-    {
-      "kind": "static",
-      "staticFrame": "static.01",
-      "sha256": "399db4bc9fa1d5508555a46bc4b60bc7d7272d447e91a15411de6e6553b9b75b",
-      "offset": 28032,
-      "length": 4968,
-      "paddingOffset": 28032,
-      "paddingLength": 0,
-      "storageOffset": 28032,
-      "storageLength": 4968
-    },
-    {
-      "kind": "static",
-      "staticFrame": "static.02",
-      "sha256": "1381cf8252fa191bdaeaedbb65bb8f29ca2a186359d090599d34698589f9a0d3",
-      "offset": 33000,
-      "length": 4968,
-      "paddingOffset": 33000,
-      "paddingLength": 0,
-      "storageOffset": 33000,
-      "storageLength": 4968
     }
   ],
-  "staticFirstOrder": [
+  "unitOrder": [
     "metadata",
-    "static:static.02",
-    "all-statics",
     "unit:packed.1x/hover-body",
     "unit:packed.1x/hover-shift",
     "unit:packed.1x/idle-body",

@@ -20,7 +20,6 @@ describe("hostile compiled manifests", () => {
       ["edges[1]", (m) => { m.edges[1].transition = { kind: "locked", unit: "bridge-ab" }; }],
       ["bindings[0]", (m) => { m.bindings[0].extra = 1; }],
       ["readiness", (m) => { m.readiness.extra = []; }],
-      ["fallback", (m) => { m.fallback.extra = true; }],
       ["limits", (m) => { m.limits.extra = 0; }]
     ];
 
@@ -43,7 +42,6 @@ describe("hostile compiled manifests", () => {
       ["renditions[0].capabilities", (m) => { m.renditions[0].capabilities = ["webgl2"]; }],
       ["units[0].ports[0].portalFrames[0]", (m) => { m.units[0].ports[0].portalFrames[0] = -1; }],
       ["units[0].samples[0].sampleStart", (m) => { m.units[0].samples[0].sampleStart = 0.5; }],
-      ["staticFrames[0].length", (m) => { m.staticFrames[0].length = 0; }],
       ["states[0]", (m) => { m.states = Array(1); }],
       ["edges[0].start.maxWaitFrames", (m) => { m.edges[0].start.maxWaitFrames = -1; }],
       ["readiness.bootstrapUnits", (m) => { m.readiness.bootstrapUnits = ["body-a", "body-a"]; }]

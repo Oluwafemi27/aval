@@ -124,9 +124,6 @@ export function createResidentFramePlan(
     allowMixedRenditions: true
   });
   const reversible = plan.reversibleClips[0]!;
-  if (plan.persistentBytes > MAX_RESIDENT_FRAME_BYTES) {
-    throw new RangeError("resident frame bytes exceed the 48 MiB cap");
-  }
 
   const residentAllocation = roundedGpuAllocationBytes(plan.persistentBytes);
   const streamingBytes = BigInt(plan.bytesPerFrame) *
@@ -140,9 +137,6 @@ export function createResidentFramePlan(
     [gpuAllocation, plan.bytesPerFrame],
     "tracked player bytes"
   );
-  if (tracked > BigInt(MAX_TRACKED_PLAYER_BYTES)) {
-    throw new RangeError("tracked player bytes exceed the 64 MiB cap");
-  }
 
   return Object.freeze({
     width: input.width,
@@ -200,6 +194,11 @@ function validateLegacySequence(
 ): void {
   if (!Array.isArray(sequence)) throw new TypeError(`${label} must be an array`);
   if (sequence.length < minimum || sequence.length > maximum) {
+    if (maximum === MAX_REVERSIBLE_CLIP_FRAMES) {
+      throw new RangeError(
+        `${label} must contain at least ${String(minimum)} frame${minimum === 1 ? "" : "s"}`
+      );
+    }
     throw new RangeError(
       `${label} must contain ${String(minimum)}–${String(maximum)} frames`
     );

@@ -1,4 +1,4 @@
-import type { AvcRenditionGeometry } from "@rendered-motion/format";
+import type { AvcRenditionGeometry } from "@aval/format";
 
 import { CompilerError } from "../diagnostics.js";
 import {

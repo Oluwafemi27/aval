@@ -1,4 +1,4 @@
-import type { RenderedMotionElement } from "@rendered-motion/element";
+import type { AvalElement } from "@aval/element";
 
 export interface VisibilityStressReport {
   readonly status: "passed" | "failed" | "unsupported";
@@ -7,7 +7,7 @@ export interface VisibilityStressReport {
 }
 
 export async function runVisibilityStress(
-  element: RenderedMotionElement,
+  element: AvalElement,
   parent: HTMLElement,
   cycles: number
 ): Promise<VisibilityStressReport> {

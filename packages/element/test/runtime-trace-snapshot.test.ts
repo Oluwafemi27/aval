@@ -1,4 +1,4 @@
-import type { RuntimeTraceRecord } from "@rendered-motion/player-web";
+import type { RuntimeTraceRecord } from "@aval/player-web";
 import { describe, expect, it } from "vitest";
 
 import { snapshotRuntimeTrace } from "../src/runtime-trace-snapshot.js";
@@ -18,6 +18,7 @@ describe("runtime trace public snapshot", () => {
         snapshot: {
           readiness: "interactiveReady",
           phase: "body",
+          initialUnitPending: false,
           requestedState: "idle",
           visualState: "idle",
           prospectiveState: "idle",
@@ -78,7 +79,9 @@ describe("runtime trace public snapshot", () => {
       canvasSubmissionCompleteMicroseconds: 300_480,
       eligibleAnimationFrameOrdinal: 22,
       readbackTag: "pixel:idle:2",
-      graph: { snapshot: { contentOrdinal: "9" } },
+      graph: {
+        snapshot: { initialUnitPending: false, contentOrdinal: "9" }
+      },
       media: { intendedPresentationOrdinal: "9" }
     });
     expect(() => JSON.stringify(snapshot)).not.toThrow();

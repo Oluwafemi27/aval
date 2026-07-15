@@ -1,10 +1,12 @@
 import {
   FormatError,
+  avcQuantizationPolicyForRendition,
   deriveAvcRenditionGeometry,
+  isAvcCodec,
   type AvcRenditionGeometry,
   type AvcRenditionInspection,
   type RenditionV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import { inspectRuntimeCatalogAvcRendition } from "./borrowed-avc-inspection.js";
@@ -24,7 +26,9 @@ export type RuntimeAvcRendition = Extract<
   {
     readonly profile:
       | "avc-annexb-opaque-v0"
-      | "avc-annexb-packed-alpha-v0";
+      | "avc-annexb-packed-alpha-v0"
+      | "avc-annexb-opaque-v1"
+      | "avc-annexb-packed-alpha-v1";
   }
 >;
 
@@ -84,11 +88,11 @@ export function createAvcRenditionCandidates(
   const production = renditions.filter(isExactAvcRendition);
   if (production.length === 0) return Object.freeze([]);
   const checkedCanvas = canvas ?? inferCompatibilityCanvas(production);
-  const alphaClass = production[0]!.profile;
-  if (production.some(({ profile }) => profile !== alphaClass)) {
+  const productionProfile = production[0]!.profile;
+  if (production.some(({ profile }) => profile !== productionProfile)) {
     throw selectionError(
       "invalid-asset",
-      "opaque and packed AVC candidates cannot be mixed"
+      "AVC candidates must use one exact profile and version"
     );
   }
 
@@ -176,7 +180,10 @@ export function inspectAvcRenditionCandidate(
         averageBitrate: installed.bitrate.average,
         peakBitrate: installed.bitrate.peak,
         cpbBufferBits: installed.bitrate.peak,
-        requireBt709LimitedRange: true
+        requireBt709LimitedRange: true,
+        quantizationPolicy: avcQuantizationPolicyForRendition(
+          installed.profile
+        )
       })
     );
     const report = createRuntimeCandidateReport({
@@ -223,10 +230,14 @@ function isExactAvcRendition(
     (rendition.profile === "avc-annexb-opaque-v0" &&
       rendition.alphaLayout.type === "opaque-v0") ||
     (rendition.profile === "avc-annexb-packed-alpha-v0" &&
+      rendition.alphaLayout.type === "stacked-v0") ||
+    (rendition.profile === "avc-annexb-opaque-v1" &&
+      rendition.alphaLayout.type === "opaque-v0") ||
+    (rendition.profile === "avc-annexb-packed-alpha-v1" &&
       rendition.alphaLayout.type === "stacked-v0");
   const capabilities = rendition.capabilities as readonly unknown[];
   return profileMatches &&
-    rendition.codec === "avc1.42E020" &&
+    isAvcCodec(rendition.codec) &&
     Array.isArray(capabilities) &&
     capabilities.length === 2 &&
     capabilities[0] === "webcodecs" &&
@@ -245,15 +256,16 @@ function deriveGeometry(
     codedHeight: rendition.codedHeight,
     colorRect: rendition.alphaLayout.colorRect
   } as const;
-  return rendition.profile === "avc-annexb-packed-alpha-v0"
+  return rendition.profile === "avc-annexb-packed-alpha-v0" ||
+    rendition.profile === "avc-annexb-packed-alpha-v1"
     ? deriveAvcRenditionGeometry({
         ...base,
-        profile: "avc-annexb-packed-alpha-v0",
+        profile: rendition.profile,
         alphaRect: rendition.alphaLayout.alphaRect
       })
     : deriveAvcRenditionGeometry({
         ...base,
-        profile: "avc-annexb-opaque-v0"
+        profile: rendition.profile
       });
 }
 
@@ -323,7 +335,7 @@ function cloneAvcRendition(
   const colorRect = cloneRect(rendition.alphaLayout.colorRect);
   const common = {
     id: rendition.id,
-    codec: "avc1.42E020" as const,
+    codec: rendition.codec,
     codedWidth: rendition.codedWidth,
     codedHeight: rendition.codedHeight,
     bitrate: Object.freeze({
@@ -332,10 +344,13 @@ function cloneAvcRendition(
     }),
     capabilities: Object.freeze(["webcodecs", "webgl2"] as const)
   };
-  if (rendition.profile === "avc-annexb-packed-alpha-v0") {
+  if (
+    rendition.profile === "avc-annexb-packed-alpha-v0" ||
+    rendition.profile === "avc-annexb-packed-alpha-v1"
+  ) {
     return Object.freeze({
       ...common,
-      profile: "avc-annexb-packed-alpha-v0" as const,
+      profile: rendition.profile,
       alphaLayout: Object.freeze({
         type: "stacked-v0" as const,
         colorRect,
@@ -345,7 +360,7 @@ function cloneAvcRendition(
   }
   return Object.freeze({
     ...common,
-    profile: "avc-annexb-opaque-v0" as const,
+    profile: rendition.profile,
     alphaLayout: Object.freeze({ type: "opaque-v0" as const, colorRect })
   });
 }
@@ -361,6 +376,7 @@ function sameAvcRendition(
   if (
     left.id !== right.id ||
     left.profile !== right.profile ||
+    left.codec !== right.codec ||
     left.codedWidth !== right.codedWidth ||
     left.codedHeight !== right.codedHeight ||
     left.bitrate.average !== right.bitrate.average ||
@@ -368,7 +384,9 @@ function sameAvcRendition(
     !sameRect(left.alphaLayout.colorRect, right.alphaLayout.colorRect)
   ) return false;
   return left.profile === "avc-annexb-opaque-v0" ||
-    (right.profile === "avc-annexb-packed-alpha-v0" &&
+    left.profile === "avc-annexb-opaque-v1" ||
+    ((right.profile === "avc-annexb-packed-alpha-v0" ||
+      right.profile === "avc-annexb-packed-alpha-v1") &&
       sameRect(left.alphaLayout.alphaRect, right.alphaLayout.alphaRect));
 }
 

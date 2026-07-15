@@ -9,17 +9,18 @@ export type {
   CompilerErrorDetails
 } from "./diagnostics.js";
 export {
+  AVC_ENCODER_PRESETS,
   COMPILER_PROJECT_VERSION,
   DEFAULT_MEDIA_TIMEOUT_MS,
   DEFAULT_PROBE_TIMEOUT_MS,
   DEFAULT_PROCESS_TIMEOUT_MS,
   MAX_PROCESS_OUTPUT_BYTES,
-  MAX_PROCESS_STDERR_BYTES,
-  MAX_SOURCE_DIMENSION,
-  MAX_SOURCE_DURATION_SECONDS,
-  MAX_SOURCE_FRAMES
+  MAX_PROCESS_STDERR_BYTES
 } from "./model.js";
 export type {
+  AvcEncoderPreset,
+  AvcEncodingV03,
+  AvcRateControlV03,
   CompileArtifact,
   AlphaAuditSummary,
   AlphaErrorStatistics,
@@ -36,13 +37,13 @@ export type {
   CompileRenditionDetails,
   CompileResult,
   CompileSourceDetails,
-  CompileStaticDetails,
-  CompileStaticValidationDetails,
   DirectArtifactOptions,
   DirectCompileOptions,
   MediaProbe,
   MediaProbeFrame,
+  NormalizedAvcEncoding,
   NormalizedSourceProject,
+  NormalizedSourceRenditionTarget,
   OpaqueRenditionTargetV01,
   ProcessLimits,
   ProjectArtifactOptions,
@@ -50,10 +51,13 @@ export type {
   SourceDescriptorV01,
   SourceAlphaPolicy,
   SourceAvcProfileV02,
+  SourceAvcProfileV03,
   SourceProjectV01,
   SourceProjectV02,
+  SourceProjectV03,
   SourceRangeV01,
   SourceRenditionTargetV02,
+  SourceRenditionTargetV03,
   SourceStateV01,
   SourceUnitV01,
   ToolProvenance

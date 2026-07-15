@@ -3,12 +3,13 @@ import { dirname, resolve } from "node:path";
 import {
   FORMAT_DEFAULT_BUDGETS,
   FormatError,
+  avcCodecForLevel,
   writeCanonicalAsset,
   type AccessUnitInputV01,
   type CanonicalAssetInputV01,
   type SampleDigestInputV01,
   type UnitInputV01
-} from "@rendered-motion/format";
+} from "@aval/format";
 
 import { readBoundedRegularFile } from "../bounded-file.js";
 import { CompilerError } from "../diagnostics.js";
@@ -30,6 +31,7 @@ import type {
 } from "../model.js";
 import { parseSourceProject } from "../source-project-schema.js";
 import { sha256Concat, sha256Hex } from "./hash.js";
+import { buildAvcManifestRendition } from "./avc-manifest-rendition.js";
 import { compileAvcRendition } from "./avc-rendition-pipeline.js";
 import {
   mergeCanonicalAlphaAudits,
@@ -37,10 +39,6 @@ import {
 } from "./alpha-policy.js";
 import { ffmpegGenerator, writeAssetAtomic } from "./output.js";
 import { validateCompiledOutput } from "./output-validation.js";
-import {
-  encodeCanonicalRgbaPng,
-  inspectCanonicalRgbaPng
-} from "./png.js";
 import { deriveReadiness } from "./readiness-plan.js";
 import { estimateRuntimeLimits } from "./resource-estimate.js";
 import { validateProjectMedia } from "./project-continuity.js";
@@ -112,13 +110,9 @@ export async function buildProjectArtifact(
       ffmpeg: provenance.executable,
       ...(options.signal === undefined ? {} : { signal: options.signal })
     });
-    const posterPlan = buildPosters(project, media.posters);
     const accessUnits: AccessUnitInputV01[] = [];
-    let cumulativePayloadBytes = posterPlan.frames.reduce(
-      (total, frame) => total + frame.bytes.byteLength,
-      0
-    );
-    let cumulativeRawEncodedBytes = cumulativePayloadBytes;
+    let cumulativePayloadBytes = 0;
+    let cumulativeRawEncodedBytes = 0;
     const sampleDigests = new Map<string, SampleDigestInputV01[]>();
     const renditionDetails: CompileRenditionDetails[] = [];
     const invocations: CompileInvocationDetails[] = [
@@ -162,9 +156,12 @@ export async function buildProjectArtifact(
         ...(options.signal === undefined ? {} : { signal: options.signal })
       });
       invocations.push(...compiled.invocations);
-      cumulativeRawEncodedBytes += compiled.rawEncodedBytes;
+      cumulativeRawEncodedBytes = checkedMediaSum(
+        cumulativeRawEncodedBytes,
+        compiled.rawEncodedBytes,
+        "raw encoded bytes"
+      );
       if (
-        !Number.isSafeInteger(cumulativeRawEncodedBytes) ||
         cumulativeRawEncodedBytes > FORMAT_DEFAULT_BUDGETS.maxFileBytes
       ) {
         throw new CompilerError(
@@ -180,7 +177,11 @@ export async function buildProjectArtifact(
       let renditionAccessUnits = 0;
       for (const unit of project.units) {
         const samples = encodedUnits.get(unit.id)!;
-        renditionAccessUnits += samples.length;
+        renditionAccessUnits = checkedMediaSum(
+          renditionAccessUnits,
+          samples.length,
+          "rendition access-unit count"
+        );
         const digests = sampleDigests.get(unit.id) ?? [];
         digests.push(Object.freeze({
           rendition: rendition.id,
@@ -189,15 +190,22 @@ export async function buildProjectArtifact(
         sampleDigests.set(unit.id, digests);
         for (let frameIndex = 0; frameIndex < samples.length; frameIndex += 1) {
           const sample = samples[frameIndex]!;
-          cumulativePayloadBytes += sample.bytes.byteLength;
-          encodedBytes += sample.bytes.byteLength;
+          cumulativePayloadBytes = checkedMediaSum(
+            cumulativePayloadBytes,
+            sample.bytes.byteLength,
+            "encoded payload bytes"
+          );
+          encodedBytes = checkedMediaSum(
+            encodedBytes,
+            sample.bytes.byteLength,
+            "rendition encoded bytes"
+          );
           if (
-            !Number.isSafeInteger(cumulativePayloadBytes) ||
             cumulativePayloadBytes > FORMAT_DEFAULT_BUDGETS.maxFileBytes
           ) {
             throw new CompilerError(
               "OUTPUT_LIMIT",
-              "Encoded and static payloads exceed the compiled-file budget"
+              "Encoded payloads exceed the compiled-file budget"
             );
           }
           accessUnits.push(Object.freeze({
@@ -215,7 +223,8 @@ export async function buildProjectArtifact(
         geometry: compiled.geometry,
         codedWidth: compiled.geometry.codedWidth,
         codedHeight: compiled.geometry.codedHeight,
-        bitrate: rendition.bitrate,
+        bitrate: compiled.bitrate,
+        encoding: compiled.encoding,
         encodedBytes,
         accessUnits: renditionAccessUnits,
         inspection: prepared.inspection,
@@ -236,7 +245,6 @@ export async function buildProjectArtifact(
       project,
       units,
       accessUnits,
-      posters: posterPlan,
       renditions: renditionDetails
     });
     let bytes: Uint8Array;
@@ -253,28 +261,14 @@ export async function buildProjectArtifact(
     invocations.push(...toolchainInvocations("verify"));
     const sourceWarnings = [...sources.values()].flatMap(({ warnings }) => warnings);
     const publicWarnings = Object.freeze([
-      ...new Set([...sourceWarnings, ...alphaPolicy.warnings])
+      ...new Set([...sourceWarnings, ...alphaPolicy.warnings, ...media.warnings])
     ]);
-    const staticDetails = posterPlan.frames.map((frame) => Object.freeze({
-      id: frame.id,
-      bytes: frame.bytes.byteLength,
-      sha256: sha256Hex(frame.bytes),
-      states: Object.freeze(project.states
-        .filter((state) => posterPlan.staticIdByState.get(state.id) === frame.id)
-        .map(({ id }) => id)
-        .sort()),
-      validation: inspectCanonicalRgbaPng({
-        png: frame.bytes,
-        expectedWidth: project.canvas.width,
-        expectedHeight: project.canvas.height
-      })
-    }));
     const encodedPayloadBytes = accessUnits.reduce(
-      (total, sample) => total + sample.bytes.byteLength,
-      0
-    );
-    const staticPayloadBytes = posterPlan.frames.reduce(
-      (total, frame) => total + frame.bytes.byteLength,
+      (total, sample) => checkedMediaSum(
+        total,
+        sample.bytes.byteLength,
+        "encoded payload bytes"
+      ),
       0
     );
     const artifactBytes = bytes.slice();
@@ -285,7 +279,7 @@ export async function buildProjectArtifact(
       provenance,
       warnings: publicWarnings,
       buildDetails: Object.freeze({
-        detailsVersion: "0.1" as const,
+        detailsVersion: "0.2" as const,
         mode: "project" as const,
         projectFile: Object.freeze({
           bytes: projectFile.bytes,
@@ -315,11 +309,9 @@ export async function buildProjectArtifact(
           });
         })),
         renditions: Object.freeze(renditionDetails),
-        statics: Object.freeze(staticDetails),
         invocations: Object.freeze(invocations),
         accessUnits: accessUnits.length,
         encodedPayloadBytes,
-        staticPayloadBytes,
         normalization: Object.freeze(sourceWarnings),
         continuity: media.reports
       })
@@ -335,86 +327,16 @@ function collectSourceFrameReferences(
   const references = new Map<string, Set<number>>(
     project.sources.map(({ id }) => [id, new Set<number>()])
   );
-  const units = new Map(project.units.map((unit) => [unit.id, unit]));
   for (const unit of project.units) {
     const frames = references.get(unit.source)!;
     for (let frame = unit.range[0]; frame < unit.range[1]; frame += 1) {
       frames.add(frame);
     }
   }
-  for (const state of project.states) {
-    const body = units.get(state.bodyUnit)!;
-    const source = state.poster?.source ?? body.source;
-    const frame = state.poster?.frame ?? body.range[0];
-    references.get(source)?.add(frame);
-  }
   return new Map([...references].map(([source, frames]) => [
     source,
     Object.freeze([...frames].sort((left, right) => left - right))
   ]));
-}
-
-interface PosterPlan {
-  readonly frames: readonly {
-    readonly id: string;
-    readonly bytes: Uint8Array;
-  }[];
-  readonly staticIdByState: ReadonlyMap<string, string>;
-}
-
-export function buildPosters(
-  project: Pick<NormalizedSourceProject, "canvas" | "states">,
-  rgbaByState: ReadonlyMap<string, Uint8Array>
-): Readonly<PosterPlan> {
-  const framesByDigest = new Map<
-    string,
-    { readonly id: string; readonly bytes: Uint8Array }[]
-  >();
-  const frames: { readonly id: string; readonly bytes: Uint8Array }[] = [];
-  const staticIdByState = new Map<string, string>();
-  const states = [...project.states].sort((left, right) =>
-    left.id < right.id ? -1 : left.id > right.id ? 1 : 0
-  );
-  for (let stateIndex = 0; stateIndex < states.length; stateIndex += 1) {
-    const state = states[stateIndex]!;
-    const rgba = rgbaByState.get(state.id);
-    if (rgba === undefined) {
-      throw new CompilerError("IO_FAILED", `Missing poster for ${state.id}`);
-    }
-    const bytes = encodeCanonicalRgbaPng({
-      width: project.canvas.width,
-      height: project.canvas.height,
-      rgba
-    });
-    const digest = sha256Hex(bytes);
-    const existing = framesByDigest.get(digest)?.find((candidate) =>
-      equalBytes(candidate.bytes, bytes)
-    );
-    let id: string;
-    if (existing !== undefined) {
-      id = existing.id;
-    } else {
-      id = `static.${String(stateIndex).padStart(2, "0")}`;
-      const frame = Object.freeze({ id, bytes });
-      frames.push(frame);
-      const bucket = framesByDigest.get(digest);
-      if (bucket === undefined) {
-        framesByDigest.set(digest, [frame]);
-      } else {
-        bucket.push(frame);
-      }
-    }
-    staticIdByState.set(state.id, id);
-  }
-  return Object.freeze({
-    frames: Object.freeze(frames),
-    staticIdByState
-  });
-}
-
-function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength &&
-    left.every((value, index) => value === right[index]);
 }
 
 function lowerUnit(
@@ -453,7 +375,6 @@ function buildAssetInput(input: {
   readonly project: NormalizedSourceProject;
   readonly units: readonly UnitInputV01[];
   readonly accessUnits: readonly AccessUnitInputV01[];
-  readonly posters: Readonly<PosterPlan>;
   readonly renditions: readonly CompileRenditionDetails[];
 }): CanonicalAssetInputV01 {
   const readiness = deriveReadiness(input.project);
@@ -464,6 +385,15 @@ function buildAssetInput(input: {
   );
   const geometryById = new Map(
     input.renditions.map(({ id, geometry }) => [id, geometry])
+  );
+  const codecById = new Map(
+    input.renditions.map(({ id, inspection }) => [
+      id,
+      avcCodecForLevel(inspection.parameterSet.levelIdc)
+    ])
+  );
+  const detailsById = new Map(
+    input.renditions.map((details) => [details.id, details])
   );
   return {
     manifest: {
@@ -476,61 +406,34 @@ function buildAssetInput(input: {
         if (geometry === undefined) {
           throw new CompilerError("IO_FAILED", "Compiled rendition geometry is missing");
         }
-        const common = {
+        const codec = codecById.get(rendition.id);
+        if (codec === undefined) {
+          throw new CompilerError("IO_FAILED", "Compiled rendition codec is missing");
+        }
+        const details = detailsById.get(rendition.id);
+        if (details === undefined) {
+          throw new CompilerError("IO_FAILED", "Compiled rendition details are missing");
+        }
+        return buildAvcManifestRendition({
           id: rendition.id,
-          codec: "avc1.42E020" as const,
-          codedWidth: geometry.codedWidth,
-          codedHeight: geometry.codedHeight,
-          bitrate: rendition.bitrate,
-          capabilities: ["webcodecs", "webgl2"] as const
-        };
-        return geometry.profile === "avc-annexb-opaque-v0"
-          ? {
-              ...common,
-              profile: geometry.profile,
-              alphaLayout: {
-                type: "opaque-v0" as const,
-                colorRect: geometry.visibleColorRect
-              }
-            }
-          : {
-              ...common,
-              profile: geometry.profile,
-              alphaLayout: {
-                type: "stacked-v0" as const,
-                colorRect: geometry.visibleColorRect,
-                alphaRect: geometry.visibleAlphaRect!
-              }
-            };
+          codec,
+          geometry,
+          bitrate: details.bitrate
+        });
       }),
       units: input.units,
-      staticFrames: input.posters.frames.map(({ id, bytes }) => ({
-        id,
-        width: input.project.canvas.width,
-        height: input.project.canvas.height,
-        sha256: sha256Hex(bytes)
-      })),
       initialState: input.project.initialState,
       states: input.project.states.map((state) => ({
         id: state.id,
         bodyUnit: state.bodyUnit,
-        staticFrame: input.posters.staticIdByState.get(state.id)!,
         ...(state.initialUnit === undefined ? {} : { initialUnit: state.initialUnit })
       })),
       edges: input.project.edges,
       bindings: input.project.bindings,
       readiness,
-      fallback: {
-        unsupported: "per-state-static",
-        reducedMotion: "per-state-static"
-      },
       limits
     },
-    accessUnits: input.accessUnits,
-    staticPayloads: input.posters.frames.map(({ id, bytes }) => ({
-      staticFrame: id,
-      bytes
-    }))
+    accessUnits: input.accessUnits
   };
 }
 
@@ -554,4 +457,17 @@ async function readProject(
     bytes: bytes.byteLength,
     sha256: sha256Hex(bytes)
   });
+}
+
+function checkedMediaSum(left: number, right: number, label: string): number {
+  if (
+    !Number.isSafeInteger(left) ||
+    !Number.isSafeInteger(right) ||
+    left < 0 ||
+    right < 0 ||
+    left > Number.MAX_SAFE_INTEGER - right
+  ) {
+    throw new CompilerError("SOURCE_LIMIT", `${label} exceeds safe arithmetic`);
+  }
+  return left + right;
 }

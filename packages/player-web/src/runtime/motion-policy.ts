@@ -18,7 +18,7 @@ export type ActualMotionMode =
   | "static"
   | "disposed";
 export type MotionPolicyTransitionKind = "enter-reduced" | "enter-full";
-export type MotionStaticOrigin = StaticReason | "png-failure" | "context-loss";
+export type MotionStaticOrigin = StaticReason | "context-loss";
 export type MotionFailureStaticOrigin = Exclude<
   MotionStaticOrigin,
   "reduced-motion"
@@ -167,7 +167,7 @@ export class MotionPolicyCoordinator {
     return transition;
   }
 
-  /** Commit after the static surface has covered the animated plane. */
+  /** Commit after the host fallback has covered the animated canvas. */
   public commitStatic(
     transition: Readonly<MotionPolicyTransition>
   ): boolean {
@@ -187,7 +187,7 @@ export class MotionPolicyCoordinator {
     return true;
   }
 
-  /** Commit only after body frame zero is drawn behind the static plane. */
+  /** Commit only after body frame zero is drawn behind the host fallback. */
   public commitAnimated(
     transition: Readonly<MotionPolicyTransition>
   ): boolean {
@@ -208,7 +208,7 @@ export class MotionPolicyCoordinator {
     return true;
   }
 
-  /** Runtime failure has already installed and covered a strict static frame. */
+  /** Runtime failure has already installed and covered the host fallback. */
   public failToStatic(origin: MotionFailureStaticOrigin): void {
     this.#assertUsable();
     const checked = validateStaticOrigin(origin);
@@ -311,7 +311,6 @@ function validateHostReducedMotion(reduced: boolean): boolean {
 
 function validateStaticOrigin(origin: MotionStaticOrigin): MotionStaticOrigin {
   if (
-    origin !== "png-failure" &&
     origin !== "context-loss" &&
     !STATIC_REASONS.includes(origin)
   ) {
@@ -327,7 +326,6 @@ function isReenterableStaticOrigin(
     origin === "context-loss"
   ) || (
     origin !== null &&
-    origin !== "png-failure" &&
     isTransientStaticReason(origin)
   );
 }

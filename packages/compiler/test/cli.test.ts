@@ -30,7 +30,7 @@ describe("programmatic CLI", () => {
     const status = await runCli([
       "compile", "source.mp4",
       "--loop", "0:2",
-      "--out", "asset.rma",
+      "--out", "asset.avl",
       "--json"
     ], {
       cwd: root,
@@ -51,6 +51,53 @@ describe("programmatic CLI", () => {
       bytes: 42,
       sha256: "c".repeat(64)
     });
+  });
+
+  it("prints project review warnings in human-readable compile output", async () => {
+    const root = await temporaryRoot();
+    const capture = capturedIo();
+    const warning = "idle-body loop needs visual review: source pixels were preserved";
+    const status = await runCli([
+      "compile", "motion.json", "--out", "asset.avl"
+    ], {
+      cwd: root,
+      io: capture.io,
+      compileDependencies: {
+        buildDirectArtifact: async () => {
+          throw new Error("wrong compiler");
+        },
+        buildProjectArtifact: async () => compileArtifact(42, "d", [warning])
+      }
+    });
+
+    expect(status).toBe(0);
+    expect(capture.stdout()).toContain(`WARNING ${warning}`);
+    expect(capture.stderr()).toBe("");
+  });
+
+  it("prints configured AVC policy and measured bitrate evidence", async () => {
+    const root = await temporaryRoot();
+    const capture = capturedIo();
+    const status = await runCli([
+      "compile", "source.mov", "--loop", "0:2",
+      "--crf", "20", "--max-bitrate", "10000000",
+      "--preset", "veryslow", "--out", "asset.avl"
+    ], {
+      cwd: root,
+      io: capture.io,
+      compileDependencies: {
+        buildDirectArtifact: async () => encodedCompileArtifact(),
+        buildProjectArtifact: async () => {
+          throw new Error("wrong compiler");
+        }
+      }
+    });
+
+    expect(status).toBe(0);
+    expect(capture.stdout()).toContain(
+      "Encoding avc.1x: CRF 20, preset veryslow; measured average 4200000 bit/s, configured peak 10000000 bit/s"
+    );
+    expect(capture.stderr()).toBe("");
   });
 
   it("serializes a legal high-cardinality CLI result above M4 JSON limits", () => {
@@ -75,7 +122,7 @@ describe("programmatic CLI", () => {
   it("returns CLI_USAGE as canonical JSON Lines without terminal injection", async () => {
     const capture = capturedIo();
     const status = await runCli([
-      "inspect", "asset.rma", "--bad\u001b[31m", "--json"
+      "inspect", "asset.avl", "--bad\u001b[31m", "--json"
     ], { io: capture.io });
     expect(status).toBe(2);
     expect(capture.stdout()).toBe("");
@@ -88,7 +135,7 @@ describe("programmatic CLI", () => {
     const root = await temporaryRoot();
     const capture = capturedIo();
     const status = await runCli([
-      "compile", "source.mp4", "--loop", "0:2", "--out", "asset.rma"
+      "compile", "source.mp4", "--loop", "0:2", "--out", "asset.avl"
     ], {
       cwd: root,
       io: capture.io,
@@ -113,7 +160,7 @@ describe("programmatic CLI", () => {
       const capture = capturedIo();
       const privatePath = join(root, "customer-project-secret.yuv");
       const status = await runCli([
-        "compile", "source.mp4", "--loop", "0:2", "--out", "asset.rma",
+        "compile", "source.mp4", "--loop", "0:2", "--out", "asset.avl",
         ...(json ? ["--json"] : [])
       ], {
         cwd: root,
@@ -159,7 +206,7 @@ describe("programmatic CLI", () => {
     const root = await temporaryRoot();
     const capture = capturedIo();
     const status = await runCli([
-      "compile", "source.mp4", "--loop", "0:2", "--out", "asset.rma", "--json"
+      "compile", "source.mp4", "--loop", "0:2", "--out", "asset.avl", "--json"
     ], {
       cwd: root,
       io: capture.io,
@@ -183,14 +230,20 @@ describe("programmatic CLI", () => {
   it("prints bounded help with no filesystem work", async () => {
     const capture = capturedIo();
     await expect(runCli([], { io: capture.io })).resolves.toBe(0);
-    expect(capture.stdout()).toContain("rma compile");
+    expect(capture.stdout()).toContain("avl compile");
+    expect(capture.stdout()).toContain("--crf <1..51>");
+    expect(capture.stdout()).toContain("--max-bitrate <bits/second>");
+    expect(capture.stdout()).toContain("--preset <name>");
+    expect(capture.stdout()).toContain("--media-timeout-ms <integer>");
+    expect(capture.stdout()).toContain("arbitrary FFmpeg arguments");
+    expect(capture.stdout()).toContain("HEVC/WebM output");
     expect(capture.stderr()).toBe("");
   });
 
   it.each([
-    ["inspect", ["inspect", "missing.rma"]],
-    ["validate", ["validate", "missing.rma"]],
-    ["unpack", ["unpack", "missing.rma", "--out", "unpacked"]]
+    ["inspect", ["inspect", "missing.avl"]],
+    ["validate", ["validate", "missing.avl"]],
+    ["unpack", ["unpack", "missing.avl", "--out", "unpacked"]]
   ] as const)("threads runtime cancellation through %s", async (_, argv) => {
     const root = await temporaryRoot();
     const capture = capturedIo();
@@ -228,7 +281,11 @@ describe("programmatic CLI", () => {
   });
 });
 
-function compileArtifact(bytes: number, digestCharacter: string): Readonly<CompileArtifact> {
+function compileArtifact(
+  bytes: number,
+  digestCharacter: string,
+  warnings: readonly string[] = []
+): Readonly<CompileArtifact> {
   return Object.freeze({
     assetBytes: new Uint8Array(bytes).fill(9),
     bytes,
@@ -249,9 +306,36 @@ function compileArtifact(bytes: number, digestCharacter: string): Readonly<Compi
       ffprobeVersionOutputSha256: "3".repeat(64),
       aggregateMemoryLimit: "derived"
     }),
-    warnings: Object.freeze([]),
+    warnings: Object.freeze([...warnings]),
     buildDetails: Object.freeze({
-      detailsVersion: "0.1"
+      detailsVersion: "0.2"
+    }) as unknown as CompileArtifact["buildDetails"]
+  });
+}
+
+function encodedCompileArtifact(): Readonly<CompileArtifact> {
+  const base = compileArtifact(42, "e");
+  return Object.freeze({
+    ...base,
+    buildDetails: Object.freeze({
+      detailsVersion: "0.2",
+      mode: "direct-video",
+      renditions: Object.freeze([Object.freeze({
+        id: "avc.1x",
+        bitrate: Object.freeze({ average: 4_200_000, peak: 10_000_000 }),
+        encoding: Object.freeze({
+          codec: "libx264",
+          preset: "veryslow",
+          rateControl: Object.freeze({
+            mode: "crf",
+            crf: 20,
+            maxBitrate: 10_000_000
+          }),
+          legacyZeroLatency: false,
+          canonicalBytes: 1_000,
+          measuredAverageBitrate: 4_200_000
+        })
+      })])
     }) as unknown as CompileArtifact["buildDetails"]
   });
 }
@@ -284,7 +368,7 @@ function capturedIo(): {
 }
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "rma-cli-"));
+  const root = await mkdtemp(join(tmpdir(), "aval-cli-"));
   roots.push(root);
   return root;
 }

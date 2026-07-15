@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("pre-definition framework properties upgrade and same-task config coalesces", async ({ page }) => {
   await page.goto("/m8-no-js.html");
   const result = await page.evaluate(async () => {
-    const element = document.createElement("rendered-motion") as unknown as
+    const element = document.createElement("aval-player") as unknown as
       HTMLElement & Record<string, unknown>;
     element.src = "";
     element.state = "idle";
@@ -11,8 +11,8 @@ test("pre-definition framework properties upgrade and same-task config coalesces
     document.body.append(element);
     const apiPath = "/src/m8-element-browser-api.ts";
     const api = await import(apiPath);
-    api.defineRenderedMotionElement();
-    element.src = "/first.rma";
+    api.defineAvalElement();
+    element.src = "/first.avl";
     element.src = "";
     element.state = "newest";
     await Promise.resolve();
@@ -31,8 +31,8 @@ test("invalid property writes throw without mutation", async ({ page }) => {
   const result = await page.evaluate(async () => {
     const apiPath = "/src/m8-element-browser-api.ts";
     const api = await import(apiPath);
-    api.defineRenderedMotionElement();
-    const element = document.createElement("rendered-motion") as unknown as
+    api.defineAvalElement();
+    const element = document.createElement("aval-player") as unknown as
       HTMLElement & Record<string, unknown>;
     element.motion = "full";
     let threw = false;
@@ -44,7 +44,7 @@ test("invalid property writes throw without mutation", async ({ page }) => {
 
 test("removing declarative state returns to the authored initial state", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?state-default");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -64,7 +64,7 @@ test("removing declarative state returns to the authored initial state", async (
 
 test("removing declarative state supersedes an in-flight imperative command", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?state-default-supersession");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -109,7 +109,7 @@ test("removing declarative state supersedes an in-flight imperative command", as
 
 test("imperative state intent is generation-scoped across source replacement", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?imperative-state-rebase");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -161,7 +161,7 @@ test("imperative state intent is generation-scoped across source replacement", a
 
 test("explicit declarative state persists across compatible source replacement", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?declarative-state-rebase");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");

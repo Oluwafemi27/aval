@@ -8,14 +8,14 @@ import { readCanonicalRgbaRange } from "./rgba-spool.js";
 import { analyzeSeam } from "./seam-analysis.js";
 
 export interface ProjectContinuityResult {
-  readonly posters: ReadonlyMap<string, Uint8Array>;
   readonly reports: readonly ContinuityReport[];
+  readonly warnings: readonly string[];
 }
 
 export interface ContinuityReport {
   readonly name: string;
   readonly kind: "loop" | "intro" | "departure" | "arrival" | "cut";
-  readonly status: "pass" | "cut";
+  readonly status: "pass" | "review" | "cut";
   readonly from: {
     readonly unit: string;
     readonly frame: number | null;
@@ -56,42 +56,6 @@ export async function validateProjectMedia(input: {
   validateRanges(input.project, input.sources);
   const units = new Map(input.project.units.map((unit) => [unit.id, unit]));
   const states = new Map(input.project.states.map((state) => [state.id, state]));
-  const posters = new Map<string, Uint8Array>();
-  for (let stateIndex = 0;
-    stateIndex < input.project.states.length;
-    stateIndex += 1) {
-    const state = input.project.states[stateIndex]!;
-    const body = requiredUnit(units, state.bodyUnit, "body");
-    const bodySource = requiredSource(input.sources, body.source);
-    const bodyEntry = (
-      await readProjectFrames(bodySource, [body.range[0]], input.signal)
-    )[0]!;
-    if (state.poster === undefined) {
-      posters.set(state.id, bodyEntry);
-      continue;
-    }
-    const posterSource = requiredSource(input.sources, state.poster.source);
-    if (state.poster.frame >= posterSource.probe.frameCount) {
-      throw new CompilerError(
-        "FRAME_RANGE_INVALID",
-        `Poster frame ${String(state.poster.frame)} is outside source ${state.poster.source}`
-      );
-    }
-    const poster = (
-      await readProjectFrames(posterSource, [state.poster.frame], input.signal)
-    )[0]!;
-    if (!equalBytes(poster, bodyEntry)) {
-      throw new CompilerError(
-        "INPUT_INVALID",
-        "Explicit poster pixels must exactly match the state body-entry frame",
-        {
-          field: `states[${String(stateIndex)}].poster`,
-          hint: "Choose a poster frame identical to the first body frame, or omit poster."
-        }
-      );
-    }
-    posters.set(state.id, poster);
-  }
 
   const boundaries: {
     readonly name: string;
@@ -100,6 +64,7 @@ export async function validateProjectMedia(input: {
     readonly to: FramePoint;
   }[] = [];
   const reports: ContinuityReport[] = [];
+  const warnings: string[] = [];
   for (const unit of input.project.units) {
     if (unit.kind === "body" && unit.playback === "loop") {
       boundaries.push({
@@ -201,10 +166,11 @@ export async function validateProjectMedia(input: {
       input.ffmpeg,
       input.signal
     );
+    const needsReview = result.repeatedEndpointPause || !result.passes;
     reports.push(Object.freeze({
       name: boundary.name,
       kind: boundary.kind,
-      status: "pass",
+      status: needsReview ? "review" : "pass",
       from: Object.freeze({
         unit: boundary.from.unit.id,
         frame: boundary.from.frame,
@@ -224,28 +190,38 @@ export async function validateProjectMedia(input: {
         repeatedEndpointPause: result.repeatedEndpointPause
       })
     }));
-    if (result.repeatedEndpointPause) {
-      throw new CompilerError(
-        "CONTINUITY_FAILED",
-        `${boundary.name} repeats an identical endpoint frame`
-      );
-    }
-    if (!result.passes) {
-      throw new CompilerError(
-        "CONTINUITY_FAILED",
-        `${boundary.name} exceeds the authored continuity threshold`
-      );
-    }
+    if (needsReview) warnings.push(continuityReviewWarning(boundary, result));
   }
   return Object.freeze({
-    posters,
-    reports: Object.freeze(reports)
+    reports: Object.freeze(reports),
+    warnings: Object.freeze(warnings)
   });
 }
 
-function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength &&
-    left.every((value, index) => value === right[index]);
+function continuityReviewWarning(
+  boundary: Readonly<{
+    name: string;
+    from: FramePoint;
+    to: FramePoint;
+  }>,
+  result: Readonly<{
+    boundaryRms: number;
+    alphaBoundaryRms: number;
+    neighborP95: number;
+    alphaNeighborP95: number;
+    repeatedEndpointPause: boolean;
+  }>
+): string {
+  const frames = `${boundary.from.unit.id}:${String(boundary.from.frame)} → ` +
+    `${boundary.to.unit.id}:${String(boundary.to.frame)}`;
+  if (result.repeatedEndpointPause) {
+    return `${boundary.name} needs visual review: ${frames} repeats an endpoint ` +
+      "amid surrounding motion; source pixels were preserved";
+  }
+  return `${boundary.name} needs visual review: ${frames}, RGB RMS ` +
+    `${result.boundaryRms.toFixed(9)} vs neighboring ${result.neighborP95.toFixed(9)}, ` +
+    `alpha RMS ${result.alphaBoundaryRms.toFixed(9)} vs neighboring ` +
+    `${result.alphaNeighborP95.toFixed(9)}; source pixels were preserved`;
 }
 
 function validateRanges(

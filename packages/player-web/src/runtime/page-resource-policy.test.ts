@@ -12,14 +12,14 @@ describe("page resource policy", () => {
     const policy = createRuntimePageResourcePolicy();
     expect(policy).toEqual({
       maximumDecoderLeases: 2,
-      maximumPagePhysicalBytes: 192 * 1024 * 1024,
-      maximumPlayerLogicalBytes: 64 * 1024 * 1024,
+      maximumPagePhysicalBytes: Number.MAX_SAFE_INTEGER,
+      maximumPlayerLogicalBytes: Number.MAX_SAFE_INTEGER,
       referenceProfile: true
     });
     expect(Object.isFrozen(policy)).toBe(true);
     expect(DEFAULT_MAXIMUM_DECODER_LEASES).toBe(2);
-    expect(DEFAULT_MAXIMUM_PAGE_PHYSICAL_BYTES).toBe(192 * 1024 * 1024);
-    expect(DEFAULT_MAXIMUM_PLAYER_LOGICAL_BYTES).toBe(64 * 1024 * 1024);
+    expect(DEFAULT_MAXIMUM_PAGE_PHYSICAL_BYTES).toBe(Number.MAX_SAFE_INTEGER);
+    expect(DEFAULT_MAXIMUM_PLAYER_LOGICAL_BYTES).toBe(Number.MAX_SAFE_INTEGER);
   });
 
   it("accepts lower limits without changing reference-profile status", () => {
@@ -35,11 +35,19 @@ describe("page resource policy", () => {
     });
   });
 
-  it.each([
-    { maximumDecoderLeases: 3 },
-    { maximumPagePhysicalBytes: 192 * 1024 * 1024 + 1 },
-    { maximumPlayerLogicalBytes: 64 * 1024 * 1024 + 1 }
-  ])("requires explicit uncertified opt-in for $maximumDecoderLeases$maximumPagePhysicalBytes$maximumPlayerLogicalBytes", (input) => {
+  it("accepts byte policies above the former defaults without an opt-in", () => {
+    expect(createRuntimePageResourcePolicy({
+      maximumPagePhysicalBytes: 193 * 1024 * 1024,
+      maximumPlayerLogicalBytes: 65 * 1024 * 1024
+    })).toMatchObject({
+      maximumPagePhysicalBytes: 193 * 1024 * 1024,
+      maximumPlayerLogicalBytes: 65 * 1024 * 1024,
+      referenceProfile: true
+    });
+  });
+
+  it("keeps the decoder-concurrency reference opt-in", () => {
+    const input = { maximumDecoderLeases: 3 };
     expect(() => createRuntimePageResourcePolicy(input)).toThrow();
     expect(createRuntimePageResourcePolicy({
       ...input,

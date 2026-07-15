@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("DOM events stage properties before dispatch and promises settle last", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?events");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -36,7 +36,7 @@ test("DOM events stage properties before dispatch and promises settle last", asy
 
 test("listener-triggered state work starts only after the current settlement", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?event-reentrancy");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -72,7 +72,7 @@ test("listener-triggered state work starts only after the current settlement", a
 
 test("authored event acceptance remains exact during listener reentrancy", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?event-send-deferral");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -125,7 +125,7 @@ test("authored event acceptance remains exact during listener reentrancy", async
 
 test("listener-triggered source replacement invalidates only after dispatch exits", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?event-source-deferral");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");
@@ -170,7 +170,7 @@ test("listener-triggered source replacement invalidates only after dispatch exit
 
 test("listener-triggered disposal becomes terminal only after dispatch exits", async ({ page }) => {
   await page.goto("/m8-dev-entry.html?event-dispose-deferral");
-  const motion = page.locator("rendered-motion");
+  const motion = page.locator("aval-player");
   await expect.poll(() => motion.evaluate((element) =>
     (element as unknown as { readiness: string }).readiness
   ), { timeout: 20_000 }).toBe("interactiveReady");

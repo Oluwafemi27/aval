@@ -34,7 +34,7 @@ export function serveAssetRange(
   bytes: Buffer,
   sha256: string
 ): void {
-  const etag = `"rma-${sha256}"`;
+  const etag = `"aval-${sha256}"`;
   const honorRange = rangeHeader !== undefined && (ifRangeHeader === undefined || ifRangeHeader === etag);
   const range = !honorRange ? null : parseRange(rangeHeader, bytes.byteLength);
   response.setHeader("Accept-Ranges", "bytes");
@@ -49,7 +49,7 @@ export function serveAssetRange(
   const end = range?.end ?? bytes.byteLength - 1;
   const body = bytes.subarray(start, end + 1);
   response.statusCode = range === null ? 200 : 206;
-  response.setHeader("Content-Type", "application/vnd.rendered-motion");
+  response.setHeader("Content-Type", "application/vnd.aval");
   response.setHeader("Content-Encoding", "identity");
   response.setHeader("Content-Length", body.byteLength);
   if (range !== null) response.setHeader("Content-Range", `bytes ${String(start)}-${String(end)}/${String(bytes.byteLength)}`);

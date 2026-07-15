@@ -23,7 +23,22 @@ describe("source project 0.2 schema", () => {
       sourceProjectVersion: "0.2",
       alphaPolicy,
       canvas: { width: 33, height: 21, pixelAspect: [4, 3] },
-      renditions: [{ id: "full", width: 33, height: 21 }]
+      renditions: [{
+        id: "full",
+        width: 33,
+        height: 21,
+        avcProfileVersion: "v0",
+        encoding: {
+          codec: "h264",
+          preset: "medium",
+          legacyZeroLatency: true,
+          rateControl: {
+            mode: "abr",
+            averageBitrate: 300_000,
+            maxBitrate: 600_000
+          }
+        }
+      }]
     });
     expect(normalized.renditions[0]).not.toHaveProperty("codedWidth");
     expect(Object.isFrozen(normalized)).toBe(true);
@@ -40,7 +55,21 @@ describe("source project 0.2 schema", () => {
     expect(legacy).toMatchObject({
       sourceProjectVersion: "0.1",
       alphaPolicy: "opaque",
-      renditions: [{ id: "opaque", width: 32, height: 32 }]
+      renditions: [{
+        id: "opaque",
+        width: 32,
+        height: 32,
+        avcProfileVersion: "v0",
+        encoding: {
+          preset: "medium",
+          legacyZeroLatency: true,
+          rateControl: {
+            mode: "abr",
+            averageBitrate: 300_000,
+            maxBitrate: 600_000
+          }
+        }
+      }]
     });
     expect(legacy.renditions[0]).not.toHaveProperty("codedWidth");
   });
@@ -65,17 +94,62 @@ describe("source project 0.2 schema", () => {
     });
   });
 
+  it("accepts authored canvas, rendition, PNG count, and ranges above old ceilings", () => {
+    const value = projectV02();
+    value.canvas = { ...value.canvas, width: 1_920, height: 1_080 };
+    value.renditions[0] = {
+      ...value.renditions[0],
+      width: 1_920,
+      height: 1_080,
+      bitrate: { average: 6_000_000, peak: 10_000_000 }
+    };
+    value.sources[0] = {
+      id: "source",
+      type: "png-sequence",
+      directory: "frames",
+      prefix: "frame-",
+      digits: 4,
+      suffix: ".png",
+      firstNumber: 0,
+      frameCount: 1_801
+    };
+    value.units[0].range = [0, 1_801];
+
+    expect(validateSourceProjectV02(value)).toMatchObject({
+      canvas: { width: 1_920, height: 1_080 },
+      renditions: [{
+        width: 1_920,
+        height: 1_080,
+        bitrate: { average: 6_000_000, peak: 10_000_000 }
+      }],
+      sources: [{ frameCount: 1_801 }],
+      units: [{ range: [0, 1_801] }]
+    });
+  });
+
   it("rejects author-controlled compiled geometry, ambiguity, and invalid ratios", () => {
     const cases: ((value: any) => void)[] = [
       (value) => { value.unknown = true; },
       (value) => { value.renditions[0].codedWidth = 48; },
       (value) => { value.renditions[0].alphaRect = [0, 40, 33, 21]; },
+      (value) => {
+        value.renditions[0].encoding = {
+          codec: "h264",
+          preset: "slow",
+          rateControl: {
+            mode: "crf",
+            crf: 20,
+            maxBitrate: 600_000
+          }
+        };
+      },
       (value) => { value.renditions[0].width = 34; },
       (value) => { value.renditions[0].width = 32; },
       (value) => { value.canvas.pixelAspect = [2, 2]; },
       (value) => { value.canvas.pixelAspect = [10_001, 1]; },
       (value) => { value.canvas.width = 0; },
       (value) => { value.canvas.height = 513; },
+      (value) => { value.states[0].poster = { source: "source", frame: 0 }; },
       (value) => { value.profile = "avc-annexb-packed-v0"; }
     ];
     for (const mutate of cases) {
@@ -97,7 +171,7 @@ describe("source project 0.2 schema", () => {
 
   it("dispatches only on an own, exact projectVersion field", () => {
     expect(() => parseNormalizedSourceProject(new TextEncoder().encode(
-      JSON.stringify({ ...projectV02(), projectVersion: "0.3" })
+      JSON.stringify({ ...projectV02(), projectVersion: "0.4" })
     ))).toThrow(CompilerError);
     expect(() => parseNormalizedSourceProject(new TextEncoder().encode(
       JSON.stringify({ ...projectV02(), projectVersion: 0.2 })

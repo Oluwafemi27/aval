@@ -19,8 +19,6 @@ interface CapturedRuntimeAssetSession {
   readonly identity: object;
   readonly generation: number;
   readonly catalog: RuntimeAssetCatalog;
-  readonly ensureStatic: RuntimeAssetSession["ensureStatic"];
-  readonly ensureAllStatics: RuntimeAssetSession["ensureAllStatics"];
   readonly ensureAllUnits: RuntimeAssetSession["ensureAllUnits"];
   readonly evictRenditionUnits: RuntimeAssetSession["evictRenditionUnits"];
   readonly dispose: RuntimeAssetSession["dispose"];
@@ -87,7 +85,7 @@ export function captureIntegratedPlayerAssetSource(
 }
 
 /**
- * Adapts sparse residency to the existing catalog/static/candidate path. It
+ * Adapts sparse residency to the existing catalog/candidate path. It
  * never owns graph, decoder, scheduler, or presentation behavior.
  */
 export class IntegratedPlayerAssetBinding {
@@ -113,24 +111,6 @@ export class IntegratedPlayerAssetBinding {
     this.#source = source;
     this.catalog = catalog;
     this.requiresEnsure = source.kind === "session";
-  }
-
-  public async ensureStaticState(
-    state: string,
-    signal: AbortSignal
-  ): Promise<void> {
-    if (this.#source.kind === "bytes") return;
-    throwIfAborted(signal);
-    const staticFrame = this.catalog.states.require(state).staticFrame;
-    await this.#source.session.ensureStatic(staticFrame, { signal });
-    throwIfAborted(signal);
-  }
-
-  public async ensureAllStatics(signal: AbortSignal): Promise<void> {
-    if (this.#source.kind === "bytes") return;
-    throwIfAborted(signal);
-    await this.#source.session.ensureAllStatics({ signal });
-    throwIfAborted(signal);
   }
 
   public async ensureCandidate(
@@ -173,16 +153,12 @@ function captureRuntimeAssetSession(value: unknown): CapturedRuntimeAssetSession
   }
   let catalog: unknown;
   let disposed: unknown;
-  let ensureStatic: unknown;
-  let ensureAllStatics: unknown;
   let ensureAllUnits: unknown;
   let evictRenditionUnits: unknown;
   let dispose: unknown;
   try {
     catalog = Reflect.get(value, "catalog");
     disposed = Reflect.get(value, "disposed");
-    ensureStatic = Reflect.get(value, "ensureStatic");
-    ensureAllStatics = Reflect.get(value, "ensureAllStatics");
     ensureAllUnits = Reflect.get(value, "ensureAllUnits");
     evictRenditionUnits = Reflect.get(value, "evictRenditionUnits");
     dispose = Reflect.get(value, "dispose");
@@ -193,8 +169,6 @@ function captureRuntimeAssetSession(value: unknown): CapturedRuntimeAssetSession
     throw new TypeError("integrated player assetSession is disposed");
   }
   if (
-    typeof ensureStatic !== "function" ||
-    typeof ensureAllStatics !== "function" ||
     typeof ensureAllUnits !== "function" ||
     typeof evictRenditionUnits !== "function" ||
     typeof dispose !== "function"
@@ -206,21 +180,6 @@ function captureRuntimeAssetSession(value: unknown): CapturedRuntimeAssetSession
     identity: value,
     generation,
     catalog,
-    ensureStatic: (
-      staticFrame: string,
-      options?: Parameters<RuntimeAssetSession["ensureStatic"]>[1]
-    ) => Reflect.apply(
-      ensureStatic,
-      value,
-      [staticFrame, options]
-    ) as ReturnType<RuntimeAssetSession["ensureStatic"]>,
-    ensureAllStatics: (
-      options?: Parameters<RuntimeAssetSession["ensureAllStatics"]>[0]
-    ) => Reflect.apply(
-      ensureAllStatics,
-      value,
-      [options]
-    ) as ReturnType<RuntimeAssetSession["ensureAllStatics"]>,
     ensureAllUnits: (
       rendition: string,
       options?: Parameters<RuntimeAssetSession["ensureAllUnits"]>[1]

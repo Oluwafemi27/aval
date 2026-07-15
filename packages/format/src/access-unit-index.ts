@@ -29,6 +29,20 @@ import {
 
 const KEY_FLAG = 0x0001;
 
+function recordByteOffset(ordinal: number, maximum: number): number {
+  return checkedAdd(
+    ACCESS_UNIT_INDEX_HEADER_LENGTH,
+    checkedMultiply(
+      ordinal,
+      ACCESS_UNIT_RECORD_LENGTH,
+      maximum,
+      "access-unit record offset"
+    ),
+    maximum,
+    "access-unit record offset"
+  );
+}
+
 function fail(message: string, offset?: number): never {
   throw new FormatError(
     "INDEX_INVALID",
@@ -40,7 +54,7 @@ function fail(message: string, offset?: number): never {
 function assertMagic(bytes: Uint8Array): void {
   for (let index = 0; index < ACCESS_UNIT_INDEX_MAGIC.length; index += 1) {
     if (bytes[index] !== ACCESS_UNIT_INDEX_MAGIC[index]) {
-      fail("access-unit index magic must be RMAI", index);
+      fail("access-unit index magic must be AVLI", index);
     }
   }
 }
@@ -91,7 +105,7 @@ function validateRecordSequence(
   options?: FormatOptions
 ): void {
   const budgets = resolveFormatBudgets(options);
-  const expectedCount = plan.slots.length;
+  const expectedCount = plan.recordCount;
   if (records.length !== expectedCount) {
     fail(
       `access-unit record count must be ${String(expectedCount)}, received ${String(records.length)}`,
@@ -99,10 +113,9 @@ function validateRecordSequence(
     );
   }
 
-  for (const slot of plan.slots) {
+  for (const slot of plan.records()) {
     const record = records[slot.ordinal];
-    const recordOffset =
-      ACCESS_UNIT_INDEX_HEADER_LENGTH + slot.ordinal * ACCESS_UNIT_RECORD_LENGTH;
+    const recordOffset = recordByteOffset(slot.ordinal, budgets.maxIndexBytes);
     if (record === undefined) {
       fail("access-unit record is missing", recordOffset);
     }
@@ -143,8 +156,7 @@ function parseRecord(
   options?: FormatOptions
 ): Readonly<AccessUnitRecord> {
   const budgets = resolveFormatBudgets(options);
-  const offset =
-    ACCESS_UNIT_INDEX_HEADER_LENGTH + ordinal * ACCESS_UNIT_RECORD_LENGTH;
+  const offset = recordByteOffset(ordinal, budgets.maxIndexBytes);
   const payloadOffset = readUint64LE(
     bytes,
     offset,
@@ -283,16 +295,24 @@ export function parseAccessUnitIndex(
       budgets.maxSampleRecords,
       budgets.maxTotalUnitFrames
     );
-    if (sampleCount !== plan.slots.length) {
+    if (sampleCount !== plan.recordCount) {
       fail(
-        `access-unit sample count must match the manifest count of ${String(plan.slots.length)}`,
+        `access-unit sample count must match the manifest count of ${String(plan.recordCount)}`,
         8
       );
     }
 
     const records: AccessUnitRecord[] = [];
-    for (let ordinal = 0; ordinal < sampleCount; ordinal += 1) {
-      records.push(parseRecord(bytes, ordinal, options));
+    try {
+      for (let ordinal = 0; ordinal < sampleCount; ordinal += 1) {
+        records.push(parseRecord(bytes, ordinal, options));
+      }
+    } catch (error) {
+      if (isFormatError(error)) throw error;
+      throw new FormatError(
+        "INDEX_INVALID",
+        `access-unit index allocation for ${String(sampleCount)} records failed`
+      );
     }
     validateRecordSequence(records, manifest, plan, options);
     return Object.freeze(records);
@@ -336,7 +356,15 @@ export function encodeAccessUnitIndex(
       budgets.maxIndexBytes,
       "access-unit index length"
     );
-    const bytes = new Uint8Array(length);
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(length);
+    } catch {
+      throw new FormatError(
+        "INDEX_INVALID",
+        `access-unit index allocation of ${String(length)} bytes failed`
+      );
+    }
     bytes.set(ACCESS_UNIT_INDEX_MAGIC, 0);
     writeUint16LE(
       bytes,
@@ -357,8 +385,7 @@ export function encodeAccessUnitIndex(
 
     for (let ordinal = 0; ordinal < records.length; ordinal += 1) {
       const record = records[ordinal];
-      const offset =
-        ACCESS_UNIT_INDEX_HEADER_LENGTH + ordinal * ACCESS_UNIT_RECORD_LENGTH;
+      const offset = recordByteOffset(ordinal, budgets.maxIndexBytes);
       if (typeof record !== "object" || record === null) {
         fail("access-unit record must be an object", offset);
       }

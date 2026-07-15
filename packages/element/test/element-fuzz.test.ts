@@ -313,7 +313,7 @@ function createTape(seed: number): readonly TapeOperation[] {
 
 function configurationOperation(random: () => number): Extract<TapeOperation, Readonly<{ type: "configure" }>> {
   const attributes = Object.freeze({
-    src: choose(random, ["", "motion.rma", "https://example.invalid/motion.rma"]),
+    src: choose(random, ["", "motion.avl", "https://example.invalid/motion.avl"]),
     integrity: choose(random, ["", `sha256-${"A".repeat(43)}=`, "sha256-invalid"]),
     crossorigin: choose(random, [null, "anonymous", "use-credentials", "include"]),
     motion: choose(random, [null, "auto", "reduce", "full", "fast"]),

@@ -10,7 +10,7 @@ wire-format version. Reports should include the affected package/version, a
 minimal bounded input, expected and actual behavior, and whether untrusted
 network or asset bytes are required.
 
-Rendered Motion treats compiled assets, HTTP responses, element attributes,
+AVAL treats compiled assets, HTTP responses, element attributes,
 DOM events, decoder outputs, worker messages, GPU limits, and certification
 attachments as untrusted. A passing runtime report is not publisher
 authenticity; use external integrity and a trusted distribution channel.

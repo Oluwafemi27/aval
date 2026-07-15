@@ -10,7 +10,7 @@ const directoryIndex = process.argv.indexOf("--packages");
 const packageDirectory = resolve(root, directoryIndex < 0 ? "artifacts/1.0.0/packages" : process.argv[directoryIndex + 1]);
 const archives = (await readdir(packageDirectory)).filter((name) => name.endsWith(".tgz")).map((name) => join(packageDirectory, name));
 if (archives.length !== 5) throw new Error(`expected five package archives, found ${archives.length}`);
-const temporary = await mkdtemp(join(tmpdir(), "rma-consumers-"));
+const temporary = await mkdtemp(join(tmpdir(), "aval-consumers-"));
 try {
   for (const fixture of ["node-esm", "typescript-nodenext", "typescript-bundler", "browser-vite"]) {
     const target = join(temporary, fixture);
@@ -25,9 +25,9 @@ try {
   const cliRoot = join(temporary, "cli");
   await cp(resolve(root, "tests/consumers/node-esm"), cliRoot, { recursive: true });
   run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", "--offline", "--cache", join(temporary, "npm-cache"), ...archives], cliRoot, 120_000);
-  const cli = resolve(cliRoot, "node_modules/@rendered-motion/compiler/dist/cli.js");
+  const cli = resolve(cliRoot, "node_modules/@aval/compiler/dist/cli.js");
   run(process.execPath, [cli, "--help"], cliRoot, 30_000);
-  const invalid = spawnSync(process.execPath, [cli, "validate", "missing.rma"], { cwd: cliRoot, encoding: "utf8", timeout: 30_000 });
+  const invalid = spawnSync(process.execPath, [cli, "validate", "missing.avl"], { cwd: cliRoot, encoding: "utf8", timeout: 30_000 });
   if (invalid.error !== undefined) throw invalid.error;
   if (invalid.status === 0) {
     throw new Error(`compiler CLI accepted a missing input:\n${invalid.stdout}\n${invalid.stderr}`);

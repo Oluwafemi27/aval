@@ -2,9 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("built public element records an honest functional-engine capability outcome", async ({ page }, testInfo) => {
   await page.goto("/certification.html");
-  await page.waitForFunction(() => customElements.get("rendered-motion") !== undefined);
+  await page.waitForFunction(() => customElements.get("aval-player") !== undefined);
   const result = await page.evaluate(async (session) => {
-    const element = document.createElement("rendered-motion") as unknown as HTMLElement & {
+    const element = document.createElement("aval-player") as unknown as HTMLElement & {
       src: string;
       prepare(): Promise<unknown>;
       dispose(): Promise<void>;
