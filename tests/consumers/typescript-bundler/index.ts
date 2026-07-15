@@ -1,4 +1,4 @@
-import { defineAvalElement, type AvalElement } from "@aval/element";
+import { defineAvalElement, type AvalElement } from "@pixel-point/aval-element";
 
 defineAvalElement();
 const motion = document.querySelector<AvalElement>("aval-player");

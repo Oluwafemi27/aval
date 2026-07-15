@@ -15,7 +15,7 @@ not the still-uncreated protected candidate identity.
 
 ## Implemented independent certification authority
 
-- Private `@aval/certification` package with the closed result
+- Private `@pixel-point/aval-certification` package with the closed result
   vocabulary, bounded canonical JSON, exact runtime/display report separation,
   environment normalization, public-safe profile IDs, attachment verification,
   conformance runner, runtime/display criteria, benchmark statistics, ownership

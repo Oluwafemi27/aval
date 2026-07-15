@@ -1,4 +1,4 @@
-import type { CanvasV01 } from "@aval/format";
+import type { CanvasV01 } from "@pixel-point/aval-format";
 
 import {
   RendererUnavailableError,

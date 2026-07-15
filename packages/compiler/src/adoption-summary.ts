@@ -102,7 +102,7 @@ export function createCompileAdoptionSummary(
     }),
     sha256: result.sha256,
     snippets: Object.freeze({
-      npm: `npm install @aval/element@${SYNCHRONIZED_PUBLIC_VERSION}`,
+      npm: `npm install @pixel-point/aval-element@${SYNCHRONIZED_PUBLIC_VERSION}`,
       html: `<aval-player src="./${fileName}"><span slot="fallback">Add an author-owned static fallback here.</span></aval-player>`
     })
   });

@@ -5,9 +5,9 @@ import { basename, join, relative, resolve, sep } from "node:path";
 
 import { inspectTarballBytes } from "./inspect-tarball.mjs";
 import { validatePublishManifest } from "./publish-manifest.mjs";
-import { RELEASE_PACKAGE_NAMES, RELEASE_PACKAGE_SPECS, RELEASE_VERSION, topologicalPackageOrder } from "./release-set-model.mjs";
+import { RELEASE_PACKAGE_NAMES, RELEASE_PACKAGE_SPECS, RELEASE_VERSION, releaseArchiveFilename, releasePackageDirectory, topologicalPackageOrder } from "./release-set-model.mjs";
 
-export { RELEASE_PACKAGE_NAMES, RELEASE_PACKAGE_SPECS, RELEASE_VERSION, topologicalPackageOrder };
+export { RELEASE_PACKAGE_NAMES, RELEASE_PACKAGE_SPECS, RELEASE_VERSION, releaseArchiveFilename, releasePackageDirectory, topologicalPackageOrder };
 
 export function validateReleasePolicy(policy) {
   if (policy === null || typeof policy !== "object") throw new TypeError("release policy is invalid");
@@ -53,7 +53,7 @@ export async function loadVerifiedReleaseSet({ directory, policy, packageIndex }
     const path = join(root, entry.name);
     const bytes = await readExactRegularFile(path, root);
     const inspected = inspectTarballBytes(bytes, { label: entry.name });
-    const expectedFilename = archiveFilename(inspected.name);
+    const expectedFilename = releaseArchiveFilename(inspected.name);
     if (entry.name !== expectedFilename) throw new Error(`${inspected.name} archive filename must be ${expectedFilename}`);
     packages.push(Object.freeze({ ...inspected, filename: entry.name, path, bytes }));
   }
@@ -166,11 +166,6 @@ async function readExactRegularFile(path, root) {
   } finally {
     await handle.close();
   }
-}
-
-function archiveFilename(name) {
-  if (!name.startsWith("@aval/")) throw new Error(`unexpected release package name: ${name}`);
-  return `aval-${name.slice("@aval/".length)}-${RELEASE_VERSION}.tgz`;
 }
 
 function sameArray(left, right) {

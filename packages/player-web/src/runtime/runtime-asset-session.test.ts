@@ -1,4 +1,4 @@
-import { validateCompleteAsset } from "@aval/format";
+import { validateCompleteAsset } from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 
 import { createOpaqueTestAsset } from "./asset-test-fixture.js";

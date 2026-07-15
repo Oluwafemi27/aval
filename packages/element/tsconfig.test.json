@@ -3,10 +3,10 @@
   "compilerOptions": {
     "noEmit": true,
     "paths": {
-      "@aval/element": [
+      "@pixel-point/aval-element": [
         "./src/index.ts"
       ],
-      "@aval/element/auto": [
+      "@pixel-point/aval-element/auto": [
         "./src/auto.ts"
       ]
     },

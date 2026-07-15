@@ -1,4 +1,4 @@
-import { maximumAvcDecodedRgbaBytes } from "@aval/format";
+import { maximumAvcDecodedRgbaBytes } from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 
 import {

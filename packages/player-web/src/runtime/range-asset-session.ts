@@ -6,7 +6,7 @@ import {
   validateCompleteAsset,
   type FormatHeader,
   type ParsedFrontIndex
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import type {
   NormalizedRuntimeAssetRequest,
   RuntimeFetchAdapter,

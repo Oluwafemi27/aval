@@ -19,7 +19,7 @@ import {
   validateCompleteAsset,
   writeCanonicalAsset,
   type CanonicalAssetInputV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { parseCliArguments, type CompileCliArguments } from "../src/cli-args.js";
 import { runCompileCommand } from "../src/commands/compile.js";

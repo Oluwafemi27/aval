@@ -1,4 +1,4 @@
-import type { ParsedFrontIndex } from "@aval/format";
+import type { ParsedFrontIndex } from "@pixel-point/aval-format";
 
 import {
   RuntimeBlobAssembly,

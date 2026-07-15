@@ -7,7 +7,7 @@ import {
   type AvcRenditionInspection,
   type ParsedFrontIndex,
   type ValidatedAssetLayout
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { readBoundedRegularFile } from "../bounded-file.js";
 import { throwIfAborted } from "../cancellation.js";

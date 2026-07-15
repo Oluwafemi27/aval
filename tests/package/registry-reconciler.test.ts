@@ -5,7 +5,7 @@ import { reconcileRegistryMutation } from "../../scripts/release/registry-reconc
 
 const integrity = `sha512-${Buffer.alloc(64, 2).toString("base64")}`;
 const identity = {
-  packageName: "@aval/graph",
+  packageName: "@pixel-point/aval-graph",
   version: "1.0.0" as const,
   tarballSha256: "a".repeat(64),
   registryIntegrity: integrity,

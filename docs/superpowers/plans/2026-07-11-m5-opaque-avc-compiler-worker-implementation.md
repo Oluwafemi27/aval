@@ -61,7 +61,7 @@ format → player-web
 all libraries → playground
 ```
 
-Give `@aval/compiler` a provisional private `avl` bin entry. Add
+Give `@pixel-point/aval-compiler` a provisional private `avl` bin entry. Add
 compile-only declaration tests proving that format's AVC exports have no
 Node/DOM/WebCodecs types, compiler public types have no DOM/WebCodecs types,
 and the worker source has no `Window` or Node ambient types. Preserve format's
@@ -71,9 +71,9 @@ Gate:
 
 ```text
 npm run typecheck
-npm run build -w @aval/format
-npm run build -w @aval/compiler
-npm run build -w @aval/player-web
+npm run build -w @pixel-point/aval-format
+npm run build -w @pixel-point/aval-compiler
+npm run build -w @pixel-point/aval-player-web
 ```
 
 ### 2. Freeze errors, options, budgets, and checked primitives
@@ -556,8 +556,8 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @aval/format
-npm pack --dry-run -w @aval/compiler
+npm pack --dry-run -w @pixel-point/aval-format
+npm pack --dry-run -w @pixel-point/aval-compiler
 git diff --check
 ```
 

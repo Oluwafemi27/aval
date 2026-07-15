@@ -2,7 +2,7 @@ import {
   FormatError,
   validateCompleteAsset,
   type ValidatedAssetLayout
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import { describe, expect, it, vi } from "vitest";
 
 import {

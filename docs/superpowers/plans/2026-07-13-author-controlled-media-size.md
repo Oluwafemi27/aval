@@ -366,7 +366,7 @@ npm run avl -- inspect public/motion.avl
 npm run avl -- validate public/motion.avl
 ```
 
-Explain that the `.avl` contains the compiled video/media, consumers import `@aval/element` once, and framework code controls public element state. Link the permanent end-user playground.
+Explain that the `.avl` contains the compiled video/media, consumers import `@pixel-point/aval-element` once, and framework code controls public element state. Link the permanent end-user playground.
 
 - [x] **Step 3: State the size contract consistently**
 

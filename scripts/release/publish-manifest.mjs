@@ -19,18 +19,18 @@ export function validatePublishManifest(manifest) {
   const specification = RELEASE_PACKAGE_SPECS.find(({ name }) => name === manifest.name);
   if (specification === undefined || manifest.version !== RELEASE_VERSION || manifest.private !== false || manifest.type !== "module" || manifest.license !== "MIT") throw new Error(`${manifest.name ?? "package"} publish identity is invalid`);
   if (JSON.stringify(manifest.files) !== JSON.stringify(["dist", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"])) throw new Error(`${manifest.name} publish files are not the exact allowlist`);
-  const expectedExports = manifest.name === "@aval/element"
+  const expectedExports = manifest.name === "@pixel-point/aval-element"
     ? { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" }, "./auto": { types: "./dist/auto.d.ts", import: "./dist/auto.js" } }
     : { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } };
   validateExportMapBounds(manifest.exports);
   if (JSON.stringify(manifest.exports) !== JSON.stringify(expectedExports)) throw new Error(`${manifest.name} exports do not match the reviewed public surface`);
-  const expectedBin = manifest.name === "@aval/compiler" ? { avl: "./dist/cli.js" } : undefined;
+  const expectedBin = manifest.name === "@pixel-point/aval-compiler" ? { avl: "./dist/cli.js" } : undefined;
   if (JSON.stringify(manifest.bin) !== JSON.stringify(expectedBin)) throw new Error(`${manifest.name} bin map does not match the reviewed public surface`);
   if (manifest.types !== undefined && manifest.types !== "./dist/index.d.ts") throw new Error(`${manifest.name} top-level types target is invalid`);
-  const expectedSideEffects = manifest.name === "@aval/element" ? ["./dist/auto.js"] : false;
+  const expectedSideEffects = manifest.name === "@pixel-point/aval-element" ? ["./dist/auto.js"] : false;
   if (JSON.stringify(manifest.sideEffects) !== JSON.stringify(expectedSideEffects)) throw new Error(`${manifest.name} sideEffects declaration is invalid`);
   if (JSON.stringify(manifest.engines) !== JSON.stringify({ node: ">=22.12.0" })) throw new Error(`${manifest.name} engines policy is invalid`);
-  validateRepositoryMetadata(manifest, specification.name.slice("@aval/".length));
+  validateRepositoryMetadata(manifest, specification.directory);
   const dependencies = manifest.dependencies;
   if (dependencies === null || typeof dependencies !== "object" || Array.isArray(dependencies)) throw new Error(`${manifest.name} dependencies are invalid`);
   const actualDependencies = Object.keys(dependencies).sort();

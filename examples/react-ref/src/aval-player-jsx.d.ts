@@ -1,7 +1,7 @@
 import type {
   AvalElement,
   AvalElementAttributes
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
 type AvalReactProps = DetailedHTMLProps<

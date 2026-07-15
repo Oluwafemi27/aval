@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { parseFrontIndex } from "@aval/format";
+import { parseFrontIndex } from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 import { evaluateRuntimeScenarioLedger, runtimeFixtureModelFromManifest } from "../src/runtime-scenario-ledger.js";
 import { createRawScenarioLedger, TEST_FIXTURE_DIGEST, TEST_RUNTIME_FIXTURE } from "./runtime-scenario-support.js";

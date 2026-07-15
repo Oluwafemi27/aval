@@ -1,4 +1,4 @@
-import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@pixel-point/aval-format";
 
 const SHA256_BYTES = 32;
 const SHA256_HEX_LENGTH = SHA256_BYTES * 2;

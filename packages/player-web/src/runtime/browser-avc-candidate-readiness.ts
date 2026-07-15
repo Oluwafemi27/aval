@@ -1,8 +1,8 @@
-import type { UnitV01 } from "@aval/format";
+import type { UnitV01 } from "@pixel-point/aval-format";
 import type {
   GraphEdgeDefinition,
   GraphStateDefinition
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { DecoderWorkerSample } from "../decoder-worker/protocol.js";
 import type {

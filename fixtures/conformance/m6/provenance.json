@@ -3,7 +3,7 @@
   "generatedAt": "2026-07-14",
   "generator": "aval-format-writer/0.1",
   "regeneration": {
-    "build": "npm run build -w @aval/format",
+    "build": "npm run build -w @pixel-point/aval-format",
     "compilerSourceCheck": "node fixtures/compiler/m6/update-provenance.mjs --check",
     "completeConformanceCheck": "node fixtures/conformance/m6/update-provenance.mjs --check"
   },

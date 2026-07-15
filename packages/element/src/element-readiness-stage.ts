@@ -1,4 +1,4 @@
-import type { RuntimeReadiness, StaticReason } from "@aval/player-web";
+import type { RuntimeReadiness, StaticReason } from "@pixel-point/aval-player-web";
 
 import type { ElementDesiredState } from "./element-desired-state.js";
 import type { ElementPublicState } from "./element-public-state.js";

@@ -28,7 +28,7 @@ await collect("docs", files);
 files.push("README.md", "SECURITY.md", "THREAT-MODEL.md", "THIRD_PARTY_NOTICES.md");
 for (const path of files) {
   const text = await readFile(path, "utf8");
-  if (/@aval\/[a-z-]+\/src\/|\.\.\/src\//u.test(text)) failures.push(`${path}: source-private import in public documentation`);
+  if (/@pixel-point\/aval-[a-z-]+\/src\/|\.\.\/src\//u.test(text)) failures.push(`${path}: source-private import in public documentation`);
   if (removedImageApi.test(text)) failures.push(`${path}: removed external image API is still documented`);
   if (!path.startsWith("docs/superpowers/") && !path.startsWith("docs/evidence/") && /\b(?:displayed|scanout)(?:Time|Timestamp)\b/u.test(text)) failures.push(`${path}: forbidden display claim field`);
   for (const match of text.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)) {
@@ -40,6 +40,23 @@ for (const path of files) {
     catch { failures.push(`${path}: broken relative link ${target}`); }
   }
 }
+const expectedInstallSequence = [
+  "npm install @pixel-point/aval-element@1.0.0",
+  "npm install --save-dev @pixel-point/aval-compiler@1.0.0",
+  "npx avl init my-motion",
+  "cd my-motion",
+  "npm install",
+  "npm run dev"
+].join("\n");
+for (const path of ["README.md", "docs/quick-start.md"]) {
+  const text = await readFile(path, "utf8");
+  if (!text.includes(expectedInstallSequence)) failures.push(`${path}: exact public install sequence is missing`);
+  if (!text.includes("resolves the `avl` executable from the compiler package")) failures.push(`${path}: npx avl local-binary context is missing`);
+}
+const elementReadme = await readFile("packages/element/README.md", "utf8");
+if (!elementReadme.includes("npm install @pixel-point/aval-element@1.0.0")) failures.push("packages/element/README.md: exact public install is missing");
+const compilerReadme = await readFile("packages/compiler/README.md", "utf8");
+if (!compilerReadme.includes("npm install --save-dev @pixel-point/aval-compiler@1.0.0\nnpx avl init my-motion")) failures.push("packages/compiler/README.md: local compiler install sequence is missing");
 const hosting = await readFile("docs/element/hosting-cors-csp-integrity.md", "utf8");
 if (hosting.includes(["unsafe", "inline"].join("-"))) failures.push("docs/element/hosting-cors-csp-integrity.md: CSP must not require inline authority");
 if (!hosting.includes("style-src 'self'") || !hosting.includes("worker-src 'self'")) failures.push("docs/element/hosting-cors-csp-integrity.md: strict self-hosted CSP baseline is incomplete");
@@ -73,7 +90,7 @@ for (const claim of [
   "npm run avl -- dev",
   "npm run avl -- inspect",
   "npm run avl -- validate",
-  'from "@aval/element"'
+  'from "@pixel-point/aval-element"'
 ]) {
   if (!authoring.includes(claim)) {
     failures.push(`docs/compiler/authoring-video-and-states.md: missing authoring contract: ${claim}`);
@@ -92,17 +109,17 @@ const captured = support.match(/<!-- BEGIN GENERATED SUPPORT -->\n([\s\S]*?)\n<!
 if (captured !== generated) failures.push("docs/browser-support.md: generated support table is stale");
 for (const directory of ["examples/zero-config-loop", "examples/idle-hover-states", "examples/network-integrity"]) {
   const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
-  if (packageJson.dependencies?.["@aval/element"] !== "1.0.0") failures.push(`${directory}: example must use exact element 1.0.0`);
+  if (packageJson.dependencies?.["@pixel-point/aval-element"] !== "1.0.0") failures.push(`${directory}: example must use exact element 1.0.0`);
   const source = await readFile(join(directory, "src/main.ts"), "utf8");
-  if (!source.includes('from "@aval/element"')) failures.push(`${directory}: example must use the public package root`);
+  if (!source.includes('from "@pixel-point/aval-element"')) failures.push(`${directory}: example must use the public package root`);
   const exampleReadme = await readFile(join(directory, "README.md"), "utf8");
   if (!exampleReadme.includes("illustrative")) failures.push(`${directory}: placeholder assets must be labeled illustrative`);
 }
 const reactDirectory = "examples/react-ref";
 const reactPackage = JSON.parse(await readFile(join(reactDirectory, "package.json"), "utf8"));
 const reactLock = JSON.parse(await readFile(join(reactDirectory, "package-lock.json"), "utf8"));
-if (reactPackage.peerDependencies?.["@aval/element"] !== "1.0.0") failures.push(`${reactDirectory}: example must target exact element 1.0.0`);
-if (reactPackage.peerDependenciesMeta?.["@aval/element"]?.optional !== true) failures.push(`${reactDirectory}: unpublished element peer must remain optional until packed verification`);
+if (reactPackage.peerDependencies?.["@pixel-point/aval-element"] !== "1.0.0") failures.push(`${reactDirectory}: example must target exact element 1.0.0`);
+if (reactPackage.peerDependenciesMeta?.["@pixel-point/aval-element"]?.optional !== true) failures.push(`${reactDirectory}: unpublished element peer must remain optional until packed verification`);
 for (const [name, version] of Object.entries({
   react: "19.2.7",
   "react-dom": "19.2.7"
@@ -127,7 +144,7 @@ if (JSON.stringify(reactLock.packages?.[""] ?? {}) !== JSON.stringify({
 })) failures.push(`${reactDirectory}: isolated package lock root is stale`);
 const reactSource = await readFile(join(reactDirectory, "src/StatusMotion.tsx"), "utf8");
 const reactAugmentation = await readFile(join(reactDirectory, "src/aval-player-jsx.d.ts"), "utf8");
-if (!reactSource.includes('from "@aval/element"') || /@aval\/element\//u.test(reactSource)) failures.push(`${reactDirectory}: component must use only the public element package root`);
+if (!reactSource.includes('from "@pixel-point/aval-element"') || /@pixel-point\/aval-element\//u.test(reactSource)) failures.push(`${reactDirectory}: component must use only the public element package root`);
 if (!reactSource.includes('slot="fallback"')) failures.push(`${reactDirectory}: component must retain an author-owned slotted fallback`);
 if (!reactAugmentation.includes('declare module "react"') || !reactAugmentation.includes("AvalElementAttributes")) failures.push(`${reactDirectory}: copyable React JSX augmentation is missing`);
 const plainDirectory = "examples/plain-html";
@@ -135,15 +152,15 @@ const plainPackage = JSON.parse(await readFile(join(plainDirectory, "package.jso
 const plainHtml = await readFile(join(plainDirectory, "index.html"), "utf8");
 const plainSource = await readFile(join(plainDirectory, "main.js"), "utf8");
 const plainReadme = await readFile(join(plainDirectory, "README.md"), "utf8");
-if (plainPackage.dependencies?.["@aval/element"] !== "1.0.0") failures.push(`${plainDirectory}: example must use exact element 1.0.0`);
+if (plainPackage.dependencies?.["@pixel-point/aval-element"] !== "1.0.0") failures.push(`${plainDirectory}: example must use exact element 1.0.0`);
 if (plainPackage.devDependencies?.vite !== "8.1.4") failures.push(`${plainDirectory}: example must pin the package-aware web tool`);
-if (!plainSource.includes('from "@aval/element"')) failures.push(`${plainDirectory}: example must use the public package root`);
+if (!plainSource.includes('from "@pixel-point/aval-element"')) failures.push(`${plainDirectory}: example must use the public package root`);
 if (/<(?:script|style)[^>]*>[^<]/u.test(plainHtml)) failures.push(`${plainDirectory}: example must not require inline script or style authority`);
 if (!plainReadme.includes("illustrative") || !plainReadme.includes("placeholders")) failures.push(`${plainDirectory}: absent assets must be labeled illustrative placeholders`);
 const starterHtml = await readFile("fixtures/starter/m8-idle-hover/index.html", "utf8");
 const starterSource = await readFile("fixtures/starter/m8-idle-hover/main.js", "utf8");
 if (/<(?:script|style)[^>]*>[^<]/u.test(starterHtml)) failures.push("generated starter must not require inline script or style authority");
-if (!starterSource.includes('"@aval/element/auto"')) failures.push("generated starter must use the public auto entry");
+if (!starterSource.includes('"@pixel-point/aval-element/auto"')) failures.push("generated starter must use the public auto entry");
 if (failures.length > 0) throw new Error(failures.join("\n"));
 process.stdout.write(`${JSON.stringify({ status: "passed", documents: files.length, examples: 5 })}\n`);
 

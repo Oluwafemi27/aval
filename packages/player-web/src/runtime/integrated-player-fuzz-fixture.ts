@@ -4,7 +4,7 @@ import {
   type MotionGraphResult,
   type MotionGraphSnapshot,
   type ValidatedMotionGraph
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import {
   type IntegratedCandidateAttempt,

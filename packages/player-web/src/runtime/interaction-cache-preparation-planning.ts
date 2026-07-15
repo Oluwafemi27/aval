@@ -1,4 +1,4 @@
-import type { UnitV01 } from "@aval/format";
+import type { UnitV01 } from "@pixel-point/aval-format";
 
 import type { RuntimeCatalogIdIndex } from "./asset-catalog.js";
 import type { InteractionCachePlan } from "./interaction-cache-plan.js";

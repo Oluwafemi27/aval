@@ -98,11 +98,11 @@ timestamps to be mislabeled as scan-out evidence.
 
 The release set is:
 
-- `@aval/graph`;
-- `@aval/format`;
-- `@aval/compiler`;
-- `@aval/player-web`; and
-- `@aval/element`.
+- `@pixel-point/aval-graph`;
+- `@pixel-point/aval-format`;
+- `@pixel-point/aval-compiler`;
+- `@pixel-point/aval-player-web`; and
+- `@pixel-point/aval-element`.
 
 M9 resolves the M8 prototype naming gate: the package scope and default
 `aval-player` tag become the stable 1.0 names unless one coordinated naming

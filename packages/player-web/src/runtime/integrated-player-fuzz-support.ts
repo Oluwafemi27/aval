@@ -1,4 +1,4 @@
-import { GRAPH_LIMITS } from "@aval/graph";
+import { GRAPH_LIMITS } from "@pixel-point/aval-graph";
 
 import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
 import { createAvcRenditionCandidates } from "./avc-rendition-selection.js";

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalJsonBytes } from "./canonical-json.js";
+import { PUBLIC_RELEASE_PACKAGES } from "./compatibility.js";
 import {
   SHA256_PATTERN,
   type CandidateManifest,
@@ -13,13 +14,7 @@ const MEDIA_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}\/[a-z0-9][a-z0-9!#$&^_.+-]{
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const MAX_REFERENCE_BYTES = 1024 * 1024 * 1024;
-const PACKAGE_ARTIFACT_PATHS = new Set([
-  "packages/aval-graph-1.0.0.tgz",
-  "packages/aval-format-1.0.0.tgz",
-  "packages/aval-player-web-1.0.0.tgz",
-  "packages/aval-element-1.0.0.tgz",
-  "packages/aval-compiler-1.0.0.tgz"
-]);
+const PACKAGE_ARTIFACT_PATHS = new Set(PUBLIC_RELEASE_PACKAGES.map((name) => `packages/${name.slice(1).replace("/", "-")}-1.0.0.tgz`));
 const REQUIRED_CANDIDATE_ROLES = new Set([
   "package", "package-index", "package-inspection", "sbom", "api-report",
   "schema", "fixture", "documentation", "example", "browser-harness",

@@ -3,7 +3,7 @@ import {
   parseFrontIndex,
   parseHeader,
   validateCompleteAsset
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 
 import {

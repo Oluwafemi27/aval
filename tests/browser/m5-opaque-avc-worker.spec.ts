@@ -6,7 +6,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   maximumAvcDecodedRgbaBytes,
   type AvcCodecV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 interface BrowserSupport {
   readonly supported: boolean;

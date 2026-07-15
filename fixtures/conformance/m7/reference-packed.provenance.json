@@ -15,8 +15,8 @@
     "path": "fixtures/conformance/m6/packed-alpha-all-routes.avl",
     "provenance": {
       "path": "fixtures/conformance/m6/provenance.json",
-      "bytes": 87174,
-      "sha256": "8653cb5fc8be0a5d17004e8cbc6f1d4e3ef3d91ac513cac3d40e92f604949784"
+      "bytes": 87186,
+      "sha256": "4a7e4d3c1536c86630838979c07ebceb81870ef6cb6313af25fcd581f0ce3c74"
     },
     "compilerProject": {
       "path": "fixtures/compiler/m6/source/packed-all-routes.json",

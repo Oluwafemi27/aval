@@ -1,8 +1,8 @@
 export {
   defineAvalElement,
   AVAL_TAG_NAME
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 
 export async function importAvalAuto(): Promise<void> {
-  await import("@aval/element/auto");
+  await import("@pixel-point/aval-element/auto");
 }

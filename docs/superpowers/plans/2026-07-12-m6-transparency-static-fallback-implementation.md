@@ -380,7 +380,7 @@ Run:
 
 ```text
 npx vitest run packages/format/test/deflate.test.ts packages/format/test/deflate-mutation.test.ts packages/format/test/png-unfilter.test.ts packages/format/test/png-decode.test.ts
-npm run typecheck -w @aval/format
+npm run typecheck -w @pixel-point/aval-format
 ```
 
 ### 7. Add the browser native-inflate adapter and strict static surfaces
@@ -611,7 +611,7 @@ Run:
 
 ```text
 npx vitest run packages/player-web/src/runtime/rendition-selection.test.ts packages/player-web/src/runtime/resource-plan.test.ts packages/player-web/src/runtime/interaction-cache-plan.test.ts packages/player-web/src/runtime/browser-phase-ownership.test.ts
-npm run typecheck -w @aval/player-web
+npm run typecheck -w @pixel-point/aval-player-web
 ```
 
 ### 11. Implement the one opaque/packed WebGL2 compositor and full accounting
@@ -914,7 +914,7 @@ apps/playground/src/m6-transparency-static-proof.ts
 tests/browser/m6-transparency-static.spec.ts
 ```
 
-Update the playground only through `@aval/player-web`'s public
+Update the playground only through `@pixel-point/aval-player-web`'s public
 browser composition. Do not import runtime-private modules. Use the real M6
 asset, module worker, `VideoDecoder`, `VideoFrame.copyTo`, strict PNG decoder,
 WebGL2 backend, static plane, scheduler, readiness rehearsal, and motion-policy
@@ -1016,10 +1016,10 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @aval/graph
-npm pack --dry-run -w @aval/format
-npm pack --dry-run -w @aval/compiler
-npm pack --dry-run -w @aval/player-web
+npm pack --dry-run -w @pixel-point/aval-graph
+npm pack --dry-run -w @pixel-point/aval-format
+npm pack --dry-run -w @pixel-point/aval-compiler
+npm pack --dry-run -w @pixel-point/aval-player-web
 git diff --check
 ```
 

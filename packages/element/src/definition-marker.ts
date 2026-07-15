@@ -1,7 +1,7 @@
 import { AVAL_ELEMENT_API_MAJOR } from "./public-types.js";
 
 export const AVAL_DEFINITION_MARKER = Symbol.for(
-  "@aval/element/definition-api-major"
+  "@pixel-point/aval-element/definition-api-major"
 );
 
 export function markAvalConstructor(

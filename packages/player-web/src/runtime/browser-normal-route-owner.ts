@@ -1,4 +1,4 @@
-import type { GraphEdgeDefinition, GraphPresentation } from "@aval/graph";
+import type { GraphEdgeDefinition, GraphPresentation } from "@pixel-point/aval-graph";
 import {
   FRAME_STREAMING_SLOT_COUNT,
   type RenderFrameHandle,

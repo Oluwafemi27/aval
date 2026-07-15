@@ -5,7 +5,7 @@ import {
   type GraphTransitionDefinition,
   type MotionGraphDefinition,
   type ValidatedMotionGraph
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import { FormatError } from "./errors.js";
 import type {

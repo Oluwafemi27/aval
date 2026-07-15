@@ -3,7 +3,7 @@ import {
   runContinuousLoopStress,
   type ContinuousLoopStressReport,
   type LoopCanvasPlayerSnapshot
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import "./style.css";
 import {

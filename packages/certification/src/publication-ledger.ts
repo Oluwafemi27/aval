@@ -1,21 +1,15 @@
 import { createHash } from "node:crypto";
 
 import { canonicalJsonBytes } from "./canonical-json.js";
+import { PUBLIC_RELEASE_PACKAGES } from "./compatibility.js";
 import { SHA256_PATTERN } from "./model.js";
 
 const INTEGRITY = /^sha512-[A-Za-z0-9+/]{86}==$/u;
-const PACKAGE = /^@aval\/[a-z][a-z0-9-]{0,63}$/u;
 const TAG = /^[a-z][a-z0-9._-]{0,63}$/u;
 const VERSION = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$/u;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const APPROVAL = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{7,255}$/u;
-const RELEASE_PACKAGES = Object.freeze([
-  "@aval/graph",
-  "@aval/format",
-  "@aval/player-web",
-  "@aval/element",
-  "@aval/compiler"
-] as const);
+const RELEASE_PACKAGES = PUBLIC_RELEASE_PACKAGES;
 
 export interface RegistryPackageState {
   readonly name: string;
@@ -258,7 +252,7 @@ function settleUnsuccessful(planned: PublicationOperation, result: "failed" | "a
 }
 
 function validateIdentity(input: OperationIdentity): void {
-  if (!PACKAGE.test(input.packageName)) throw new TypeError("invalid package name");
+  if (!RELEASE_PACKAGES.includes(input.packageName as (typeof RELEASE_PACKAGES)[number])) throw new TypeError("invalid package name");
   if (input.version !== "1.0.0") throw new TypeError("publication version must be 1.0.0");
   digest(input.tarballSha256, "tarballSha256");
   integrity(input.registryIntegrity, "registry integrity");

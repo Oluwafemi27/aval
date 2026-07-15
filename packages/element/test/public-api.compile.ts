@@ -5,7 +5,7 @@ import type {
   AvalFit,
   AvalReadinessChangeDetail,
   StaticReason
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 
 declare const element: AvalElement;
 declare const detail: Readonly<AvalErrorDetail>;

@@ -1,5 +1,5 @@
 import type { ManagedDecoderWorkerFrame } from "../decoder-worker/client.js";
-import type { GraphBodyDefinition } from "@aval/graph";
+import type { GraphBodyDefinition } from "@pixel-point/aval-graph";
 import type { DecoderWorkerSample } from "../decoder-worker/protocol.js";
 import type {
   RuntimeMediaCursor,

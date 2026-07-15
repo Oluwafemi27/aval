@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
-import { parseFrontIndex } from "@aval/format";
+import { parseFrontIndex } from "@pixel-point/aval-format";
 
 import { compileDirectInput } from "../../packages/compiler/dist/index.js";
 import { encodeCanonicalRgbaPng } from "../../packages/compiler/dist/compile/png.js";

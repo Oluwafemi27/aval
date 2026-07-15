@@ -1,7 +1,7 @@
 import {
   defineAvalElement,
   type AvalElement
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 
 defineAvalElement();
 

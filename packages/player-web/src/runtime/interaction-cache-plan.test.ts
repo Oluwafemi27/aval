@@ -1,4 +1,4 @@
-import type { CompiledManifestV01, UnitV01 } from "@aval/format";
+import type { CompiledManifestV01, UnitV01 } from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 
 import type { RuntimeFrameKey } from "./model.js";

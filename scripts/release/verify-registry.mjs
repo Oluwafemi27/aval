@@ -4,12 +4,12 @@ import { fileURLToPath } from "node:url";
 
 import { readStableRegistryState } from "./registry-client.mjs";
 import { loadPublicationAuthorization } from "./publication-support.mjs";
+import { RELEASE_PACKAGE_NAMES } from "./release-set-model.mjs";
 
 export function verifyRegistryReleaseSet({ releaseSet, tag, readState }) {
   if (tag !== "next" && tag !== "latest") throw new Error("registry verification tag must be next or latest");
   if (releaseSet === null || typeof releaseSet !== "object" || !Array.isArray(releaseSet.packages) || releaseSet.packages.length !== 5) throw new Error("registry verification requires the exact five-package release set");
-  const expectedNames = ["@aval/graph", "@aval/format", "@aval/player-web", "@aval/element", "@aval/compiler"];
-  if (releaseSet.packages.some((archive, index) => archive?.name !== expectedNames[index] || !isCanonicalIntegrity(archive.registryIntegrity))) throw new Error("registry verification release-set identity/order is invalid");
+  if (releaseSet.packages.some((archive, index) => archive?.name !== RELEASE_PACKAGE_NAMES[index] || !isCanonicalIntegrity(archive.registryIntegrity))) throw new Error("registry verification release-set identity/order is invalid");
   const results = [];
   for (const archive of releaseSet.packages) {
     const state = readState(archive.name, "1.0.0");

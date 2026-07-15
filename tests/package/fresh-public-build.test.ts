@@ -37,9 +37,9 @@ describe("fresh public distribution provenance", () => {
       await writeFile(join(distribution, "index.d.ts"), "export declare const current = true;\n");
       await writeFile(join(distribution, "element.release.tsbuildinfo"), "{}\n");
       await writeFile(join(distribution, "stale-owner.js"), "export const stale = true;\n");
-      await expect(assertDistributionDerived({ source, distribution, packageName: "@aval/element" })).rejects.toThrow(/stale-owner\.js/u);
+      await expect(assertDistributionDerived({ source, distribution, packageName: "@pixel-point/aval-element" })).rejects.toThrow(/stale-owner\.js/u);
       await rm(join(distribution, "stale-owner.js"));
-      await expect(assertDistributionDerived({ source, distribution, packageName: "@aval/element" })).resolves.toMatchObject({ outputs: ["element.release.tsbuildinfo", "index.d.ts", "index.js"] });
+      await expect(assertDistributionDerived({ source, distribution, packageName: "@pixel-point/aval-element" })).resolves.toMatchObject({ outputs: ["element.release.tsbuildinfo", "index.d.ts", "index.js"] });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -55,7 +55,7 @@ describe("fresh public distribution provenance", () => {
       await writeFile(join(source, "index.ts"), "export {};\n");
       await writeFile(join(source, "excluded-by-drift.ts"), "export const required = true;\n");
       for (const path of ["index.js", "index.js.map", "index.d.ts", "index.d.ts.map", "graph.tsbuildinfo"]) await writeFile(join(distribution, path), "{}\n");
-      await expect(assertDistributionDerived({ source, distribution, packageName: "@aval/graph" })).rejects.toThrow(/missing required.*excluded-by-drift/u);
+      await expect(assertDistributionDerived({ source, distribution, packageName: "@pixel-point/aval-graph" })).rejects.toThrow(/missing required.*excluded-by-drift/u);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -71,7 +71,7 @@ describe("fresh public distribution provenance", () => {
       await writeFile(join(source, "index.ts"), "export {};\n");
       await writeFile(join(source, "behavior.test.ts"), "export {};\n");
       for (const path of ["index.js", "index.d.ts", "behavior.test.js"]) await writeFile(join(distribution, path), "export {};\n");
-      await expect(assertDistributionDerived({ source, distribution, packageName: "@aval/graph" })).rejects.toThrow(/exact release emission contract|test output/u);
+      await expect(assertDistributionDerived({ source, distribution, packageName: "@pixel-point/aval-graph" })).rejects.toThrow(/exact release emission contract|test output/u);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -88,10 +88,10 @@ describe("fresh public distribution provenance", () => {
         await mkdir(next, { recursive: true });
         await writeFile(join(current, "identity"), `old-${short}`);
         await writeFile(join(next, "identity"), `new-${short}`);
-        staged.set(`@aval/${short}`, next);
+        staged.set(`@pixel-point/aval-${short}`, next);
       }
       const renameEntry = async (source: string, target: string) => {
-        if (source === staged.get("@aval/player-web")) throw new Error("injected install failure");
+        if (source === staged.get("@pixel-point/aval-player-web")) throw new Error("injected install failure");
         await rename(source, target);
       };
       await expect(installVerifiedDistributions({ root, staged, backupRoot: join(root, "backup"), renameEntry })).rejects.toThrow(/injected install failure/u);

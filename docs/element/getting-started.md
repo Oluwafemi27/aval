@@ -1,15 +1,13 @@
 # AVAL element: getting started
 
-> Pin an exact version once packages are published.
-
-Install and explicitly register the SSR-safe package root:
+Install and explicitly register the exact SSR-safe package release:
 
 ```sh
-npm install @aval/element
+npm install @pixel-point/aval-element@1.0.0
 ```
 
 ```js
-import { defineAvalElement } from "@aval/element";
+import { defineAvalElement } from "@pixel-point/aval-element";
 defineAvalElement();
 ```
 
@@ -28,7 +26,7 @@ visible. Network, parser, integrity, or decode failure does the same.
 For a browser-only pinned CDN import, use the explicit side-effect entry:
 
 ```js
-import "https://your-pinned-cdn.example/@aval/element@VERSION/auto";
+import "https://your-pinned-cdn.example/@pixel-point/aval-element@VERSION/auto";
 ```
 
 Do not use an unpinned URL in production. Call `dispose()` when an element

@@ -1,7 +1,7 @@
 import type {
   MotionGraphEngine,
   MotionGraphResult
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { EffectHost } from "./effect-host.js";
 import {

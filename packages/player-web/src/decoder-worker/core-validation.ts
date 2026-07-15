@@ -3,7 +3,7 @@ import {
   maximumAvcDecodedRgbaBytes,
   maximumAvcDecoderSurfaceDimension,
   parseAvcCodec
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import {
   DECODER_WORKER_HARD_LIMITS,

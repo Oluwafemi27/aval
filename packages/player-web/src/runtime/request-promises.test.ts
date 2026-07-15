@@ -1,4 +1,4 @@
-import type { MotionGraphEffect } from "@aval/graph";
+import type { MotionGraphEffect } from "@pixel-point/aval-graph";
 import { describe, expect, it } from "vitest";
 
 import {

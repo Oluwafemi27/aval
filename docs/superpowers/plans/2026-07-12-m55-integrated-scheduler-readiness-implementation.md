@@ -8,7 +8,7 @@
 
 Integrate the validated M4 asset, M3 graph, M5 opaque AVC worker, bounded
 resident/streaming rendering, all-routes readiness, and host-side
-effect/promise settlement in `@aval/player-web`. Prove every direct
+effect/promise settlement in `@pixel-point/aval-player-web`. Prove every direct
 route with deterministic fakes and a real compiled-AVC browser fixture, while
 keeping alpha, network loading, shared budgets, the custom element, and device
 certification in M6–M9.
@@ -19,8 +19,8 @@ intentional milestone commit after its complete gate passes.
 ## Engineering Rules
 
 - Write a failing focused test before each production slice.
-- Keep graph behavior in `@aval/graph`, container/AVC behavior in
-  `@aval/format`, and scheduling/readiness in `player-web`.
+- Keep graph behavior in `@pixel-point/aval-graph`, container/AVC behavior in
+  `@pixel-point/aval-format`, and scheduling/readiness in `player-web`.
 - Reuse the M5 worker protocol unchanged unless a test proves an impossible
   integration; do not move scheduler policy into the worker.
 - Use the existing `routeReady` graph handshake. Do not fork the graph reducer.
@@ -60,7 +60,7 @@ packages/player-web/src/runtime/public-api.compile.ts
 packages/player-web/src/runtime/model.test.ts
 ```
 
-Add a direct `@aval/graph` dependency and project reference. Define
+Add a direct `@pixel-point/aval-graph` dependency and project reference. Define
 immutable internal types for readiness levels/results, candidate reports,
 runtime frame keys, media presentations, scheduler snapshots, trace records,
 static reasons, and normalized runtime failures.
@@ -87,7 +87,7 @@ Run:
 
 ```text
 npx vitest run packages/player-web/src/runtime/model.test.ts
-npm run typecheck -w @aval/player-web
+npm run typecheck -w @pixel-point/aval-player-web
 ```
 
 ### 2. Implement the owned validated asset catalog
@@ -889,10 +889,10 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @aval/graph
-npm pack --dry-run -w @aval/format
-npm pack --dry-run -w @aval/compiler
-npm pack --dry-run -w @aval/player-web
+npm pack --dry-run -w @pixel-point/aval-graph
+npm pack --dry-run -w @pixel-point/aval-format
+npm pack --dry-run -w @pixel-point/aval-compiler
+npm pack --dry-run -w @pixel-point/aval-player-web
 git diff --check
 ```
 

@@ -11,11 +11,11 @@ const RESOLUTION_IMPORTER = fileURLToPath(new URL("./src/certification/app.ts", 
 const PACKAGES_ROOT = fileURLToPath(new URL("../../packages", import.meta.url));
 
 const PUBLIC_ENTRIES = Object.freeze([
-  entry("@aval/graph", ".", "graph", "dist/index.js", true),
-  entry("@aval/format", ".", "format", "dist/index.js", true),
-  entry("@aval/player-web", ".", "player-web", "dist/index.js", true),
-  entry("@aval/element", ".", "element", "dist/index.js", true),
-  entry("@aval/element/auto", "./auto", "element", "dist/auto.js", true)
+  entry("@pixel-point/aval-graph", ".", "graph", "dist/index.js", true),
+  entry("@pixel-point/aval-format", ".", "format", "dist/index.js", true),
+  entry("@pixel-point/aval-player-web", ".", "player-web", "dist/index.js", true),
+  entry("@pixel-point/aval-element", ".", "element", "dist/index.js", true),
+  entry("@pixel-point/aval-element/auto", "./auto", "element", "dist/auto.js", true)
 ]);
 
 export interface ProductionPublicEntryRecord {
@@ -111,8 +111,8 @@ function entry(
   absolutePath: string;
   requiredInGraph: boolean;
 }> {
-  const packageName = specifier === "@aval/element/auto"
-    ? "@aval/element"
+  const packageName = specifier === "@pixel-point/aval-element/auto"
+    ? "@pixel-point/aval-element"
     : specifier;
   return Object.freeze({
     specifier,

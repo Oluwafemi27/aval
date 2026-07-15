@@ -2,11 +2,11 @@ import {
   writeCanonicalAsset,
   type CanonicalAssetInputV01,
   type RenditionV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import {
   MotionGraphEngine,
   type MotionGraphResult
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type {

@@ -2,7 +2,7 @@ import type {
   GraphBodyDefinition,
   GraphEdgeDefinition,
   GraphStartPolicy
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { DecoderWorkerLimits } from "../decoder-worker/protocol.js";
 import type { RuntimeMediaPresentation } from "./model.js";

@@ -9,7 +9,7 @@ describe("packed dev proof", () => {
       readFile(".github/workflows/ci.yml", "utf8"),
       readFile(".github/workflows/release-candidate.yml", "utf8")
     ]);
-    expect(source).toContain('"node_modules",\n    "@aval",\n    "compiler"');
+    expect(source).toContain('"node_modules",\n    "@pixel-point",\n    "aval-compiler"');
     expect(source).not.toContain("packages/compiler/dist/cli.js");
     expect(source).toContain('headers: { Range: "bytes=0-31" }');
     expect(source).toContain('range.headers.get("etag")');

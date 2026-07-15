@@ -1,7 +1,7 @@
 import type {
   GraphBodyDefinition,
   GraphStartPolicy
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type {
   RuntimeMediaCursor,

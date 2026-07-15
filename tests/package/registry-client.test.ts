@@ -37,8 +37,8 @@ describe("fail-closed npm registry reads", () => {
       calls.push([...args]);
       return replies.shift()!;
     };
-    expect(readRegistryState("@aval/graph", "1.0.0", { spawn, registry: "https://registry.npmjs.org/" })).toEqual({
-      name: "@aval/graph", version: "1.0.0", integrity,
+    expect(readRegistryState("@pixel-point/aval-graph", "1.0.0", { spawn, registry: "https://registry.npmjs.org/" })).toEqual({
+      name: "@pixel-point/aval-graph", version: "1.0.0", integrity,
       tags: { next: "1.0.0", latest: "0.9.0" }, deprecation: "Withdrawn"
     });
     expect(calls).toHaveLength(3);
@@ -48,13 +48,13 @@ describe("fail-closed npm registry reads", () => {
   it("does not turn auth, timeout, malformed JSON, or mutation failure into package absence", () => {
     for (const diagnostics of ["npm ERR! code E401", "ETIMEDOUT", "ENETUNREACH"]) {
       const spawn = () => ({ status: 1, stdout: "", stderr: diagnostics });
-      expect(() => readRegistryState("@aval/graph", "1.0.0", { spawn })).toThrow(/failed closed/u);
+      expect(() => readRegistryState("@pixel-point/aval-graph", "1.0.0", { spawn })).toThrow(/failed closed/u);
     }
     const malformed = () => ({ status: 0, stdout: "not-json", stderr: "" });
-    expect(() => readRegistryState("@aval/graph", "1.0.0", { spawn: malformed })).toThrow(/malformed/u);
+    expect(() => readRegistryState("@pixel-point/aval-graph", "1.0.0", { spawn: malformed })).toThrow(/malformed/u);
     const mutation = () => ({ status: 1, stdout: "", stderr: "denied" });
-    expect(() => runRegistryMutation(["dist-tag", "add", "@aval/graph@1.0.0", "latest"], { spawn: mutation })).toThrow(/status 1/u);
-    expect(() => readRegistryState("@aval/graph", "1.0.0", { spawn: malformed, registry: "http://registry.npmjs.org/" })).toThrow(/canonical HTTPS/u);
+    expect(() => runRegistryMutation(["dist-tag", "add", "@pixel-point/aval-graph@1.0.0", "latest"], { spawn: mutation })).toThrow(/status 1/u);
+    expect(() => readRegistryState("@pixel-point/aval-graph", "1.0.0", { spawn: malformed, registry: "http://registry.npmjs.org/" })).toThrow(/canonical HTTPS/u);
     expect(() => runRegistryMutation(["publish", "package.tgz"], { spawn: mutation })).toThrow(/disable lifecycle/u);
     expect(() => runRegistryMutation(["publish", "package.tgz", "--ignore-scripts", "--registry", "https://attacker.invalid/"], { spawn: mutation })).toThrow(/override/u);
   });
@@ -65,13 +65,13 @@ describe("fail-closed npm registry reads", () => {
       JSON.stringify(integrity), '{"next":"1.0.0"}', 'null'
     ];
     const stableSpawn = () => ({ status: 0, stdout: stableReplies.shift()!, stderr: "" });
-    expect(readStableRegistryState("@aval/graph", "1.0.0", { spawn: stableSpawn })).toMatchObject({ integrity, tags: { next: "1.0.0" } });
+    expect(readStableRegistryState("@pixel-point/aval-graph", "1.0.0", { spawn: stableSpawn })).toMatchObject({ integrity, tags: { next: "1.0.0" } });
 
     const states = ["1.0.0", "1.0.1", "1.0.2"];
     const unstableReplies = states.flatMap((tag) => ['"sha512-exact"', `{\"next\":\"${tag}\"}`, 'null']);
     for (let index = 0; index < unstableReplies.length; index += 3) unstableReplies[index] = JSON.stringify(integrity);
     const unstableSpawn = () => ({ status: 0, stdout: unstableReplies.shift()!, stderr: "" });
-    expect(() => readStableRegistryState("@aval/graph", "1.0.0", { spawn: unstableSpawn })).toThrow(/did not stabilize/u);
+    expect(() => readStableRegistryState("@pixel-point/aval-graph", "1.0.0", { spawn: unstableSpawn })).toThrow(/did not stabilize/u);
   });
 
   it("rejects noncanonical integrity and unbounded dist-tag maps", () => {
@@ -80,14 +80,14 @@ describe("fail-closed npm registry reads", () => {
       { status: 0, stdout: "{}", stderr: "" },
       { status: 0, stdout: "null", stderr: "" }
     ];
-    expect(() => readRegistryState("@aval/graph", "1.0.0", { spawn: () => noncanonical.shift()! })).toThrow(/noncanonical integrity/u);
+    expect(() => readRegistryState("@pixel-point/aval-graph", "1.0.0", { spawn: () => noncanonical.shift()! })).toThrow(/noncanonical integrity/u);
     const tags = Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`tag${String(index)}`, "1.0.0"]));
     const oversized = [
       { status: 0, stdout: JSON.stringify(integrity), stderr: "" },
       { status: 0, stdout: JSON.stringify(tags), stderr: "" },
       { status: 0, stdout: "null", stderr: "" }
     ];
-    expect(() => readRegistryState("@aval/graph", "1.0.0", { spawn: () => oversized.shift()! })).toThrow(/too many dist-tags/u);
+    expect(() => readRegistryState("@pixel-point/aval-graph", "1.0.0", { spawn: () => oversized.shift()! })).toThrow(/too many dist-tags/u);
   });
 
   it("keeps publish, promotion, and rollback dry-runs on real registry reads", async () => {

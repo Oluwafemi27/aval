@@ -1,7 +1,7 @@
 import {
   defineAvalElement,
   type AvalElement
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 
 import { createM8DiagnosticsPanel } from "./m8-diagnostics-panel.js";
 import { deriveM8ProofSession } from "./m8-proof-session.js";

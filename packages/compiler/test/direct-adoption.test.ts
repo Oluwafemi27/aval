@@ -45,7 +45,7 @@ describe("direct compile adoption summary", () => {
     expect(summary.snippets.html).toContain("orbit.avl");
     expect(summary.snippets.html).toContain("author-owned static fallback");
     expect(summary.snippets.html).not.toContain("fallback.png");
-    expect(summary.snippets.npm).toBe("npm install @aval/element@1.0.0");
+    expect(summary.snippets.npm).toBe("npm install @pixel-point/aval-element@1.0.0");
     expect(formatCompileAdoptionSummary(summary)).toContain("body body.default");
     expect(JSON.stringify(summary)).not.toContain("/private/output");
   });

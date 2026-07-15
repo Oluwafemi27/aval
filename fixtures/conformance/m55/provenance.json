@@ -15,7 +15,7 @@
   "compiler": {
     "architecture": "arm64",
     "nodeMajor": 22,
-    "package": "@aval/compiler",
+    "package": "@pixel-point/aval-compiler",
     "packageVersion": "0.0.0",
     "platform": "darwin",
     "projectVersion": "0.3"

@@ -1,4 +1,4 @@
-import type { CompiledManifestV01 } from "@aval/format";
+import type { CompiledManifestV01 } from "@pixel-point/aval-format";
 
 import {
   MAX_PLAYER_RUNTIME_BYTES,

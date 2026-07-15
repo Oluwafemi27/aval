@@ -2,7 +2,7 @@ import {
   FORMAT_DEFAULT_BUDGETS,
   type PortV01,
   type ResidencyEndpointV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import type {
   SourceDescriptorV01,

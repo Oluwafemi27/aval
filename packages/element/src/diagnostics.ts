@@ -2,7 +2,7 @@ import type {
   BindingV01,
   RuntimeReadiness,
   StaticReason
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import type { BrowserRuntimePlayerSnapshot } from "./browser-runtime-factory.js";
 import type { ElementTrace } from "./element-trace.js";

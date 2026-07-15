@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Vite resolves the public `@aval/element` package import. A browser
+Vite resolves the public `@pixel-point/aval-element` package import. A browser
 cannot resolve a bare npm specifier by opening `index.html` from disk; use this
 workflow, another package-aware bundler, or an exact pinned CDN URL.
 

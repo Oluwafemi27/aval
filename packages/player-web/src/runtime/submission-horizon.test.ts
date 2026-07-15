@@ -4,7 +4,7 @@ import type {
   GraphBodyDefinition,
   GraphEdgeDefinition,
   GraphStartPolicy
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import {
   planSubmissionHorizon,

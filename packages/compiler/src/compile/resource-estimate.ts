@@ -2,8 +2,8 @@ import type {
   AccessUnitInputV01,
   AvcRenditionGeometry,
   DeclaredLimitsV01
-} from "@aval/format";
-import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
+} from "@pixel-point/aval-format";
+import { FORMAT_DEFAULT_BUDGETS } from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 import type { NormalizedSourceProject } from "../model.js";

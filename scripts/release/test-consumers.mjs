@@ -25,7 +25,7 @@ try {
   const cliRoot = join(temporary, "cli");
   await cp(resolve(root, "tests/consumers/node-esm"), cliRoot, { recursive: true });
   run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", "--offline", "--cache", join(temporary, "npm-cache"), ...archives], cliRoot, 120_000);
-  const cli = resolve(cliRoot, "node_modules/@aval/compiler/dist/cli.js");
+  const cli = resolve(cliRoot, "node_modules/@pixel-point/aval-compiler/dist/cli.js");
   run(process.execPath, [cli, "--help"], cliRoot, 30_000);
   const invalid = spawnSync(process.execPath, [cli, "validate", "missing.avl"], { cwd: cliRoot, encoding: "utf8", timeout: 30_000 });
   if (invalid.error !== undefined) throw invalid.error;

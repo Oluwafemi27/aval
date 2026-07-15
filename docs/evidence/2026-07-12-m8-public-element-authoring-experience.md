@@ -48,9 +48,9 @@ These results apply to the current pre-freeze worktree. They are not substituted
 for the exact archive-bound candidate run and do not establish a branded-browser
 or physical-display certificate.
 
-- `npm run --workspace @aval/element typecheck` passed source and
+- `npm run --workspace @pixel-point/aval-element typecheck` passed source and
   test TypeScript checks.
-- `npm run --workspace @aval/playground typecheck` passed.
+- `npm run --workspace @pixel-point/aval-playground typecheck` passed.
 - `npx vitest run packages/element/test` passed 36 files and 98 tests. The
   source and test TypeScript projects also passed.
 - `npm run test:mutation -- --profile release` passed 6 files and 67 tests with
@@ -138,11 +138,11 @@ SHA-256 values were:
 
 | Package | Archive bytes | SHA-256 |
 |---|---:|---|
-| `@aval/graph` | 22,803 | `d30f81097ded224a8b26925e1f0047a4a894c9ebcdeea6ac9eabdcf091063d29` |
-| `@aval/format` | 74,209 | `81d68ca490f6b0c2216168b5f7c835fb1262e74f29f90fa5c4bc57a4af1d2780` |
-| `@aval/player-web` | 417,379 | `26ffc90c5b9b1d639dd688af3e3480f319983bbb6e6cf97bc2800a0aa892417f` |
-| `@aval/element` | 62,408 | `2b9bd411b59ee3b3397a55f837d4119d51634761c3a2e728fcef834705b9ee8a` |
-| `@aval/compiler` | 123,373 | `7bf95d019dadb9982a523b877fc28122a34a858bbd91d1364280390ea1f63135` |
+| `@pixel-point/aval-graph` | 22,803 | `d30f81097ded224a8b26925e1f0047a4a894c9ebcdeea6ac9eabdcf091063d29` |
+| `@pixel-point/aval-format` | 74,209 | `81d68ca490f6b0c2216168b5f7c835fb1262e74f29f90fa5c4bc57a4af1d2780` |
+| `@pixel-point/aval-player-web` | 417,379 | `26ffc90c5b9b1d639dd688af3e3480f319983bbb6e6cf97bc2800a0aa892417f` |
+| `@pixel-point/aval-element` | 62,408 | `2b9bd411b59ee3b3397a55f837d4119d51634761c3a2e728fcef834705b9ee8a` |
+| `@pixel-point/aval-compiler` | 123,373 | `7bf95d019dadb9982a523b877fc28122a34a858bbd91d1364280390ea1f63135` |
 
 The proof used synthetic metadata only inside one OS-temporary authority root,
 cleaned it afterward, and reported `externalPublication: false`. These digests

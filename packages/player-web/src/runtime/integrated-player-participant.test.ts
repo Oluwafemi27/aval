@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { GraphPresentation } from "@aval/graph";
+import type { GraphPresentation } from "@pixel-point/aval-graph";
 
 // @ts-expect-error Vite exposes the checked-in binary as a data URL in tests.
 import packedFixtureDataUrl from "../../../../fixtures/conformance/m7/reference-packed.avl?url&inline";

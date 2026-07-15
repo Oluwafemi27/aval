@@ -1,5 +1,5 @@
-import type { UnitV01 } from "@aval/format";
-import type { GraphEdgeDefinition } from "@aval/graph";
+import type { UnitV01 } from "@pixel-point/aval-format";
+import type { GraphEdgeDefinition } from "@pixel-point/aval-graph";
 
 import {
   evaluateAllRoutesReadiness,

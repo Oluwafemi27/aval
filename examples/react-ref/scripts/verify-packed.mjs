@@ -14,8 +14,8 @@ if (packagesFlag < 0 || process.argv[packagesFlag + 1] === undefined) {
 const packageDirectory = resolve(process.cwd(), process.argv[packagesFlag + 1]);
 const packageJson = JSON.parse(await readFile(join(example, "package.json"), "utf8"));
 if (
-  packageJson.peerDependencies?.["@aval/element"] !== "1.0.0" ||
-  packageJson.peerDependenciesMeta?.["@aval/element"]?.optional !== true
+  packageJson.peerDependencies?.["@pixel-point/aval-element"] !== "1.0.0" ||
+  packageJson.peerDependenciesMeta?.["@pixel-point/aval-element"]?.optional !== true
 ) {
   throw new Error("React example must target the exact optional element 1.0.0 peer");
 }
@@ -24,7 +24,7 @@ const archives = (await readdir(packageDirectory))
   .filter((name) => name.endsWith(".tgz"))
   .sort()
   .map((name) => join(packageDirectory, name));
-if (!archives.some((path) => basename(path).includes("aval-element"))) {
+if (!archives.some((path) => basename(path) === "pixel-point-aval-element-1.0.0.tgz")) {
   throw new Error("packed React verification requires the element archive");
 }
 
@@ -57,7 +57,7 @@ try {
     ...archives
   ], target, 120_000);
   const installedElement = JSON.parse(await readFile(
-    join(target, "node_modules/@aval/element/package.json"),
+    join(target, "node_modules", "@pixel-point", "aval-element", "package.json"),
     "utf8"
   ));
   if (installedElement.version !== "1.0.0") {

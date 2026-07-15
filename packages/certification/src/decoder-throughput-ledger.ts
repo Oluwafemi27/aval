@@ -1,7 +1,7 @@
 import {
   isAvcCodec,
   type AvcCodecV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { SHA256_PATTERN } from "./model.js";
 

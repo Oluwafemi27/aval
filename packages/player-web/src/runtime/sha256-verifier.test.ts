@@ -1,4 +1,4 @@
-import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@pixel-point/aval-format";
 import { describe, expect, it, vi } from "vitest";
 
 import {

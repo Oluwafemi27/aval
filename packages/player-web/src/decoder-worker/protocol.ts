@@ -1,7 +1,7 @@
 import type {
   AvcCodecV01,
   AvcQuantizationPolicy
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 /** Closed, structured-clone-safe protocol for the dedicated decoder worker. */
 

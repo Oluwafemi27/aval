@@ -1,12 +1,25 @@
 export const RELEASE_VERSION = "1.0.0";
 export const RELEASE_PACKAGE_SPECS = Object.freeze([
-  packageSpec("@aval/graph", []),
-  packageSpec("@aval/format", ["@aval/graph"]),
-  packageSpec("@aval/player-web", ["@aval/graph", "@aval/format"]),
-  packageSpec("@aval/element", ["@aval/player-web"]),
-  packageSpec("@aval/compiler", ["@aval/graph", "@aval/format", "@aval/player-web", "@aval/element"])
+  packageSpec("@pixel-point/aval-graph", "graph", []),
+  packageSpec("@pixel-point/aval-format", "format", ["@pixel-point/aval-graph"]),
+  packageSpec("@pixel-point/aval-player-web", "player-web", ["@pixel-point/aval-graph", "@pixel-point/aval-format"]),
+  packageSpec("@pixel-point/aval-element", "element", ["@pixel-point/aval-player-web"]),
+  packageSpec("@pixel-point/aval-compiler", "compiler", ["@pixel-point/aval-graph", "@pixel-point/aval-format", "@pixel-point/aval-player-web", "@pixel-point/aval-element"])
 ]);
 export const RELEASE_PACKAGE_NAMES = Object.freeze(topologicalPackageOrder(RELEASE_PACKAGE_SPECS));
+
+export function releasePackageDirectory(name) {
+  const specification = RELEASE_PACKAGE_SPECS.find((entry) => entry.name === name);
+  if (specification === undefined) throw new Error(`unknown release package: ${String(name)}`);
+  return specification.directory;
+}
+
+/** Match npm pack's canonical scoped-package filename (`@scope/name` -> `scope-name-version.tgz`). */
+export function releaseArchiveFilename(name) {
+  const specification = RELEASE_PACKAGE_SPECS.find((entry) => entry.name === name);
+  if (specification === undefined) throw new Error(`unknown release package: ${String(name)}`);
+  return `${specification.name.slice(1).replace("/", "-")}-${RELEASE_VERSION}.tgz`;
+}
 
 export function topologicalPackageOrder(specifications) {
   if (!Array.isArray(specifications) || specifications.length === 0 || specifications.length > 64) throw new TypeError("release package specifications are invalid");
@@ -30,5 +43,5 @@ export function topologicalPackageOrder(specifications) {
   return ordered;
 }
 
-function packageSpec(name, dependencies) { return Object.freeze({ name, dependencies: Object.freeze([...dependencies]) }); }
+function packageSpec(name, directory, dependencies) { return Object.freeze({ name, directory, dependencies: Object.freeze([...dependencies]) }); }
 function compareText(left, right) { return left < right ? -1 : left > right ? 1 : 0; }

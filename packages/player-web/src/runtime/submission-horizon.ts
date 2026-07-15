@@ -4,7 +4,7 @@ import {
   type GraphBodyDefinition,
   type GraphEdgeDefinition,
   type GraphStartPolicy
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import { planEdgeLead, type EdgeLeadPlan } from "./edge-lead.js";
 import { validatePresentationRingCapacity } from "./presentation-ring.js";

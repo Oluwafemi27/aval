@@ -4,7 +4,7 @@ import {
   crc32,
   decodePngRgba,
   validatePngProfile
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 

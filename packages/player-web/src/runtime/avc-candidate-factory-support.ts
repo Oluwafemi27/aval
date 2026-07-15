@@ -1,7 +1,7 @@
 import type {
   GraphPresentation,
   MotionGraphResult
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type {
   IntegratedPlaybackSession,

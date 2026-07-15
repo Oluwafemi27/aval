@@ -4,7 +4,7 @@ import type {
   MotionGraphOperation,
   MotionGraphReadiness,
   MotionGraphSnapshot
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import {
   normalizeRuntimeFailure,

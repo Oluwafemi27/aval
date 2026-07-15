@@ -9,7 +9,7 @@ import {
   type CanonicalAssetInputV01,
   type SampleDigestInputV01,
   type UnitInputV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { readBoundedRegularFile } from "../bounded-file.js";
 import { CompilerError } from "../diagnostics.js";

@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
-import type { AvalElement } from "@aval/element";
-import { parseFrontIndex } from "@aval/format";
+import type { AvalElement } from "@pixel-point/aval-element";
+import { parseFrontIndex } from "@pixel-point/aval-format";
 
 const ASSET_PATH = resolve(
   "examples/grass-rabbit/public/grass-rabbit.avl"

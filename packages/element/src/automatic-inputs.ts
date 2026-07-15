@@ -1,4 +1,4 @@
-import type { BindingSourceV01 } from "@aval/player-web";
+import type { BindingSourceV01 } from "@pixel-point/aval-player-web";
 
 import type {
   ElementOwnershipHandle,

@@ -3,12 +3,12 @@ import type {
   EdgeV01,
   ResidencyEndpointV01,
   UnitV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import type {
   GraphEdgeDefinition,
   GraphStateDefinition,
   ValidatedMotionGraph
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { RuntimeFailure } from "./errors.js";
 import type {

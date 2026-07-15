@@ -1,4 +1,4 @@
-import type { AvalDiagnostics } from "@aval/element";
+import type { AvalDiagnostics } from "@pixel-point/aval-element";
 
 export interface ResourceSnapshot {
   readonly ordinal: number;

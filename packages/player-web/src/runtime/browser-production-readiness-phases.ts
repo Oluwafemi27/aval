@@ -2,7 +2,7 @@ import type {
   GraphEdgeDefinition,
   GraphPresentation,
   GraphStateDefinition
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import { graphBodyFrameAt } from "./body-frame-semantics.js";
 import {

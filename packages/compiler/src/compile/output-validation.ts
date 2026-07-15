@@ -1,7 +1,7 @@
 import {
   validateCompleteAsset,
   type ValidatedAssetLayout
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 import { sha256Hex } from "./hash.js";

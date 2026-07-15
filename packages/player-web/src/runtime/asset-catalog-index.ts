@@ -8,7 +8,7 @@ import type {
   StateV01,
   UnitV01,
   UnitBlobRange
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import {
   RuntimePlaybackError,

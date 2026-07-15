@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { loadVerifiedReleaseSet } from "../release/release-set.mjs";
+import { releasePackageDirectory } from "../release/release-set-model.mjs";
 import { validateSpdxDocument } from "./sbom-model.mjs";
 
 const args = parse(process.argv.slice(2));
@@ -46,7 +47,7 @@ for (const archive of releaseSet.packages) {
     ]
   };
   validateSpdxDocument(document);
-  await writeFile(join(output, `${archive.name.slice("@aval/".length)}.spdx.json`), `${JSON.stringify(document, null, 2)}\n`, { flag: "wx" });
+  await writeFile(join(output, `${releasePackageDirectory(archive.name)}.spdx.json`), `${JSON.stringify(document, null, 2)}\n`, { flag: "wx" });
 }
 process.stdout.write(`${JSON.stringify({ status: "passed", output, releaseSetDigest: releaseSet.releaseSetDigest, packages: releaseSet.packages.length })}\n`);
 function spdxId(value) { return `SPDXRef-${createHash("sha256").update(value).digest("hex").slice(0, 32)}`; }

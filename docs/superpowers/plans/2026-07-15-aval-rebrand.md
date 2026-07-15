@@ -20,7 +20,7 @@
 | `RenderedMotion` | `Aval` |
 | `renderedMotion` | `aval` |
 | `RENDERED_MOTION` | `AVAL` |
-| `@rendered-motion/*` | `@aval/*` |
+| `@rendered-motion/*` | `@pixel-point/aval-*` |
 | `<rendered-motion>` | `<aval-player>` |
 | `rma` CLI and npm script | `avl` |
 | `.rma` | `.avl` |
@@ -45,7 +45,7 @@
 RENDERED_MOTION -> AVAL
 RenderedMotion -> Aval
 renderedMotion -> aval
-@rendered-motion/ -> @aval/
+@rendered-motion/ -> @pixel-point/aval-
 rendered-motion -> aval
 Rendered Motion -> AVAL
 rendered motion -> AVAL
@@ -141,7 +141,7 @@ Expected: generated assets begin with `AVLF`; nested access indexes/reference fr
 
 ```sh
 npm run compile:grass-rabbit
-npm run build -w @aval/end-user-playground
+npm run build -w @pixel-point/aval-end-user-playground
 ```
 
 Expected: examples reference and ship `.avl` assets only.
@@ -157,7 +157,7 @@ Expected: examples reference and ship `.avl` assets only.
 npm install --package-lock-only --ignore-scripts
 ```
 
-Expected: lockfile workspace entries and links use `@aval/*` only.
+Expected: lockfile workspace entries and links use `@pixel-point/aval-*` only.
 
 - [ ] **Step 2: Run static verification**
 

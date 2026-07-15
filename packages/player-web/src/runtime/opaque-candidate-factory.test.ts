@@ -1,8 +1,8 @@
 import {
   deriveAvcRenditionGeometry,
   maximumAvcDecodedRgbaBytes
-} from "@aval/format";
-import { MotionGraphEngine } from "@aval/graph";
+} from "@pixel-point/aval-format";
+import { MotionGraphEngine } from "@pixel-point/aval-graph";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {

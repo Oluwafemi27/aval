@@ -3,27 +3,27 @@ import { lstat, mkdir, mkdtemp, open, readdir, rename, rm, writeFile } from "nod
 import { join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { RELEASE_PACKAGE_NAMES } from "./release-set-model.mjs";
+import { RELEASE_PACKAGE_NAMES, releasePackageDirectory } from "./release-set-model.mjs";
 import { ensureCompilerCliExecutable } from "./compiler-cli-mode.mjs";
 
 const BUILD_INFO = Object.freeze({
-  "@aval/graph": new Set(["graph.tsbuildinfo"]),
-  "@aval/format": new Set(["format.tsbuildinfo"]),
-  "@aval/player-web": new Set(["player-web.release.tsbuildinfo"]),
-  "@aval/element": new Set(["element.release.tsbuildinfo"]),
-  "@aval/compiler": new Set(["compiler.tsbuildinfo"])
+  "@pixel-point/aval-graph": new Set(["graph.tsbuildinfo"]),
+  "@pixel-point/aval-format": new Set(["format.tsbuildinfo"]),
+  "@pixel-point/aval-player-web": new Set(["player-web.release.tsbuildinfo"]),
+  "@pixel-point/aval-element": new Set(["element.release.tsbuildinfo"]),
+  "@pixel-point/aval-compiler": new Set(["compiler.tsbuildinfo"])
 });
 const SOURCE_MAP_PACKAGES = new Set([
-  "@aval/graph",
-  "@aval/format",
-  "@aval/compiler"
+  "@pixel-point/aval-graph",
+  "@pixel-point/aval-format",
+  "@pixel-point/aval-compiler"
 ]);
 const RELEASE_CONFIG = Object.freeze({
-  "@aval/graph": "tsconfig.json",
-  "@aval/format": "tsconfig.json",
-  "@aval/player-web": "tsconfig.release.json",
-  "@aval/element": "tsconfig.release.json",
-  "@aval/compiler": "tsconfig.json"
+  "@pixel-point/aval-graph": "tsconfig.json",
+  "@pixel-point/aval-format": "tsconfig.json",
+  "@pixel-point/aval-player-web": "tsconfig.release.json",
+  "@pixel-point/aval-element": "tsconfig.release.json",
+  "@pixel-point/aval-compiler": "tsconfig.json"
 });
 
 export async function buildFreshPublicDistributions(root) {
@@ -41,7 +41,7 @@ export async function buildFreshPublicDistributions(root) {
     await lock.sync();
     const staged = new Map();
     for (const name of RELEASE_PACKAGE_NAMES) {
-      const short = name.slice("@aval/".length);
+      const short = releasePackageDirectory(name);
       const distribution = join(temporary, "dist", short);
       await mkdir(distribution, { recursive: true });
       const config = join(temporary, `tsconfig.${short}.json`);
@@ -49,7 +49,7 @@ export async function buildFreshPublicDistributions(root) {
       const result = spawnSync(process.execPath, [resolve(repository, "node_modules/typescript/bin/tsc"), "-p", config, "--pretty", "false"], { cwd: repository, stdio: "inherit", timeout: 5 * 60_000 });
       if (result.error !== undefined) throw result.error;
       if (result.status !== 0) throw new Error(`private fresh public build failed for ${name}`);
-      if (name === "@aval/compiler") {
+      if (name === "@pixel-point/aval-compiler") {
         await ensureCompilerCliExecutable(join(distribution, "cli.js"));
       }
       await assertDistributionDerived({ source: packageDirectory(repository, name, "src"), distribution, packageName: name });
@@ -70,7 +70,7 @@ export async function installVerifiedDistributions({ root, staged, backupRoot, r
   const installed = [];
   try {
     for (const name of RELEASE_PACKAGE_NAMES) {
-      const short = name.slice("@aval/".length);
+      const short = releasePackageDirectory(name);
       const target = packageDirectory(root, name, "dist");
       const backup = join(backupRoot, short);
       const source = staged.get(name);
@@ -96,7 +96,7 @@ export async function installVerifiedDistributions({ root, staged, backupRoot, r
 
 function privateBuildConfig(root, name, distribution, staged) {
   const source = packageDirectory(root, name, "src");
-  const short = name.slice("@aval/".length);
+  const short = releasePackageDirectory(name);
   const buildInfo = [...BUILD_INFO[name]][0];
   const paths = Object.fromEntries([...staged].map(([packageName, path]) => [packageName, [join(path, "index.d.ts")]]));
   return {
@@ -161,4 +161,4 @@ async function collectFiles(root, directory = root, output = []) {
 }
 
 function isReleaseSource(path) { return path.endsWith(".ts") && !/\.(?:test|compile)\.ts$/u.test(path) && !/test-support\.ts$/u.test(path); }
-function packageDirectory(root, name, child) { return resolve(root, "packages", name.slice("@aval/".length), child); }
+function packageDirectory(root, name, child) { return resolve(root, "packages", releasePackageDirectory(name), child); }

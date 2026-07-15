@@ -12,7 +12,7 @@ import {
   parseFrontIndex,
   serializeCanonicalJson,
   validateCompleteAsset
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { validateAssetReport } from "../src/commands/asset.js";

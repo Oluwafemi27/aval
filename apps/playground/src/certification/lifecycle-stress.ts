@@ -1,4 +1,4 @@
-import type { AvalDiagnostics } from "@aval/element";
+import type { AvalDiagnostics } from "@pixel-point/aval-element";
 
 import { BrowserResourceLedger } from "./resource-ledger.js";
 import { createPublicMotionElement, preparePublicMotion, retirePublicMotion } from "./public-element-host.js";

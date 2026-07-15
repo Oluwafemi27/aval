@@ -4,7 +4,7 @@ import {
   type GraphPresentation,
   type MotionGraphResult,
   type MotionGraphSnapshot
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { BrowserAvcCandidateHub } from "./browser-avc-candidate-hub.js";
 import { BrowserAvcPlaybackSession } from "./browser-avc-playback-session.js";

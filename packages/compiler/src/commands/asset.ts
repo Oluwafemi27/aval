@@ -2,7 +2,7 @@ import type {
   AvcParameterSetSummary,
   AvcUnitInspection,
   ValidatedAssetLayout
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { throwIfAborted } from "../cancellation.js";
 import {

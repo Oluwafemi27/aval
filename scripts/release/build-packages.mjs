@@ -11,7 +11,7 @@ import { prepareImmutableReleaseSetOutput } from "./immutable-release-output.mjs
 import { createPublishManifest } from "./publish-manifest.mjs";
 import { validateApprovedPublicationMetadata } from "./publication-metadata.mjs";
 import { buildFreshPublicDistributions } from "./fresh-public-build.mjs";
-import { computeReleaseSetDigest, loadVerifiedReleaseSet, releaseSetSummary, validateReleasePackageManifests, validateReleasePolicy } from "./release-set.mjs";
+import { computeReleaseSetDigest, loadVerifiedReleaseSet, releasePackageDirectory, releaseSetSummary, validateReleasePackageManifests, validateReleasePolicy } from "./release-set.mjs";
 import { assertTestOnlyArchiveOutput, testOnlyPublicationMetadata } from "./test-only-archive-proof.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -39,42 +39,42 @@ try {
   const packed = [];
   try {
     for (const name of policy.publicPackages) {
-    const short = name.slice("@aval/".length);
-    const source = resolve(root, "packages", short);
-    const manifest = JSON.parse(await readFile(join(source, "package.json"), "utf8"));
-    if (manifest.name !== name || manifest.version !== policy.releaseVersion || manifest.private !== false) throw new Error(`${name} is not a publishable ${policy.releaseVersion} package`);
-    const staging = join(work, "staging", short);
-    await mkdir(join(staging, "dist"), { recursive: true });
-    await Promise.all(["README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"].map((file) => copyFile(join(source, file), join(staging, file))));
-    const publishManifest = createPublishManifest(manifest, publicationMetadata);
-    await writeFile(join(staging, "package.json"), `${JSON.stringify(publishManifest, null, 2)}\n`, { flag: "wx", mode: 0o444 });
-    const copied = [];
-    await copyDistribution(join(source, "dist"), join(staging, "dist"), copied);
-    requireEntry(copied, "index.js", name);
-    requireEntry(copied, "index.d.ts", name);
-    if (name === "@aval/compiler") {
-      requireEntry(copied, "cli.js", name);
-      await chmod(join(staging, "dist", "cli.js"), 0o755);
-    }
-    if (name === "@aval/element") requireEntry(copied, "auto.js", name);
-    if (name === "@aval/player-web") requireEntry(copied, "decoder-worker/entry.js", name);
-    const first = join(work, "first", short);
-    const second = join(work, "second", short);
-    await Promise.all([mkdir(first, { recursive: true }), mkdir(second, { recursive: true })]);
-    const firstPack = pack(staging, first);
-    const secondPack = pack(staging, second);
-    if (firstPack.filename !== secondPack.filename) throw new Error(`${name} changed archive filename across identical packs`);
-    const [firstBytes, secondBytes] = await Promise.all([
-      readFile(join(first, firstPack.filename)),
-      readFile(join(second, secondPack.filename))
-    ]);
-    const firstDigest = createHash("sha256").update(firstBytes).digest("hex");
-    const secondDigest = createHash("sha256").update(secondBytes).digest("hex");
-    if (firstDigest !== secondDigest || Buffer.compare(firstBytes, secondBytes) !== 0) throw new Error(`${name} tarball is not byte-deterministic across two clean packs`);
-    const inspected = inspectTarballBytes(firstBytes, { label: firstPack.filename });
-    if (inspected.name !== name || inspected.unpackedSize !== firstPack.unpackedSize) throw new Error(`${name} npm pack report does not match inspected archive bytes`);
-    await copyFile(join(first, firstPack.filename), join(output, firstPack.filename));
-    packed.push(Object.freeze({ ...inspected, filename: firstPack.filename, path: join(output, firstPack.filename), bytes: firstBytes }));
+      const short = releasePackageDirectory(name);
+      const source = resolve(root, "packages", short);
+      const manifest = JSON.parse(await readFile(join(source, "package.json"), "utf8"));
+      if (manifest.name !== name || manifest.version !== policy.releaseVersion || manifest.private !== false) throw new Error(`${name} is not a publishable ${policy.releaseVersion} package`);
+      const staging = join(work, "staging", short);
+      await mkdir(join(staging, "dist"), { recursive: true });
+      await Promise.all(["README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"].map((file) => copyFile(join(source, file), join(staging, file))));
+      const publishManifest = createPublishManifest(manifest, publicationMetadata);
+      await writeFile(join(staging, "package.json"), `${JSON.stringify(publishManifest, null, 2)}\n`, { flag: "wx", mode: 0o444 });
+      const copied = [];
+      await copyDistribution(join(source, "dist"), join(staging, "dist"), copied);
+      requireEntry(copied, "index.js", name);
+      requireEntry(copied, "index.d.ts", name);
+      if (name === "@pixel-point/aval-compiler") {
+        requireEntry(copied, "cli.js", name);
+        await chmod(join(staging, "dist", "cli.js"), 0o755);
+      }
+      if (name === "@pixel-point/aval-element") requireEntry(copied, "auto.js", name);
+      if (name === "@pixel-point/aval-player-web") requireEntry(copied, "decoder-worker/entry.js", name);
+      const first = join(work, "first", short);
+      const second = join(work, "second", short);
+      await Promise.all([mkdir(first, { recursive: true }), mkdir(second, { recursive: true })]);
+      const firstPack = pack(staging, first);
+      const secondPack = pack(staging, second);
+      if (firstPack.filename !== secondPack.filename) throw new Error(`${name} changed archive filename across identical packs`);
+      const [firstBytes, secondBytes] = await Promise.all([
+        readFile(join(first, firstPack.filename)),
+        readFile(join(second, secondPack.filename))
+      ]);
+      const firstDigest = createHash("sha256").update(firstBytes).digest("hex");
+      const secondDigest = createHash("sha256").update(secondBytes).digest("hex");
+      if (firstDigest !== secondDigest || Buffer.compare(firstBytes, secondBytes) !== 0) throw new Error(`${name} tarball is not byte-deterministic across two clean packs`);
+      const inspected = inspectTarballBytes(firstBytes, { label: firstPack.filename });
+      if (inspected.name !== name || inspected.unpackedSize !== firstPack.unpackedSize) throw new Error(`${name} npm pack report does not match inspected archive bytes`);
+      await copyFile(join(first, firstPack.filename), join(output, firstPack.filename));
+      packed.push(Object.freeze({ ...inspected, filename: firstPack.filename, path: join(output, firstPack.filename), bytes: firstBytes }));
     }
     validateReleasePackageManifests(packed.map(({ manifest }) => manifest));
     reports.push(...releaseSetSummary({ packages: packed, releaseSetDigest: computeReleaseSetDigest(packed) }).packages);

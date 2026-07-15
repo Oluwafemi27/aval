@@ -9,7 +9,7 @@ import {
   adaptManifestToMotionGraph,
   parseFrontIndex,
   validateCompleteAsset
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { inspectAssetFile } from "../src/commands/asset.js";
 import { compileProjectFile } from "../src/compile/project-compiler.js";

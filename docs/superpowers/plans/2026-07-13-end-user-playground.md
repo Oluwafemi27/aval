@@ -36,7 +36,7 @@
 
 ```json
 {
-  "name": "@aval/end-user-playground",
+  "name": "@pixel-point/aval-end-user-playground",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -45,7 +45,7 @@
     "dev": "vite --host 127.0.0.1"
   },
   "dependencies": {
-    "@aval/element": "1.0.0"
+    "@pixel-point/aval-element": "1.0.0"
   },
   "devDependencies": {
     "vite": "8.1.4"
@@ -58,7 +58,7 @@
 Add `examples/end-user-playground` to the root `workspaces` array and add:
 
 ```json
-"playground": "npm run dev -w @aval/end-user-playground",
+"playground": "npm run dev -w @pixel-point/aval-end-user-playground",
 "test:playground": "playwright test --config playwright.playground.config.ts"
 ```
 
@@ -66,7 +66,7 @@ Add `examples/end-user-playground` to the root `workspaces` array and add:
 
 Run: `npm install --package-lock-only --ignore-scripts`
 
-Expected: npm exits 0 and `package-lock.json` contains an `examples/end-user-playground` workspace entry linked from `node_modules/@aval/end-user-playground`.
+Expected: npm exits 0 and `package-lock.json` contains an `examples/end-user-playground` workspace entry linked from `node_modules/@pixel-point/aval-end-user-playground`.
 
 ### Task 2: Produce the real demonstration asset
 
@@ -112,7 +112,7 @@ The page must contain a focusable `#favorite-control`, an `aval-player#favorite-
 Implement `main.js` with:
 
 ```js
-import { defineAvalElement } from "@aval/element";
+import { defineAvalElement } from "@pixel-point/aval-element";
 import "./style.css";
 
 defineAvalElement();
@@ -166,7 +166,7 @@ Use system fonts, a high-contrast card, a 48-pixel minimum control target, visib
 
 - [ ] **Step 4: Build the example**
 
-Run: `npm run build -w @aval/end-user-playground`
+Run: `npm run build -w @pixel-point/aval-end-user-playground`
 
 Expected: Vite exits 0 and emits `examples/end-user-playground/dist/index.html` plus hashed JavaScript/CSS assets and copied `favorite.avl`/`favorite.png`.
 

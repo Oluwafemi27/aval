@@ -1,4 +1,4 @@
-import type { RuntimeTraceRecord } from "@aval/player-web";
+import type { RuntimeTraceRecord } from "@pixel-point/aval-player-web";
 
 import type { AvalRuntimeTraceRecord } from "./public-types.js";
 

@@ -5,7 +5,7 @@ import type {
   RuntimeReadiness,
   RuntimeReadinessResult,
   StaticReason
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 export const AVAL_TAG_NAME = "aval-player" as const;
 export const AVAL_ELEMENT_API_MAJOR = 1 as const;

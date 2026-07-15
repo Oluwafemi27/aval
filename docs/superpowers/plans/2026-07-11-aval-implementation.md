@@ -10,7 +10,7 @@
 
 Build the web-only AVAL system in evidence-driven milestones. Each milestone freezes only the contracts it proves. The first milestone is an in-memory WebCodecs experiment, not the final container: it must demonstrate that one independently decodable loop unit can be submitted repeatedly with new rational timestamps, without seeking, resetting, reconfiguring, or flushing at its seams.
 
-At this stage, the AVAL name, `@aval/*` package scope, and `.avl` asset suffix remain private and provisional until naming is finalized.
+At this stage, the AVAL name, `@pixel-point/aval-*` package scope, and `.avl` asset suffix remain private and provisional until naming is finalized.
 
 ## 2. Engineering Rules
 

@@ -23,65 +23,65 @@ const registryUrlSha256 = createHash("sha256").update(registryUrl).digest("hex")
 describe("publication ledger", () => {
   it("is read-before-write and accepts only an exact immutable existing version", () => {
     const operation = planExactPublication({
-      packageName: "@aval/graph",
+      packageName: "@pixel-point/aval-graph",
       version: "1.0.0",
       tarballSha256: "a".repeat(64),
       registryIntegrity: integrity,
       desiredTag: "next",
-      registry: { name: "@aval/graph", version: "1.0.0", integrity, tags: { next: "1.0.0" } },
+      registry: { name: "@pixel-point/aval-graph", version: "1.0.0", integrity, tags: { next: "1.0.0" } },
       sequence: 1,
       timestamp: "2026-07-12T13:00:00.000Z",
       approvalId: "approval-1"
     });
     expect(operation.result).toBe("already-exact");
     expect(() => planExactPublication({
-      packageName: "@aval/graph",
+      packageName: "@pixel-point/aval-graph",
       version: "1.0.0",
       tarballSha256: "a".repeat(64),
       registryIntegrity: integrity,
       desiredTag: "next",
-      registry: { name: "@aval/graph", version: "1.0.0", integrity: `sha512-${Buffer.alloc(64, 2).toString("base64")}`, tags: {} },
+      registry: { name: "@pixel-point/aval-graph", version: "1.0.0", integrity: `sha512-${Buffer.alloc(64, 2).toString("base64")}`, tags: {} },
       sequence: 1,
       timestamp: "2026-07-12T13:00:00.000Z",
       approvalId: "approval-1"
     })).toThrow(/different bytes/u);
 
     const tagPlan = planExactPublication({
-      packageName: "@aval/graph",
+      packageName: "@pixel-point/aval-graph",
       version: "1.0.0",
       tarballSha256: "a".repeat(64),
       registryIntegrity: integrity,
       desiredTag: "next",
-      registry: { name: "@aval/graph", version: "1.0.0", integrity, tags: {} },
+      registry: { name: "@pixel-point/aval-graph", version: "1.0.0", integrity, tags: {} },
       sequence: 1,
       timestamp: "2026-07-12T13:00:00.000Z",
       approvalId: "approval-1"
     });
     expect(tagPlan).toMatchObject({ action: "tag", result: "planned" });
     expect(completePublicationOperation(tagPlan, {
-      name: "@aval/graph",
+      name: "@pixel-point/aval-graph",
       version: "1.0.0",
       integrity,
       tags: { next: "1.0.0" }
     }).result).toBe("applied");
     expect(failPublicationOperation(tagPlan).result).toBe("failed");
     expect(markPublicationOperationAmbiguous(tagPlan).result).toBe("ambiguous");
-    expect(tagPlan.beforeStateDigest).toBe(registryStateDigest({ name: "@aval/graph", version: "1.0.0", integrity, tags: {} }));
+    expect(tagPlan.beforeStateDigest).toBe(registryStateDigest({ name: "@pixel-point/aval-graph", version: "1.0.0", integrity, tags: {} }));
   });
 
   it("blocks latest promotion after a partial next publication and rolls back in reverse dependency order", () => {
     const planned = planExactPublication({
-      packageName: "@aval/graph", version: "1.0.0", tarballSha256: "a".repeat(64), registryIntegrity: integrity,
-      desiredTag: "next", registry: { name: "@aval/graph", version: "1.0.0", integrity: null, tags: {} },
+      packageName: "@pixel-point/aval-graph", version: "1.0.0", tarballSha256: "a".repeat(64), registryIntegrity: integrity,
+      desiredTag: "next", registry: { name: "@pixel-point/aval-graph", version: "1.0.0", integrity: null, tags: {} },
       sequence: 1, timestamp: "2026-07-12T13:00:00.000Z", approvalId: "approval"
     });
-    expect(() => assertPromotionAllowed(ledger([failPublicationOperation(planned)], { status: "failed" }), ["@aval/graph"])).toThrow(/passed executed/u);
+    expect(() => assertPromotionAllowed(ledger([failPublicationOperation(planned)], { status: "failed" }), ["@pixel-point/aval-graph"])).toThrow(/passed executed/u);
     expect(rollbackOrder(["graph", "format", "compiler"])).toEqual(["compiler", "format", "graph"]);
   });
 
   it("plans promotion, rollback, and deprecation from exact registry reads", () => {
     const identity = {
-      packageName: "@aval/graph",
+      packageName: "@pixel-point/aval-graph",
       version: "1.0.0" as const,
       tarballSha256: "a".repeat(64),
       registryIntegrity: integrity,
@@ -125,17 +125,17 @@ describe("publication ledger", () => {
     expect(() => validatePublicationLedger(ledger(applied.slice(0, 4)))).toThrow(/exact release set/u);
     expect(() => validatePublicationLedger(ledger(applied, { status: "failed" }))).toThrow(/lacks a failed/u);
     expect(() => planExactPublication({
-      packageName: "@aval/graph", version: "1.0.0", tarballSha256: "a".repeat(64), registryIntegrity: "sha512-ZA==",
-      desiredTag: "next", registry: { name: "@aval/graph", version: "1.0.0", integrity: null, tags: {} },
+      packageName: "@pixel-point/aval-graph", version: "1.0.0", tarballSha256: "a".repeat(64), registryIntegrity: "sha512-ZA==",
+      desiredTag: "next", registry: { name: "@pixel-point/aval-graph", version: "1.0.0", integrity: null, tags: {} },
       sequence: 1, timestamp: "2026-07-12T13:00:00.000Z", approvalId: "approval-1"
     })).toThrow(/canonical SHA-512/u);
     expect(() => planExactPublication({
-      packageName: "@aval/graph", version: "1.0.0", tarballSha256: "a".repeat(64), registryIntegrity: integrity,
-      desiredTag: "next", registry: { name: "@aval/graph", version: "1.0.0", integrity: null, tags: {} },
+      packageName: "@pixel-point/aval-graph", version: "1.0.0", tarballSha256: "a".repeat(64), registryIntegrity: integrity,
+      desiredTag: "next", registry: { name: "@pixel-point/aval-graph", version: "1.0.0", integrity: null, tags: {} },
       sequence: 1, timestamp: "2026-07-12T13:00:00.000Z", approvalId: "approval\n1"
     })).toThrow(/approval ID/u);
     expect(() => registryStateDigest({
-      name: "@aval/graph", version: "1.0.0", integrity,
+      name: "@pixel-point/aval-graph", version: "1.0.0", integrity,
       tags: Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`tag${String(index)}`, "1.0.0"]))
     })).toThrow(/too many dist-tags/u);
   });
@@ -157,9 +157,9 @@ describe("publication ledger", () => {
     expect(validatePublicationLedger(rollback)).toBe(rollback);
     expect(operations).toHaveLength(15);
     expect(operations.map(({ packageName, action, tag, after }) => ({ packageName, action, tag, after })).slice(0, 3)).toEqual([
-      { packageName: "@aval/compiler", action: "rollback-tag", tag: "latest", after: null },
-      { packageName: "@aval/compiler", action: "rollback-tag", tag: "next", after: null },
-      { packageName: "@aval/compiler", action: "deprecate", tag: "deprecated", after: "Withdrawn" }
+      { packageName: "@pixel-point/aval-compiler", action: "rollback-tag", tag: "latest", after: null },
+      { packageName: "@pixel-point/aval-compiler", action: "rollback-tag", tag: "next", after: null },
+      { packageName: "@pixel-point/aval-compiler", action: "deprecate", tag: "deprecated", after: "Withdrawn" }
     ]);
     expect(() => validatePublicationLedger({ ...rollback, operations: operations.slice(0, -1) })).toThrow(/exact release set/u);
     expect(() => validatePublicationLedger({ ...rollback, operations: operations.map((operation, index) => index === 4 ? { ...operation, tag: "latest" } : operation) })).toThrow(/exact authorized reverse-order shape/u);
@@ -194,12 +194,12 @@ function ledger(
 
 function plannedReleaseSet() {
   return ["graph", "format", "player-web", "element", "compiler"].map((short, index) => planExactPublication({
-    packageName: `@aval/${short}`,
+    packageName: `@pixel-point/aval-${short}`,
     version: "1.0.0",
     tarballSha256: String(index + 1).repeat(64),
     registryIntegrity: integrity,
     desiredTag: "next",
-    registry: { name: `@aval/${short}`, version: "1.0.0", integrity: null, tags: {} },
+    registry: { name: `@pixel-point/aval-${short}`, version: "1.0.0", integrity: null, tags: {} },
     sequence: index + 1,
     timestamp: "2026-07-12T13:00:00.000Z",
     approvalId: "dry-run-approval"
@@ -209,7 +209,7 @@ function plannedReleaseSet() {
 function initialReleaseRollbackOperations() {
   const operations: ReturnType<typeof planTagCompensation>[] = [];
   for (const short of ["compiler", "element", "player-web", "format", "graph"]) {
-    const packageName = `@aval/${short}`;
+    const packageName = `@pixel-point/aval-${short}`;
     const base = {
       packageName,
       version: "1.0.0" as const,

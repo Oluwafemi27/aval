@@ -1,4 +1,4 @@
-import type { AvcRenditionGeometry } from "@aval/format";
+import type { AvcRenditionGeometry } from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 import {

@@ -13,13 +13,16 @@ bodies, and held states are graph routes rather than hand-timed media seeks.
 ## Five-minute start
 
 ```sh
-npm install @aval/element@1.0.0
-npm install --save-dev @aval/compiler@1.0.0
+npm install @pixel-point/aval-element@1.0.0
+npm install --save-dev @pixel-point/aval-compiler@1.0.0
 npx avl init my-motion
 cd my-motion
 npm install
 npm run dev
 ```
+
+Here `npx avl` resolves the `avl` executable from the compiler package
+installed on the preceding line.
 
 Open the printed loopback URL. That generated starter includes its frames,
 project, fallback markup, exact package dependencies, and watch workflow. The
@@ -36,7 +39,7 @@ after you publish or copy a compiled asset into your application:
 
 ```js
 // motion.js, resolved by your package-aware web build
-import { defineAvalElement } from "@aval/element";
+import { defineAvalElement } from "@pixel-point/aval-element";
 defineAvalElement();
 ```
 
@@ -63,17 +66,17 @@ includes its compiled asset and fallback image, and does not require FFmpeg at
 runtime. Hover, focus, or use the toggle to move between its authored states.
 
 The element package is SSR-safe. Its root exports an explicit definition
-helper; the opt-in `@aval/element/auto` entry is the only automatic
+helper; the opt-in `@pixel-point/aval-element/auto` entry is the only automatic
 registration side effect.
 
 ## What is included
 
-- `@aval/graph`: deterministic latest-wins state and route engine;
-- `@aval/format`: strict wire `0.1` parser, validator, and writer;
-- `@aval/compiler`: project `0.3` authoring and CLI;
-- `@aval/player-web`: bounded web loader, decoder scheduler,
+- `@pixel-point/aval-graph`: deterministic latest-wins state and route engine;
+- `@pixel-point/aval-format`: strict wire `0.1` parser, validator, and writer;
+- `@pixel-point/aval-compiler`: project `0.3` authoring and CLI;
+- `@pixel-point/aval-player-web`: bounded web loader, decoder scheduler,
   renderer, fallback-state signaling, and page resource manager; and
-- `@aval/element`: markup-first public browser component.
+- `@pixel-point/aval-element`: markup-first public browser component.
 
 The compiler uses caller-installed FFmpeg/FFprobe and libx264; it never bundles
 or downloads native codec tools. Codec, patent, source-media, and distribution

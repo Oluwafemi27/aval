@@ -14,16 +14,16 @@ at a loop or unit boundary.
 
 This milestone adds:
 
-- a Node-only `@aval/compiler` package and noninteractive CLI;
+- a Node-only `@pixel-point/aval-compiler` package and noninteractive CLI;
 - a pure, platform-independent `avc/` extension inside
-  `@aval/format` containing the one Annex B parser and opaque-
+  `@pixel-point/aval-format` containing the one Annex B parser and opaque-
   profile inspector used by both compiler and player;
 - deterministic ingestion of local PNG sequences and local rendered video;
 - independently decodable opaque H.264 units for bodies, intros, bridges, and
   reversible clips;
 - compiler-owned per-state static PNG generation and SHA-256 calculation;
 - deterministic pre-encode loop and transition continuity reports;
-- a low-level dedicated-worker decoder client in `@aval/player-web`;
+- a low-level dedicated-worker decoder client in `@pixel-point/aval-player-web`;
   and
 - checked-in compiler and real-AVC worker conformance fixtures.
 
@@ -59,11 +59,11 @@ tokenizer or writer.
 The packages form this dependency graph:
 
 ```text
-@aval/graph
+@pixel-point/aval-graph
           ↑
-@aval/format (including its pure avc/ profile inspector)
+@pixel-point/aval-format (including its pure avc/ profile inspector)
           ↑                                      ↑
-@aval/compiler          @aval/player-web
+@pixel-point/aval-compiler          @pixel-point/aval-player-web
 ```
 
 The M5 `format/src/avc/` extension preserves format's existing
@@ -71,7 +71,7 @@ The M5 `format/src/avc/` extension preserves format's existing
 owns checked bit reads, Annex B normalization, RBSP decoding, SPS/PPS/slice
 parsing, access-unit inspection, and the AVC rejection paths on M4's stable
 `FormatError` surface. It imports neither Node nor browser APIs. The approved
-inspector entry points are exported from `@aval/format`; unchecked
+inspector entry points are exported from `@pixel-point/aval-format`; unchecked
 bit readers and mutable parser state remain private.
 
 The default inspector policy requires exact `42 E0 20`. A separately named
@@ -79,7 +79,7 @@ encoder-candidate entry point permits only `42 C0 20` or `42 E0 20` while
 enforcing every other profile and dependency rule. Only the Node compiler uses
 that candidate entry point; worker/runtime code always uses strict inspection.
 
-`@aval/compiler` is Node-only. It depends on `format`, uses Node
+`@pixel-point/aval-compiler` is Node-only. It depends on `format`, uses Node
 filesystem/process/crypto APIs behind narrow adapters, and never enters a
 browser dependency graph. `player-web` also depends on `format` so its worker
 uses the same inspector rather than a second H.264 parser.
@@ -1414,8 +1414,8 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @aval/format
-npm pack --dry-run -w @aval/compiler
+npm pack --dry-run -w @pixel-point/aval-format
+npm pack --dry-run -w @pixel-point/aval-compiler
 git diff --check
 ```
 

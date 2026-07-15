@@ -1,4 +1,4 @@
-import { IDENTIFIER_PATTERN } from "@aval/format";
+import { IDENTIFIER_PATTERN } from "@pixel-point/aval-format";
 
 import { throwIfAborted } from "../cancellation.js";
 import { CompilerError } from "../diagnostics.js";

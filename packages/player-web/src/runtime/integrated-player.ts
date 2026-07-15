@@ -1,4 +1,4 @@
-import { MotionGraphEngine, type MotionGraphResult } from "@aval/graph";
+import { MotionGraphEngine, type MotionGraphResult } from "@pixel-point/aval-graph";
 import { RuntimeAssetCatalog } from "./asset-catalog.js";
 import { IntegratedPlayerAssetBinding } from "./integrated-player-asset-session.js";
 import { IntegratedPlayerParticipantController } from "./integrated-player-participant-controller.js";

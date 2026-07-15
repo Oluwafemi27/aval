@@ -5,7 +5,7 @@ import type {
   StartV01,
   TransitionV01,
   TriggerV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import {
   boundedArray,

@@ -1,7 +1,7 @@
 import {
   adaptManifestToMotionGraph,
   type CompiledManifestV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import {
   calculateReadinessMetrics,

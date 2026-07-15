@@ -1,11 +1,8 @@
 import type { CandidateArtifact } from "../src/model.js";
+import { PUBLIC_RELEASE_PACKAGES } from "../src/compatibility.js";
 
-const REQUIRED: readonly [role: string, path: string, mediaType: string][] = [
-  ["package", "packages/aval-graph-1.0.0.tgz", "application/gzip"],
-  ["package", "packages/aval-format-1.0.0.tgz", "application/gzip"],
-  ["package", "packages/aval-player-web-1.0.0.tgz", "application/gzip"],
-  ["package", "packages/aval-element-1.0.0.tgz", "application/gzip"],
-  ["package", "packages/aval-compiler-1.0.0.tgz", "application/gzip"],
+const REQUIRED: readonly (readonly [role: string, path: string, mediaType: string])[] = [
+  ...PUBLIC_RELEASE_PACKAGES.map((name) => ["package", `packages/${name.slice(1).replace("/", "-")}-1.0.0.tgz`, "application/gzip"] as const),
   ["package-index", "package-index.json", "application/json"],
   ["package-inspection", "package-inspection.json", "application/json"],
   ["sbom", "sbom/workspace.spdx.json", "application/json"],

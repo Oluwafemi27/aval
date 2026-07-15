@@ -34,7 +34,7 @@ controls found in `apps/playground`.
 
 ## Components and data flow
 
-- `package.json` declares Vite and `@aval/element`, plus `dev` and
+- `package.json` declares Vite and `@pixel-point/aval-element`, plus `dev` and
   `build` scripts.
 - `index.html` provides semantic controls, the custom element, and its slotted
   static fallback image.

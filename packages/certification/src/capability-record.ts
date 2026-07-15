@@ -1,4 +1,4 @@
-import { isAvcCodec } from "@aval/format";
+import { isAvcCodec } from "@pixel-point/aval-format";
 
 export interface CapabilityProbeRecord {
   readonly id: string;

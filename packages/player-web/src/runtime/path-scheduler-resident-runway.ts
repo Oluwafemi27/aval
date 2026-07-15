@@ -1,4 +1,4 @@
-import type { GraphBodyDefinition } from "@aval/graph";
+import type { GraphBodyDefinition } from "@pixel-point/aval-graph";
 
 import type { ResidentPathTarget, PathSequenceState } from "./path-sequence.js";
 import type { PathSchedulerCursorLedger } from "./path-scheduler-cursor-ledger.js";

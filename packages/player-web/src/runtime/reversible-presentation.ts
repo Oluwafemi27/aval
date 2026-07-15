@@ -1,4 +1,4 @@
-import type { GraphPresentation } from "@aval/graph";
+import type { GraphPresentation } from "@pixel-point/aval-graph";
 
 import type {
   InteractionCacheEndpointRunway,

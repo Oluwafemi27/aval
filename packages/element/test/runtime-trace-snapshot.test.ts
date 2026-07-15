@@ -1,4 +1,4 @@
-import type { RuntimeTraceRecord } from "@aval/player-web";
+import type { RuntimeTraceRecord } from "@pixel-point/aval-player-web";
 import { describe, expect, it } from "vitest";
 
 import { snapshotRuntimeTrace } from "../src/runtime-trace-snapshot.js";

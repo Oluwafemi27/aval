@@ -12,7 +12,7 @@ import {
   type RuntimeReadinessResult,
   type RuntimeVisibilityState,
   type StateFallbackStore
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import type {
   BrowserRuntimeMetadata,

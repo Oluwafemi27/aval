@@ -3,7 +3,7 @@ import {
   writeCanonicalAsset,
   type CanonicalAssetInputV01,
   type RenditionV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 const DIGEST = "0".repeat(64);
 

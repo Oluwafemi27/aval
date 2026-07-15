@@ -5,7 +5,7 @@ import {
   type GraphStateDefinition,
   type GraphTransitionDefinition,
   type MotionGraphDefinition
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import { CompilerError } from "./diagnostics.js";
 import type {

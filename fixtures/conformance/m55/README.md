@@ -31,9 +31,9 @@ Regenerate from the repository root with the reviewed M5 FFmpeg/FFprobe pair
 on `PATH`:
 
 ```sh
-npm run build -w @aval/graph
-npm run build -w @aval/format
-npm run build -w @aval/compiler
+npm run build -w @pixel-point/aval-graph
+npm run build -w @pixel-point/aval-format
+npm run build -w @pixel-point/aval-compiler
 node fixtures/compiler/m55/source/generate.mjs
 node packages/compiler/dist/cli.js compile fixtures/compiler/m55/source/all-routes.json --out fixtures/conformance/m55/opaque-all-routes.avl --force
 node fixtures/conformance/m55/update-provenance.mjs

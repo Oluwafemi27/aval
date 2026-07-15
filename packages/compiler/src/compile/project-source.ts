@@ -1,6 +1,6 @@
 import { join, relative, sep } from "node:path";
 
-import type { CanvasV01, RationalV01 } from "@aval/format";
+import type { CanvasV01, RationalV01 } from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 import {

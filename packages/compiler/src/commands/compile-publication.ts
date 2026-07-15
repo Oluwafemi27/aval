@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import {
   serializeCanonicalJsonWithLimits,
   type CanonicalJsonValue
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { boundedUtf8Text } from "../bounded-text.js";
 import type { CompileCliArguments } from "../cli-args.js";
@@ -330,7 +330,7 @@ function buildReportBytes(
     return serializeCanonicalJsonWithLimits(canonicalReportValue({
       reportVersion: "0.1",
       compiler: {
-        package: "@aval/compiler",
+        package: "@pixel-point/aval-compiler",
         packageVersion: "0.0.0",
         projectVersion: COMPILER_PROJECT_VERSION,
         nodeMajor: Number(process.versions.node.split(".")[0]),

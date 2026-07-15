@@ -13,7 +13,7 @@ await buildFreshPublicDistributions(root);
 runBuild();
 
 const preview = spawn(npm, [
-  "run", "preview:production", "-w", "@aval/playground", "--",
+  "run", "preview:production", "-w", "@pixel-point/aval-playground", "--",
   "--port", port, "--strictPort"
 ], {
   cwd: root,
@@ -35,7 +35,7 @@ await new Promise((resolveExit, reject) => {
 
 function runBuild() {
   const result = spawnSync(npm, [
-    "run", "build:production", "-w", "@aval/playground"
+    "run", "build:production", "-w", "@pixel-point/aval-playground"
   ], { cwd: root, stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } });
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) throw new Error("production playground build failed");

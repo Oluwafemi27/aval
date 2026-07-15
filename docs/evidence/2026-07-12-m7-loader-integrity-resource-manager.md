@@ -386,7 +386,7 @@ The independent production-only searches found:
 - one strong entity-tag parser/matcher authority in `http-entity-tag.ts`;
 - one SHA-256 comparison/promotion authority in `sha256-verifier.ts` backed by
   an injected Web Crypto digest capability;
-- the existing `@aval/format` parser/validator as the only wire
+- the existing `@pixel-point/aval-format` parser/validator as the only wire
   grammar authority, reached through captured testable adapters;
 - one untrusted response-body reader in `bounded-body-reader.ts`; the other
   stream reader match is the bounded strict-PNG inflate path, not network
@@ -515,10 +515,10 @@ All four required package dry-runs exited zero:
 
 | Package | Packed bytes | Unpacked bytes | Entries | Top-level contents |
 | --- | ---: | ---: | ---: | --- |
-| `@aval/graph` | 45,323 | 250,748 | 31 | package metadata, source, tests, configs |
-| `@aval/format` | 136,610 | 621,908 | 98 | package metadata, source, tests, configs |
-| `@aval/compiler` | 339,018 | 1,635,273 | 375 | package metadata, generated distribution, source, tests, configs |
-| `@aval/player-web` | 680,755 | 3,564,432 | 314 | package metadata, source, configs |
+| `@pixel-point/aval-graph` | 45,323 | 250,748 | 31 | package metadata, source, tests, configs |
+| `@pixel-point/aval-format` | 136,610 | 621,908 | 98 | package metadata, source, tests, configs |
+| `@pixel-point/aval-compiler` | 339,018 | 1,635,273 | 375 | package metadata, generated distribution, source, tests, configs |
+| `@pixel-point/aval-player-web` | 680,755 | 3,564,432 | 314 | package metadata, source, configs |
 
 No dry-run entry used an absolute path or a secret/report/trace-shaped name.
 No generated distribution, trace, report, result, cache, archive, credential

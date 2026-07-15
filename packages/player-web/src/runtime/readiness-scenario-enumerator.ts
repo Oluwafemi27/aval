@@ -2,7 +2,7 @@ import type {
   GraphBodyDefinition,
   GraphEdgeDefinition,
   GraphStateDefinition
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type {
   ReadinessFailureCollector,

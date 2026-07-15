@@ -13,7 +13,7 @@ import {
   type RuntimeFailure,
   type RuntimeVisibilityState,
   type StaticReason
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import { ShadowLayerOwner } from "./shadow-layers.js";
 import type {

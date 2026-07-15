@@ -1,4 +1,4 @@
-import { defineAvalElement } from "@aval/element";
+import { defineAvalElement } from "@pixel-point/aval-element";
 
 defineAvalElement();
 const motion = document.createElement("aval-player");

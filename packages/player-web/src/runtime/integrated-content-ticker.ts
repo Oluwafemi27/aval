@@ -1,5 +1,5 @@
 import { MotionGraphEngine, type MotionGraphTickOptions } from
-  "@aval/graph";
+  "@pixel-point/aval-graph";
 
 import { EffectHost } from "./effect-host.js";
 import type { RuntimeFailure, RuntimeFailureCode } from "./errors.js";

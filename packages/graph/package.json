@@ -1,5 +1,5 @@
 {
-  "name": "@aval/graph",
+  "name": "@pixel-point/aval-graph",
   "version": "1.0.0",
   "description": "Deterministic state graph for AVAL assets.",
   "keywords": ["animation", "state-machine", "motion"],

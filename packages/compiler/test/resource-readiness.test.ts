@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { deriveReadiness } from "../src/compile/readiness-plan.js";
 import { estimateRuntimeLimits } from "../src/compile/resource-estimate.js";
-import { deriveAvcRenditionGeometryFromVisible } from "@aval/format";
+import { deriveAvcRenditionGeometryFromVisible } from "@pixel-point/aval-format";
 import type {
   NormalizedSourceProject,
   SourceProjectV01

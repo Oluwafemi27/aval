@@ -18,10 +18,10 @@
     "vite": "8.1.4"
   },
   "peerDependencies": {
-    "@aval/element": "1.0.0"
+    "@pixel-point/aval-element": "1.0.0"
   },
   "peerDependenciesMeta": {
-    "@aval/element": {
+    "@pixel-point/aval-element": {
       "optional": true
     }
   }

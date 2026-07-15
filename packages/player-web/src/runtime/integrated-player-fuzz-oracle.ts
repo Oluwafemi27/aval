@@ -3,7 +3,7 @@ import {
   type GraphPresentation,
   type MotionGraphResult,
   type MotionGraphSnapshot
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { EffectHostEvent } from "./effect-host.js";
 import type { IntegratedPlayer } from "./integrated-player.js";

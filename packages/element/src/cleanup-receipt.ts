@@ -5,7 +5,7 @@ import type {
   PlayerWebPageRuntime,
   RuntimeAssetSession,
   RuntimeParticipantId
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import type { AvalCleanupReceipt } from "./public-types.js";
 

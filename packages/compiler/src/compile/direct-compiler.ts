@@ -9,7 +9,7 @@ import {
   type AccessUnitInputV01,
   type CanonicalAssetInputV01,
   type UnitInputV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 import {

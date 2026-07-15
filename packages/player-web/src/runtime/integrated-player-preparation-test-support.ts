@@ -1,7 +1,7 @@
 import type {
   GraphPresentation,
   MotionGraphSnapshot
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";
 import {

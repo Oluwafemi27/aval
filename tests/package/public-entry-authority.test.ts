@@ -5,8 +5,8 @@ import { PRODUCTION_PUBLIC_ENTRY_IDENTITIES, reconcileProductionPublicEntryManif
 const entries = PRODUCTION_PUBLIC_ENTRY_IDENTITIES.map((identity, index) => ({ ...identity, byteLength: index + 100, sha256: (index + 1).toString(16).repeat(64) }));
 const inspection = {
   packages: ["graph", "format", "player-web", "element", "compiler"].map((short) => ({
-    name: `@aval/${short}`,
-    fileRecords: entries.filter((entry) => entry.package === `@aval/${short}`).map(({ path, byteLength, sha256 }) => ({ path, byteLength, sha256, mode: 0o644 }))
+    name: `@pixel-point/aval-${short}`,
+    fileRecords: entries.filter((entry) => entry.package === `@pixel-point/aval-${short}`).map(({ path, byteLength, sha256 }) => ({ path, byteLength, sha256, mode: 0o644 }))
   }))
 };
 const manifest = { schemaVersion: "1.0", manifestKind: "production-public-entry-identity", entries };

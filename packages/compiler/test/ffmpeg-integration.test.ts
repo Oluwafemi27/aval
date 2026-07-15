@@ -10,7 +10,7 @@ import {
   crc32,
   deriveAvcRenditionGeometryFromVisible,
   prepareAvcEncoderRendition
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import {
   encodeAvcUnit,

@@ -14,22 +14,22 @@ export default defineConfig({
     // Match the workspace suite's single source-module identity. Packed and
     // registry consumer tests address built artifacts by explicit file path.
     alias: {
-      "@aval/compiler": fileURLToPath(
+      "@pixel-point/aval-compiler": fileURLToPath(
         new URL("./packages/compiler/src/index.ts", import.meta.url)
       ),
-      "@aval/format": fileURLToPath(
+      "@pixel-point/aval-format": fileURLToPath(
         new URL("./packages/format/src/index.ts", import.meta.url)
       ),
-      "@aval/graph": fileURLToPath(
+      "@pixel-point/aval-graph": fileURLToPath(
         new URL("./packages/graph/src/index.ts", import.meta.url)
       ),
-      "@aval/player-web": fileURLToPath(
+      "@pixel-point/aval-player-web": fileURLToPath(
         new URL("./packages/player-web/src/index.ts", import.meta.url)
       ),
-      "@aval/element/auto": fileURLToPath(
+      "@pixel-point/aval-element/auto": fileURLToPath(
         new URL("./packages/element/src/auto.ts", import.meta.url)
       ),
-      "@aval/element": fileURLToPath(
+      "@pixel-point/aval-element": fileURLToPath(
         new URL("./packages/element/src/index.ts", import.meta.url)
       )
     }

@@ -3,7 +3,7 @@ import type {
   MotionGraphEffect,
   MotionGraphResult,
   MotionGraphSnapshot
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import {
   RUNTIME_TRACE_CAPACITY,

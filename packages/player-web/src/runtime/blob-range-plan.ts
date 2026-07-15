@@ -2,7 +2,7 @@ import type {
   ByteRange,
   ParsedFrontIndex,
   UnitBlobRange
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 export const DEFAULT_BLOB_RANGE_TARGET_BYTES = 4 * 1024 * 1024;
 

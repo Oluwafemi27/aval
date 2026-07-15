@@ -11,8 +11,8 @@ export type {
   BindingV01,
   CanvasV01,
   CompiledManifestV01
-} from "@aval/format";
-export { IDENTIFIER_PATTERN } from "@aval/format";
+} from "@pixel-point/aval-format";
+export { IDENTIFIER_PATTERN } from "@pixel-point/aval-format";
 export {
   createEncodedLoopUnit,
   validateEncodedLoopUnit,

@@ -4,7 +4,7 @@ import {
   type GraphEdgeDefinition,
   type GraphPresentation,
   type MotionGraphResult
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 import type {
   DecoderWorkerMetrics,
   DecoderWorkerSample

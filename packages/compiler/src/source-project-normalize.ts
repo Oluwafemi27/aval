@@ -1,7 +1,7 @@
 import {
   FormatError,
   parseStrictJson
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { CompilerError } from "./diagnostics.js";
 import type {

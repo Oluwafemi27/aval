@@ -10,7 +10,7 @@ import {
   type ParsedFrontIndex,
   type RenditionV01,
   type UnitV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import {
   createDecoderWorkerClient,
   durationForFrame,
@@ -20,7 +20,7 @@ import {
   type DecoderWorkerMetrics,
   type DecoderWorkerSample,
   type ManagedDecoderWorkerFrame
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 const GENERATION = 1;
 const IDLE_LOOP_OCCURRENCES = 1_001;

@@ -1,4 +1,4 @@
-import type { ValidatedMotionGraph } from "@aval/graph";
+import type { ValidatedMotionGraph } from "@pixel-point/aval-graph";
 import type { AvcCodecV01 } from "./avc/codec.js";
 
 export type Id = string;

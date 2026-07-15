@@ -50,7 +50,7 @@ M8 proves that:
   examples, and failure messages form one coherent first-use experience.
 
 The compiled wire format remains exactly `0.1`. The package name
-`@aval/element`, tag name `aval-player`, and `.avl` extension are
+`@pixel-point/aval-element`, tag name `aval-player`, and `.avl` extension are
 prototype identifiers until product naming is complete. M8 does not claim a
 permanent name, framework-specific wrapper, mobile animation certification,
 or named-device smoothness. M9 owns CI publication and certification evidence.
@@ -94,7 +94,7 @@ The fixed version-0.1 binding-source union remains the only automatic bridge.
 The package root has no registration side effect and is safe to import in an
 SSR process. It exports `defineAvalElement()` and public types.
 Calling the function in a browser registers the prototype tag. A
-separate `@aval/element/auto` entry registers it immediately for a
+separate `@pixel-point/aval-element/auto` entry registers it immediately for a
 CDN or simple client-only module import.
 
 Automatic root registration was rejected because it makes SSR imports fail,
@@ -143,15 +143,15 @@ the element another authoring language.
 
 ## 3. Package Authority and Internal Layers
 
-M8 adds `packages/element`. It depends on `@aval/player-web`; no
+M8 adds `packages/element`. It depends on `@pixel-point/aval-player-web`; no
 lower-level package depends on it.
 
 ```text
-@aval/format       compiled 0.1 schema and binding sources
-@aval/graph        deterministic state/request semantics
-@aval/player-web   M6/M7 loader, player, policy, resource owners
+@pixel-point/aval-format       compiled 0.1 schema and binding sources
+@pixel-point/aval-graph        deterministic state/request semantics
+@pixel-point/aval-player-web   M6/M7 loader, player, policy, resource owners
              ↑
-@aval/element
+@pixel-point/aval-element
   registration and SSR-safe entries
   attribute/property configuration
   asset-generation lifecycle
@@ -228,7 +228,7 @@ The default zero-configuration path is:
 
 ```html
 <script type="module">
-  import { defineAvalElement } from "@aval/element";
+  import { defineAvalElement } from "@pixel-point/aval-element";
   defineAvalElement();
 </script>
 
@@ -802,12 +802,12 @@ a fatal application error.
 
 ## 16. npm, CDN, and Build Ergonomics
 
-`@aval/element` is built as publish-ready ESM with declarations, the
+`@pixel-point/aval-element` is built as publish-ready ESM with declarations, the
 module worker asset, and explicit package exports:
 
 ```text
-@aval/element       SSR-safe types and definition helper
-@aval/element/auto  browser-only default-tag registration
+@pixel-point/aval-element       SSR-safe types and definition helper
+@pixel-point/aval-element/auto  browser-only default-tag registration
 ```
 
 The root is side-effect-free. The auto entry is marked as the sole intentional
@@ -1037,7 +1037,7 @@ queues, trace arrays, and allocation terms retain explicit caps.
 
 ### 21.2 Real browser proof
 
-The M8 browser proof imports only `@aval/element` public entries and
+The M8 browser proof imports only `@pixel-point/aval-element` public entries and
 uses real custom-element upgrade, HTTP M7 loading, worker WebCodecs, WebGL2,
 Canvas2D statics, observers, media query, and input events. It covers:
 

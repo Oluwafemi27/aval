@@ -198,7 +198,7 @@ npx vitest run --config vitest.m9.config.ts \
   packages/compiler/test/source-project-v03-schema.test.ts \
   packages/compiler/test/source-project-v02-schema.test.ts \
   packages/compiler/test/source-project-schema.test.ts
-npm run typecheck -w @aval/compiler
+npm run typecheck -w @pixel-point/aval-compiler
 git add packages/compiler/src packages/compiler/test/source-project-*.test.ts
 git commit -m "feat(compiler): add configurable AVC project schema"
 ```
@@ -257,7 +257,7 @@ For v0 additionally require `picInitQpMinus26 === 0`. Do not relax Baseline, CAV
 
 ```sh
 npx vitest run --config vitest.m9.config.ts packages/format/test/avc-*.test.ts
-npm run typecheck -w @aval/format
+npm run typecheck -w @pixel-point/aval-format
 git add packages/format/src/avc packages/format/test/avc-*.test.ts
 git commit -m "feat(format): validate bounded AVC CRF quantization"
 ```
@@ -379,7 +379,7 @@ npx vitest run --config vitest.m9.config.ts \
   packages/compiler/test/encode-argv.test.ts \
   packages/compiler/test/encode-argv-mutation.test.ts \
   packages/compiler/test/discovery.test.ts
-npm run typecheck -w @aval/compiler
+npm run typecheck -w @pixel-point/aval-compiler
 git add packages/compiler/src/compile/avc-encoding-policy.ts \
   packages/compiler/src/ffmpeg packages/compiler/test
 git commit -m "feat(compiler): add safe CRF and preset policies"
@@ -508,7 +508,7 @@ npx vitest run --config vitest.m9.config.ts \
   packages/compiler/test/commands.test.ts \
   packages/compiler/test/cli.test.ts \
   packages/compiler/test/direct-adoption.test.ts
-npm run typecheck -w @aval/compiler
+npm run typecheck -w @pixel-point/aval-compiler
 git add packages/compiler/src packages/compiler/test
 git commit -m "feat(cli): expose safe AVC quality controls"
 ```

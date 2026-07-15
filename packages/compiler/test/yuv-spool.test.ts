@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { deriveAvcRenditionGeometry } from "@aval/format";
+import { deriveAvcRenditionGeometry } from "@pixel-point/aval-format";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {

@@ -21,9 +21,9 @@ one later intentional milestone commit after its complete evidence gate passes.
 - Write a failing focused test before every production slice.
 - Keep compiled format `0.1`; transport and page policy never enter the
   manifest or writer.
-- Keep `@aval/format` platform-free. Fetch, streams, Web Crypto,
+- Keep `@pixel-point/aval-format` platform-free. Fetch, streams, Web Crypto,
   DOM visibility, canvas context events, and page resources live only in
-  `@aval/player-web` or the browser proof.
+  `@pixel-point/aval-player-web` or the browser proof.
 - Use the existing `parseHeader()`, `parseFrontIndex()`, canonical layout, and
   `validateCompleteAsset()`; do not add a second header/index parser.
 - Only complete digest-bearing unit/static blobs enter persistent cache.
@@ -96,7 +96,7 @@ Run:
 
 ```text
 npx vitest run packages/player-web/src/runtime/model.test.ts
-npm run typecheck -w @aval/player-web
+npm run typecheck -w @pixel-point/aval-player-web
 ```
 
 ### 2. Implement exact HTTP header grammar
@@ -258,7 +258,7 @@ packages/player-web/src/runtime/blob-assembly.test.ts
 
 Consume only `ParsedFrontIndex.unitBlobs`, `.staticBlobs`, and canonical file
 geometry. Associate each blob with its immediately preceding alignment padding
-without changing `@aval/format`. Sort by canonical offset, validate
+without changing `@pixel-point/aval-format`. Sort by canonical offset, validate
 checked coverage, coalesce adjacent requested storage spans up to the 4 MiB
 target, and split larger legal spans into bounded exact requests.
 
@@ -838,10 +838,10 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @aval/graph
-npm pack --dry-run -w @aval/format
-npm pack --dry-run -w @aval/compiler
-npm pack --dry-run -w @aval/player-web
+npm pack --dry-run -w @pixel-point/aval-graph
+npm pack --dry-run -w @pixel-point/aval-format
+npm pack --dry-run -w @pixel-point/aval-compiler
+npm pack --dry-run -w @pixel-point/aval-player-web
 git diff --check
 ```
 

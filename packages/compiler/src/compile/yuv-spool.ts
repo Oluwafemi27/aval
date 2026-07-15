@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
 
-import type { AvcRenditionGeometry } from "@aval/format";
+import type { AvcRenditionGeometry } from "@pixel-point/aval-format";
 
 import { throwIfAborted } from "../cancellation.js";
 import { CompilerError } from "../diagnostics.js";

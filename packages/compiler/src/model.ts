@@ -8,7 +8,7 @@ import type {
   PortV01,
   RationalV01,
   ResidencyEndpointV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 export type { RationalV01 };
 

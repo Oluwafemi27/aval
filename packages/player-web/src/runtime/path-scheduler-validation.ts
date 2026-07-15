@@ -1,4 +1,4 @@
-import type { GraphBodyDefinition } from "@aval/graph";
+import type { GraphBodyDefinition } from "@pixel-point/aval-graph";
 
 import type { DecoderWorkerLimits } from "../decoder-worker/protocol.js";
 import type {

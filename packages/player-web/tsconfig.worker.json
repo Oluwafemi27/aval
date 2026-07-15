@@ -5,7 +5,7 @@
     "declaration": false,
     "declarationMap": false,
     "paths": {
-      "@aval/format": ["../format/src/index.ts"]
+      "@pixel-point/aval-format": ["../format/src/index.ts"]
     },
     "lib": [
       "ES2023",

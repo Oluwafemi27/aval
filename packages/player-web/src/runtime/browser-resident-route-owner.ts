@@ -2,8 +2,8 @@ import type {
   GraphEdgeDefinition,
   GraphPresentation,
   MotionGraphResult
-} from "@aval/graph";
-import { findFinishBoundary, findNextPortalBoundary } from "@aval/graph";
+} from "@pixel-point/aval-graph";
+import { findFinishBoundary, findNextPortalBoundary } from "@pixel-point/aval-graph";
 
 import {
   CutPresentationCoordinator,

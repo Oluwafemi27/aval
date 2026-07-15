@@ -1,8 +1,8 @@
-import type { CompiledManifestV01, EdgeV01 } from "@aval/format";
+import type { CompiledManifestV01, EdgeV01 } from "@pixel-point/aval-format";
 import type {
   GraphEdgeDefinition,
   ValidatedMotionGraph
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import { planEdgeLead } from "./edge-lead.js";
 import type {

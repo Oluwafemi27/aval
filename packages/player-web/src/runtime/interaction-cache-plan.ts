@@ -3,7 +3,7 @@ import type {
   EdgeV01,
   RenditionV01,
   UnitV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import type { RuntimeFrameKey } from "./model.js";
 import { manifestBodyFrameAt } from "./body-frame-semantics.js";

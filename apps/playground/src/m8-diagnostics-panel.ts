@@ -1,4 +1,4 @@
-import type { AvalElement } from "@aval/element";
+import type { AvalElement } from "@pixel-point/aval-element";
 
 export function createM8DiagnosticsPanel(
   element: AvalElement

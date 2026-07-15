@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { FORMAT_DEFAULT_BUDGETS } from "@aval/format";
+import { FORMAT_DEFAULT_BUDGETS } from "@pixel-point/aval-format";
 
 import {
   createBoundedReadAdmission,
@@ -210,7 +210,7 @@ describe("loopback dev server", () => {
       expect(await module.text()).toContain("AvalElement");
       const workerDependency = await (await fetch(new URL("modules/player-web/decoder-worker/core-validation.js", server.url))).text();
       expect(workerDependency).toContain(`${new URL(server.url).pathname}modules/format/index.js`);
-      expect(workerDependency).not.toContain('"@aval/format"');
+      expect(workerDependency).not.toContain('"@pixel-point/aval-format"');
       const workerEntry = await fetch(new URL("modules/player-web/decoder-worker/entry.js", server.url));
       const workerCsp = workerEntry.headers.get("content-security-policy") ?? "";
       expect(workerCsp).toContain("default-src 'none'");
@@ -478,10 +478,10 @@ describe("loopback dev server", () => {
     const temporary = await mkdtemp(join(tmpdir(), "aval-dev-modules-"));
     roots.push(temporary);
     const packageNames = {
-      element: "@aval/element",
-      "player-web": "@aval/player-web",
-      format: "@aval/format",
-      graph: "@aval/graph"
+      element: "@pixel-point/aval-element",
+      "player-web": "@pixel-point/aval-player-web",
+      format: "@pixel-point/aval-format",
+      graph: "@pixel-point/aval-graph"
     } as const;
     const resolutions = new Map<string, { entryPath: string; packageRoot: string }>();
     for (const [key, packageName] of Object.entries(packageNames)) {
@@ -498,7 +498,7 @@ describe("loopback dev server", () => {
     const admission = createBoundedReadAdmission(2);
     const read = await store.read("player-web", "index.js", admission);
     expect(read.status).toBe("ok");
-    if (read.status === "ok") expect(read.bytes.toString("utf8")).toContain("@aval/player-web");
+    if (read.status === "ok") expect(read.bytes.toString("utf8")).toContain("@pixel-point/aval-player-web");
 
     const outside = join(temporary, "outside.js");
     await writeFile(outside, "throw new Error('escaped');\n");
@@ -507,7 +507,7 @@ describe("loopback dev server", () => {
     await expect(store.read("element", "../outside.js", admission)).resolves.toEqual({ status: "missing" });
 
     const compilerManifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { version?: string; dependencies?: Record<string, string> };
-    expect(compilerManifest.dependencies?.["@aval/player-web"]).toBe(compilerManifest.version);
+    expect(compilerManifest.dependencies?.["@pixel-point/aval-player-web"]).toBe(compilerManifest.version);
   });
 
   it("admits no queued reads beyond its exact concurrency bound", () => {

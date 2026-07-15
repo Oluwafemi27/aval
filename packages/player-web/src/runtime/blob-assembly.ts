@@ -1,4 +1,4 @@
-import type { ByteRange } from "@aval/format";
+import type { ByteRange } from "@pixel-point/aval-format";
 
 export type { PlannedRuntimeBlob } from "./blob-range-plan.js";
 import type { PlannedRuntimeBlob } from "./blob-range-plan.js";

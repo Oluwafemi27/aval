@@ -1,7 +1,7 @@
 import {
   FORMAT_DEFAULT_BUDGETS,
   type CanvasV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import type {
   SourceProjectV02,

@@ -50,7 +50,7 @@ describe("M8 idle-hover starter", () => {
     expect(html).toContain("interaction-for=\"favorite\"");
     expect(html).toContain('src="./main.js"');
     expect(await readFile(join(result.directory, "main.js"), "utf8")).toBe(
-      'import "@aval/element/auto";\n'
+      'import "@pixel-point/aval-element/auto";\n'
     );
     expect(html).not.toContain("tabindex");
     const packageJson = JSON.parse(await readFile(
@@ -61,8 +61,8 @@ describe("M8 idle-hover starter", () => {
       scripts?: Record<string, string>;
     };
     expect(packageJson.dependencies).toEqual({
-      "@aval/compiler": "1.0.0",
-      "@aval/element": "1.0.0"
+      "@pixel-point/aval-compiler": "1.0.0",
+      "@pixel-point/aval-element": "1.0.0"
     });
     expect(packageJson.scripts?.dev).toBe("avl dev motion.json --out starter.avl --force");
     const combined = await Promise.all(result.files.map((file) =>

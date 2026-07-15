@@ -1,4 +1,4 @@
-import { deriveAvcRenditionGeometry } from "@aval/format";
+import { deriveAvcRenditionGeometry } from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 
 import {

@@ -1,5 +1,7 @@
 import { isIP } from "node:net";
 
+import { RELEASE_PACKAGE_NAMES, releasePackageDirectory } from "./release-set-model.mjs";
+
 const KEYS = Object.freeze([
   "schemaVersion", "releaseVersion", "status", "reviewId", "reviewerRole",
   "reviewedAt", "repositoryUrl", "homepageUrl", "bugsUrl",
@@ -20,7 +22,7 @@ export function validateApprovedPublicationMetadata(input) {
   exactPublicUrl(metadata.bugsUrl, "bugs URL");
   const authority = metadata.registryScopeAuthority;
   if (authority === null || typeof authority !== "object" || Array.isArray(authority) || Object.keys(authority).sort().join(",") !== "evidenceId,owner,registryUrl,scope") throw new Error("publication registry-scope authority is invalid");
-  if (authority.scope !== "@aval" || authority.registryUrl !== "https://registry.npmjs.org/" || typeof authority.owner !== "string" || !ACCOUNT.test(authority.owner) || typeof authority.evidenceId !== "string" || !REVIEW_ID.test(authority.evidenceId)) throw new Error("publication registry-scope authority is incomplete");
+  if (authority.scope !== "@pixel-point" || authority.registryUrl !== "https://registry.npmjs.org/" || typeof authority.owner !== "string" || !ACCOUNT.test(authority.owner) || typeof authority.evidenceId !== "string" || !REVIEW_ID.test(authority.evidenceId)) throw new Error("publication registry-scope authority is incomplete");
   if (typeof metadata.note !== "string" || metadata.note.length < 1 || metadata.note.length > 2048 || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(metadata.note)) throw new Error("publication metadata note is invalid");
   return metadata;
 }
@@ -38,8 +40,8 @@ export function validatePublicationMetadataShape(input) {
 
 export function applyApprovedPublicationMetadata(source, input) {
   const metadata = validateApprovedPublicationMetadata(input);
-  if (source === null || typeof source !== "object" || Array.isArray(source) || typeof source.name !== "string" || !source.name.startsWith("@aval/")) throw new Error("publication metadata package source is invalid");
-  const directory = source.name.slice("@aval/".length);
+  if (source === null || typeof source !== "object" || Array.isArray(source) || typeof source.name !== "string" || !RELEASE_PACKAGE_NAMES.includes(source.name)) throw new Error("publication metadata package source is invalid");
+  const directory = releasePackageDirectory(source.name);
   return {
     ...source,
     repository: { type: "git", url: metadata.repositoryUrl, directory: `packages/${directory}` },

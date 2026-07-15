@@ -10,7 +10,7 @@ build it:
 
 ```sh
 cd examples/react-ref
-npm install @aval/element@1.0.0
+npm install @pixel-point/aval-element@1.0.0
 npm run typecheck
 npm run build
 ```
@@ -24,7 +24,7 @@ import { useEffect, useRef } from "react";
 import {
   defineAvalElement,
   type AvalElement
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 
 export function StatusMotion({
   state,
@@ -70,7 +70,7 @@ closed public attribute contract:
 import type {
   AvalElement,
   AvalElementAttributes
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
 type AvalReactProps = DetailedHTMLProps<

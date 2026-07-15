@@ -1,4 +1,4 @@
-# @aval/format
+# @pixel-point/aval-format
 
 Strict parser, validator, writer, AVC inspector, PNG decoder, and graph adapter
 for compiled AVAL wire format `0.1`. Hostile byte arithmetic,

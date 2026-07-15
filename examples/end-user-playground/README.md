@@ -1,6 +1,6 @@
 # End-user playground
 
-This permanent example exercises the public `@aval/element` API
+This permanent example exercises the public `@pixel-point/aval-element` API
 with a real checked-in, two-state asset. From the repository root, run:
 
 ```sh

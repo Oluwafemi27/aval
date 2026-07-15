@@ -1,4 +1,4 @@
-import type { AvcRenditionGeometry, Rect } from "@aval/format";
+import type { AvcRenditionGeometry, Rect } from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 import { revalidateAvcRenditionGeometry } from "./validated-rendition-geometry.js";

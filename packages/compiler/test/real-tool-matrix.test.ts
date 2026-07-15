@@ -22,7 +22,7 @@ import {
   type AvcRenditionInspectionInput,
   type CompiledManifestInputV01,
   type CompiledManifestV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {

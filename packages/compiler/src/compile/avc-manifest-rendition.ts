@@ -3,7 +3,7 @@ import type {
   AvcRenditionGeometry,
   BitrateV01,
   RenditionV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 

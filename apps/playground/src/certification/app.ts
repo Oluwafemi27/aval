@@ -2,12 +2,12 @@ import {
   defineAvalElement,
   type AvalDiagnostics,
   type AvalElement
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 import {
   DEFAULT_MAXIMUM_DECODER_LEASES,
   DEFAULT_MAXIMUM_PAGE_PHYSICAL_BYTES,
   DEFAULT_MAXIMUM_PLAYER_LOGICAL_BYTES
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import { runDecoderThroughputProbe, type DecoderThroughputProbeResult } from "./decoder-throughput-probe.js";
 import { ForegroundMeasurementGuard, type MeasurementInterruption } from "./foreground-guard.js";

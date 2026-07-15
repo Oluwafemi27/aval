@@ -1,4 +1,4 @@
-import type { RenditionV01 } from "@aval/format";
+import type { RenditionV01 } from "@pixel-point/aval-format";
 import { describe, expect, it, vi } from "vitest";
 
 import { installRuntimeAssetCatalog } from "./asset-catalog.js";

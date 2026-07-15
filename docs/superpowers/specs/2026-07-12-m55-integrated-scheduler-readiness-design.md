@@ -45,19 +45,19 @@ performance certification. Those remain M6 through M9.
 The existing packages keep their current authority:
 
 ```text
-@aval/graph
+@pixel-point/aval-graph
   owns graph validation, authored cursors, routing, effects, and settlements
 
-@aval/format
+@pixel-point/aval-format
   owns container bytes, manifest validity, record/range relations, and AVC syntax
 
-@aval/player-web
+@pixel-point/aval-player-web
   owns rendition choice, decoded resources, readiness, scheduling, rendering,
   host promises/events, failure recovery, and lifecycle
 ```
 
-`@aval/player-web` gains a direct production dependency and
-TypeScript project reference on `@aval/graph`. Depending on graph
+`@pixel-point/aval-player-web` gains a direct production dependency and
+TypeScript project reference on `@pixel-point/aval-graph`. Depending on graph
 only through format would hide a real runtime dependency.
 
 M5.5 does not create a second graph reducer, container validator, Annex B
@@ -1011,10 +1011,10 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @aval/graph
-npm pack --dry-run -w @aval/format
-npm pack --dry-run -w @aval/compiler
-npm pack --dry-run -w @aval/player-web
+npm pack --dry-run -w @pixel-point/aval-graph
+npm pack --dry-run -w @pixel-point/aval-format
+npm pack --dry-run -w @pixel-point/aval-compiler
+npm pack --dry-run -w @pixel-point/aval-player-web
 git diff --check
 ```
 

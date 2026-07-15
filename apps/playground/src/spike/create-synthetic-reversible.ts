@@ -4,7 +4,7 @@ import {
   timestampForFrame,
   type EncodedLoopUnit,
   type RationalFrameRate,
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import {
   inspectH264AnnexBKeyAccessUnit,

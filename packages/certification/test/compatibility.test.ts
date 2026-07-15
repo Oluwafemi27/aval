@@ -22,9 +22,9 @@ describe("1.0 compatibility policy", () => {
       dependencies: Object.fromEntries(PUBLIC_RELEASE_DEPENDENCIES[name].map((dependency) => [dependency, "1.0.0"]))
     }));
     expect(validateSynchronizedReleaseSet(manifests)).toEqual([]);
-    expect(validateSynchronizedReleaseSet(manifests.map((manifest) => manifest.name === "@aval/format" ? { ...manifest, version: "1.0.1" } : manifest))).toContain("@aval/format: version must be 1.0.0");
-    expect(validateSynchronizedReleaseSet(manifests.map((manifest) => manifest.name === "@aval/graph" ? { ...manifest, dependencies: { "@aval/unknown": "1.0.0" } } : manifest))).toContain("@aval/graph: internal dependencies must be exactly none");
-    expect(validateSynchronizedReleaseSet([...manifests, manifests[0]!])).toEqual(expect.arrayContaining([expect.stringMatching(/exactly 5/u), "@aval/graph: duplicate manifest"]));
+    expect(validateSynchronizedReleaseSet(manifests.map((manifest) => manifest.name === "@pixel-point/aval-format" ? { ...manifest, version: "1.0.1" } : manifest))).toContain("@pixel-point/aval-format: version must be 1.0.0");
+    expect(validateSynchronizedReleaseSet(manifests.map((manifest) => manifest.name === "@pixel-point/aval-graph" ? { ...manifest, dependencies: { "@pixel-point/aval-unknown": "1.0.0" } } : manifest))).toContain("@pixel-point/aval-graph: internal dependencies must be exactly none");
+    expect(validateSynchronizedReleaseSet([...manifests, manifests[0]!])).toEqual(expect.arrayContaining([expect.stringMatching(/exactly 5/u), "@pixel-point/aval-graph: duplicate manifest"]));
   });
 
   it("rejects unclassified exports when no reviewed package default exists", () => {

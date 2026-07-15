@@ -1,7 +1,7 @@
 import type {
   BindingSourceV01,
   BindingV01
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 const BINDING_SOURCES: ReadonlySet<BindingSourceV01> = new Set([
   "activate",

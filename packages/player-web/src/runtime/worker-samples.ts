@@ -2,7 +2,7 @@ import {
   isAvcCodec,
   type RenditionV01,
   type UnitV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import {
   DECODER_WORKER_HARD_LIMITS,

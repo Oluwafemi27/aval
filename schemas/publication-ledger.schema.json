@@ -30,7 +30,15 @@
         "properties": {
           "sequence": { "type": "integer", "minimum": 1, "maximum": 256 },
           "action": { "enum": ["publish", "tag", "deprecate", "rollback-tag"] },
-          "packageName": { "type": "string", "pattern": "^@aval/[a-z-]+$" },
+          "packageName": {
+            "enum": [
+              "@pixel-point/aval-graph",
+              "@pixel-point/aval-format",
+              "@pixel-point/aval-player-web",
+              "@pixel-point/aval-element",
+              "@pixel-point/aval-compiler"
+            ]
+          },
           "version": { "const": "1.0.0" },
           "tarballSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
           "registryIntegrity": { "type": "string", "pattern": "^sha512-[A-Za-z0-9+/]{86}==$" },

@@ -8,7 +8,7 @@ import {
 } from "node:path";
 import { cwd } from "node:process";
 
-import { deriveAvcRenditionGeometryFromVisible } from "@aval/format";
+import { deriveAvcRenditionGeometryFromVisible } from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 import {

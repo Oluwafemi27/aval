@@ -24,7 +24,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      `npm run dev -w @aval/playground -- --port ${browserPort} --strictPort`,
+      `npm run dev -w @pixel-point/aval-playground -- --port ${browserPort} --strictPort`,
     url: browserBaseUrl,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000

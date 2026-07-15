@@ -64,8 +64,8 @@ try {
   const cli = join(
     project,
     "node_modules",
-    "@aval",
-    "compiler",
+    "@pixel-point",
+    "aval-compiler",
     "dist",
     "cli.js"
   );
@@ -277,11 +277,11 @@ function option(name) {
 }
 
 async function verifyInstalledGraph(projectRoot, version) {
-  const scope = join(projectRoot, "node_modules", "@aval");
+  const scope = join(projectRoot, "node_modules", "@pixel-point");
   const canonicalScope = await realpath(scope);
   const manifests = new Map();
   for (const name of expectedPackages) {
-    const directory = join(scope, name);
+    const directory = join(scope, `aval-${name}`);
     assert(!(await lstat(directory)).isSymbolicLink(), `installed ${name} package is a symlink`);
     const canonical = await realpath(directory);
     assert(
@@ -301,7 +301,7 @@ async function verifyInstalledGraph(projectRoot, version) {
   };
   for (const [name, expected] of Object.entries(expectedDependencies)) {
     const dependencies = manifests.get(name)?.dependencies ?? {};
-    assert(JSON.stringify(Object.keys(dependencies).sort()) === JSON.stringify(expected.map((short) => `@aval/${short}`).sort()), `packed ${name} dependency graph is not exact`);
+    assert(JSON.stringify(Object.keys(dependencies).sort()) === JSON.stringify(expected.map((short) => `@pixel-point/aval-${short}`).sort()), `packed ${name} dependency graph is not exact`);
     for (const value of Object.values(dependencies)) assert(value === version, `packed ${name} dependency version is not exact`);
   }
 }

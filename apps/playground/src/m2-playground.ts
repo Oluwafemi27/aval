@@ -12,7 +12,7 @@ import {
   type ResidentPathRecoveryEndpointReport,
   type ResidentReversalStressReport,
   type ResidentReversiblePlayerSnapshot
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import {
   SYNTHETIC_REVERSIBLE_RENDITION_ID,

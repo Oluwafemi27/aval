@@ -1,7 +1,7 @@
 import type {
   GraphBodyDefinition,
   GraphEdgeDefinition
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { BorrowedVideoFrame } from "./frame-renderer.js";
 import type {

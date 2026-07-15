@@ -15,9 +15,9 @@ and every executed FFmpeg/FFprobe argv with local paths redacted.
 Regenerate from the repository root with the reviewed tool pair on `PATH`:
 
 ```sh
-npm run build -w @aval/graph
-npm run build -w @aval/format
-npm run build -w @aval/compiler
+npm run build -w @pixel-point/aval-graph
+npm run build -w @pixel-point/aval-format
+npm run build -w @pixel-point/aval-compiler
 node fixtures/compiler/m5/source/generate.mjs
 node packages/compiler/dist/cli.js compile fixtures/compiler/m5/source/loop.json --out fixtures/conformance/m5/opaque-loop.avl --force
 node packages/compiler/dist/cli.js compile fixtures/compiler/m5/source/path.json --out fixtures/conformance/m5/opaque-path.avl --force

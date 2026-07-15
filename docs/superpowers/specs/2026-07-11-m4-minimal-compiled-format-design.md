@@ -8,7 +8,7 @@ format design
 ## 1. Objective
 
 M4 freezes the first byte-level container contract for an AVAL
-asset. It adds a browser-independent `@aval/format` package that can
+asset. It adds a browser-independent `@pixel-point/aval-format` package that can
 write one canonical version-0.1 file, parse its bounded front index without
 copying media payloads, validate the layout of a complete file, and convert the
 compiled manifest into M3's validated motion graph.
@@ -20,8 +20,8 @@ remain in M5, M6, and M7.
 
 ## 2. Package Boundary
 
-Create `@aval/format` with exactly one production dependency:
-`@aval/graph`. Its production TypeScript project uses
+Create `@pixel-point/aval-format` with exactly one production dependency:
+`@pixel-point/aval-graph`. Its production TypeScript project uses
 `lib: ["ES2023"]` and no ambient types. Importing DOM, WebCodecs, Node,
 filesystem, network, timer, or platform cryptography APIs is a compile-time
 error.

@@ -2,7 +2,7 @@ import type {
   GraphPresentation,
   MotionGraphSnapshot,
   ValidatedMotionGraph
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import {
   RuntimePlaybackError,

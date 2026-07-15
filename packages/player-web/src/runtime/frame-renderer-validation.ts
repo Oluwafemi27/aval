@@ -2,7 +2,7 @@ import {
   deriveAvcRenditionGeometry,
   type AvcRenditionGeometry,
   type Rect
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { STREAMING_TEXTURE_LAYER_COUNT } from "./checked-runtime-bytes.js";
 import type {

@@ -16,7 +16,7 @@ export function testOnlyPublicationMetadata() {
     homepageUrl: "https://github.com/aval-test-only/non-release-proof",
     bugsUrl: "https://github.com/aval-test-only/non-release-proof/issues",
     registryScopeAuthority: {
-      scope: "@aval",
+      scope: "@pixel-point",
       registryUrl: "https://registry.npmjs.org/",
       owner: "aval-test-only",
       evidenceId: "test-only-scope-proof-001"

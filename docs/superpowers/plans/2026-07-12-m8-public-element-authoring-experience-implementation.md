@@ -6,7 +6,7 @@
 
 ## Outcome
 
-Add one framework-neutral, SSR-safe `@aval/element` package over
+Add one framework-neutral, SSR-safe `@pixel-point/aval-element` package over
 the completed M7 browser runtime. Make a one-state compiled asset work through
 one definition call and one HTML tag, while preserving arbitrary authored
 states, exact graph settlement, automatic engagement bindings, reduced-motion
@@ -32,8 +32,8 @@ upload, product-name decision, or certification claim.
 - Preserve compiled format `0.1`, source project `0.1` compatibility, and the
   normalized source project `0.2` path. M8 adds no manifest field or binding
   source.
-- `@aval/element` may depend on public
-  `@aval/player-web` exports only. It must not import player private
+- `@pixel-point/aval-element` may depend on public
+  `@pixel-point/aval-player-web` exports only. It must not import player private
   paths, parse the container, fetch payloads, decode media, schedule frames,
   manage page leases, validate PNG, or implement graph routing again.
 - Keep the package root safe in a process with no DOM globals. Touch
@@ -90,7 +90,7 @@ packages/element/test/public-api.test.ts
 ```
 
 Update the root workspace/project references and package lock. Add no runtime
-dependency beyond `@aval/player-web` and the types it publicly
+dependency beyond `@pixel-point/aval-player-web` and the types it publicly
 re-exports.
 
 Freeze closed public unions for:
@@ -121,7 +121,7 @@ Run:
 
 ```text
 npx vitest run packages/element/test/public-api.test.ts
-npm run typecheck -w @aval/element
+npm run typecheck -w @pixel-point/aval-element
 ```
 
 ### 2. Implement SSR-safe, collision-safe custom-element registration
@@ -317,7 +317,7 @@ Run:
 
 ```text
 npx vitest run packages/element/test/asset-generation.test.ts packages/element/test/element-lifecycle.test.ts
-npm run typecheck -w @aval/element
+npm run typecheck -w @pixel-point/aval-element
 ```
 
 ### 6. Implement the public readiness, state, and playback facade
@@ -692,7 +692,7 @@ Run:
 
 ```text
 npx vitest run packages/compiler/test/direct-adoption.test.ts packages/compiler/test/cli-output.test.ts
-npm run typecheck -w @aval/compiler
+npm run typecheck -w @pixel-point/aval-compiler
 ```
 
 ### 15. Replace the placeholder init output with the idle-hover starter
@@ -727,7 +727,7 @@ Run:
 
 ```text
 npx vitest run packages/compiler/test/init-starter.test.ts
-npm run build -w @aval/compiler
+npm run build -w @pixel-point/aval-compiler
 node packages/compiler/dist/cli.js init .tmp-m8-starter
 node packages/compiler/dist/cli.js compile .tmp-m8-starter/project.json --out .tmp-m8-starter/output.avl
 node packages/compiler/dist/cli.js validate .tmp-m8-starter/output.avl
@@ -778,7 +778,7 @@ Run:
 
 ```text
 npx vitest run packages/compiler/test/dev-command.test.ts packages/compiler/test/dev-server.test.ts
-npm run build -w @aval/compiler
+npm run build -w @pixel-point/aval-compiler
 ```
 
 ### 17. Write public integration, hosting, and framework documentation
@@ -864,7 +864,7 @@ never writes secret header values to reports.
 Run:
 
 ```text
-npm run build -w @aval/compiler
+npm run build -w @pixel-point/aval-compiler
 node fixtures/conformance/m8/update-provenance.mjs --check
 node packages/compiler/dist/cli.js validate fixtures/conformance/m8/one-state-partial-loop.avl
 node packages/compiler/dist/cli.js validate fixtures/conformance/m8/user-states-all-routes-alpha.avl
@@ -960,7 +960,7 @@ Run a strict maintainability review and reject:
 Searches include:
 
 ```text
-rg -n "@aval/player-web/src|@aval/(format|graph)/src" packages/element
+rg -n "@pixel-point/aval-player-web/src|@pixel-point/aval-(format|graph)/src" packages/element
 rg -n "HTMLElement|customElements|document|window|matchMedia|IntersectionObserver|ResizeObserver" packages/element/src
 rg -n "innerHTML|insertAdjacentHTML|querySelector|eval\(|new Function|new Blob|console\.|globalThis\[" packages/element/src
 rg -n "role|tabindex|aria-|keydown|keyup|preventDefault|stopPropagation|\.click\(" packages/element/src
@@ -1060,11 +1060,11 @@ npm run test:unit
 npm run build
 npm run test:browser
 npm audit --audit-level=high
-npm pack --dry-run -w @aval/graph
-npm pack --dry-run -w @aval/format
-npm pack --dry-run -w @aval/compiler
-npm pack --dry-run -w @aval/player-web
-npm pack --dry-run -w @aval/element
+npm pack --dry-run -w @pixel-point/aval-graph
+npm pack --dry-run -w @pixel-point/aval-format
+npm pack --dry-run -w @pixel-point/aval-compiler
+npm pack --dry-run -w @pixel-point/aval-player-web
+npm pack --dry-run -w @pixel-point/aval-element
 git diff --check
 ```
 

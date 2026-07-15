@@ -1,4 +1,4 @@
-import type { MotionGraphResult } from "@aval/graph";
+import type { MotionGraphResult } from "@pixel-point/aval-graph";
 import { describe, expect, it } from "vitest";
 
 import { createIntegratedOpaqueTestAsset } from "./asset-test-fixture.js";

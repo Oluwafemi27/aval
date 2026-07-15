@@ -1,4 +1,4 @@
-import type { GraphEdgeDefinition } from "@aval/graph";
+import type { GraphEdgeDefinition } from "@pixel-point/aval-graph";
 
 import { graphBodyFrameAt } from "./body-frame-semantics.js";
 import type { BrowserFrameMedia } from "./browser-playback-types.js";

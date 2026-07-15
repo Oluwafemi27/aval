@@ -1,4 +1,4 @@
-import type { MotionGraphResult } from "@aval/graph";
+import type { MotionGraphResult } from "@pixel-point/aval-graph";
 
 import type {
   IntegratedContentTickContext,

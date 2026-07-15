@@ -2,7 +2,7 @@ import type {
   AvalDiagnostics,
   AvalElement,
   AvalElementEventMap
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 
 import type { RouteLedger } from "./route-ledger.js";
 

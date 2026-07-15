@@ -2,7 +2,7 @@ import {
   avcQuantizationPolicyForRendition,
   avcCodecForLevel,
   maximumAvcDecodedRgbaBytes
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import type { DecoderWorkerConfigureOptions } from "../decoder-worker/client.js";
 import { DECODER_WORKER_HARD_LIMITS } from "../decoder-worker/protocol.js";

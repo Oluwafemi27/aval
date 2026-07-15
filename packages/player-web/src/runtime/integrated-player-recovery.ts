@@ -1,7 +1,7 @@
 import {
   GRAPH_LIMITS,
   MotionGraphEngine
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import type { EffectHost } from "./effect-host.js";

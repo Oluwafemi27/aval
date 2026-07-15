@@ -102,7 +102,7 @@ try {
     license: "CC0-1.0 generated fixture sources",
     generatedBy: await digestFile(generatorPath, "fixtures/conformance/m8/update-provenance.mjs"),
     regeneration: {
-      build: "npm run build -w @aval/compiler",
+      build: "npm run build -w @pixel-point/aval-compiler",
       check: "node fixtures/conformance/m8/update-provenance.mjs --check"
     },
     sourceFrames: await frameProvenance(),

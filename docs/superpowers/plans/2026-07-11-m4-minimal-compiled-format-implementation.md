@@ -6,7 +6,7 @@
 
 ## Outcome
 
-Add a pure `@aval/format` workspace package that writes one
+Add a pure `@pixel-point/aval-format` workspace package that writes one
 canonical 0.1 compiled asset, parses its bounded front index, validates a full
 file's layout and conformance payloads, and returns M3's validated graph without
 copying or retaining media payloads.
@@ -25,7 +25,7 @@ packages/format/src/index.ts
 ```
 
 Add the root project reference and build `graph` before `format`. The package
-has only `@aval/graph` as a production dependency. Enforce
+has only `@pixel-point/aval-graph` as a production dependency. Enforce
 `lib: ["ES2023"]` and `types: []` in production. Add a compile-only test that
 the public declarations contain no DOM, WebCodecs, Node, or platform crypto
 types.

@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/aval/grass-rabbit.avl",
+      "destination": "https://pub-316828c04b85441d8230f1e08c017667.r2.dev/grass-rabbit.avl"
+    },
+    {
+      "source": "/aval",
+      "destination": "/"
+    },
+    {
+      "source": "/aval/",
+      "destination": "/"
+    },
+    {
+      "source": "/aval/:path*",
+      "destination": "/:path*"
+    }
+  ]
+}

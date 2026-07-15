@@ -1,4 +1,4 @@
-import type { GraphPresentation, MotionGraphSnapshot } from "@aval/graph";
+import type { GraphPresentation, MotionGraphSnapshot } from "@pixel-point/aval-graph";
 
 import type {
   DecoderWorkerConfigureOptions

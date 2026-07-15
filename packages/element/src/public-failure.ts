@@ -2,7 +2,7 @@ import type {
   RuntimeFailure,
   RuntimeFailureCode,
   StaticReason
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import type {
   AvalElementFailureCode,

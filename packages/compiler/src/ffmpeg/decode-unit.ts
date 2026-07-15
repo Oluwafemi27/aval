@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 
-import type { AvcRenditionGeometry } from "@aval/format";
+import type { AvcRenditionGeometry } from "@pixel-point/aval-format";
 
 import { revalidateAvcRenditionGeometry } from "../compile/validated-rendition-geometry.js";
 import { CompilerError } from "../diagnostics.js";

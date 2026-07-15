@@ -2,7 +2,7 @@ import type {
   CompiledManifestV01,
   ResidencyEndpointV01,
   UnitV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { endpointEvidenceKey } from "./readiness-evidence-index.js";
 import type {

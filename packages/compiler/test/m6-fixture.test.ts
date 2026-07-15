@@ -10,7 +10,7 @@ import {
   serializeCanonicalJson,
   validateCompleteAsset,
   validatePngProfile
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");

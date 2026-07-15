@@ -1,4 +1,4 @@
-import type { AvalElement } from "@aval/element";
+import type { AvalElement } from "@pixel-point/aval-element";
 import { createRef } from "react";
 
 const motion = createRef<AvalElement>();

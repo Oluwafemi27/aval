@@ -6,7 +6,7 @@ import {
   type AvcRenditionGeometry,
   type AvcRenditionInspection,
   type RenditionV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import { inspectRuntimeCatalogAvcRendition } from "./borrowed-avc-inspection.js";

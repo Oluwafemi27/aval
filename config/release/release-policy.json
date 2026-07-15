@@ -4,11 +4,11 @@
   "wireFormatVersion": "0.1",
   "projectSchemaVersion": "0.2",
   "publicPackages": [
-    "@aval/graph",
-    "@aval/format",
-    "@aval/player-web",
-    "@aval/element",
-    "@aval/compiler"
+    "@pixel-point/aval-graph",
+    "@pixel-point/aval-format",
+    "@pixel-point/aval-player-web",
+    "@pixel-point/aval-element",
+    "@pixel-point/aval-compiler"
   ],
   "registry": { "url": "https://registry.npmjs.org/" },
   "toolchain": {

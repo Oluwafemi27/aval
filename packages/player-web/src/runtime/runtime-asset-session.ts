@@ -6,7 +6,7 @@ import {
   validateCompleteAsset,
   type ParsedFrontIndex,
   type ValidatedAssetLayout
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import {
   adoptRuntimeCatalogCompleteSource,
   createMetadataRuntimeAssetCatalog,

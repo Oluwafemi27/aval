@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { releasePackageDirectory } from "../release/release-set-model.mjs";
+
 const SPDX_ID = /^SPDXRef-[A-Za-z0-9.-]{1,200}$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
 const SHA512 = /^[0-9a-f]{128}$/u;
@@ -66,9 +68,9 @@ export function reconcilePackageSbom(document, archive) {
 }
 
 export function reconcileReleaseSbomSet({ documentsByPath, releaseSet, workspaceLockBytes }) {
-  const expectedPaths = new Set(["sbom/workspace.spdx.json", ...releaseSet.packages.map(({ name }) => `sbom/${name.slice("@aval/".length)}.spdx.json`)]);
+  const expectedPaths = new Set(["sbom/workspace.spdx.json", ...releaseSet.packages.map(({ name }) => `sbom/${releasePackageDirectory(name)}.spdx.json`)]);
   if (documentsByPath.size !== expectedPaths.size || [...documentsByPath.keys()].some((path) => !expectedPaths.has(path))) throw new Error("candidate SBOM set is not exactly workspace plus five packages");
-  for (const archive of releaseSet.packages) reconcilePackageSbom(documentsByPath.get(`sbom/${archive.name.slice("@aval/".length)}.spdx.json`), archive);
+  for (const archive of releaseSet.packages) reconcilePackageSbom(documentsByPath.get(`sbom/${releasePackageDirectory(archive.name)}.spdx.json`), archive);
   reconcileWorkspaceSbom(documentsByPath.get("sbom/workspace.spdx.json"), workspaceLockBytes);
 }
 

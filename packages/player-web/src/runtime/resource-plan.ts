@@ -2,7 +2,7 @@ import {
   maximumAvcDecodedRgbaBytes,
   type CompiledManifestV01,
   type RenditionV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import type {
   RuntimeAssetCatalog,

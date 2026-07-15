@@ -66,7 +66,7 @@ import type {
   UnitInputV01,
   UnitV01,
   ValidatedAssetLayout
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 // This tuple is never emitted. It makes every approved public type cross the
 // package export boundary during the test TypeScript project build.
@@ -143,13 +143,13 @@ export type PublicFormatTypes = readonly [
 // Internal implementation contracts deliberately do not cross the package
 // root even though their defining modules use named exports internally.
 // @ts-expect-error encoder constraint rewriting is private
-export { canonicalizeAvcConstraintSet2 } from "@aval/format";
+export { canonicalizeAvcConstraintSet2 } from "@pixel-point/aval-format";
 // @ts-expect-error canonical layout is private
-export type { CanonicalAssetLayout } from "@aval/format";
+export type { CanonicalAssetLayout } from "@pixel-point/aval-format";
 // @ts-expect-error PNG validation inputs are private
-export type { PngEnvelopeValidationInput } from "@aval/format";
+export type { PngEnvelopeValidationInput } from "@pixel-point/aval-format";
 // @ts-expect-error writer normalization is private
-export type { NormalizedWriterInput } from "@aval/format";
+export type { NormalizedWriterInput } from "@pixel-point/aval-format";
 
 declare const publicAvcProfile: AvcConstrainedBaselineProfile;
 // @ts-expect-error compatibility policy is selected by the entry point

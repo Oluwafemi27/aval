@@ -14,7 +14,7 @@ M5.5 now connects the validated M4 container, M3 graph engine, M5 dedicated
 decoder worker, exact decode timeline, bounded presentation ring, persistent
 interaction cache, opaque WebGL2 renderer, production-backed all-routes
 readiness rehearsal, staged effect/promise host, realtime driver, and static
-recovery in `@aval/player-web`.
+recovery in `@pixel-point/aval-player-web`.
 
 The complete opaque route fixture, production browser composition,
 transactional rapid input, exact graph/media presentation agreement, cadence
@@ -22,7 +22,7 @@ bounds, and terminal resource cleanup all passed. The selected rendition used
 one configured decoder, never sought, reset, flushed, boundary-flushed, or
 reconfigured at an animation boundary, and released every live resource.
 
-The prototype `.avl` suffix and `@aval/*` scope remain private
+The prototype `.avl` suffix and `@pixel-point/aval-*` scope remain private
 descriptive labels, not a registered public format or product name.
 
 ## Captured Environment
@@ -523,10 +523,10 @@ The final-shape focused Chromium proof passed three consecutive serial runs:
 | `npm run build` | passed; playground production build transformed 159 modules |
 | `npm run test:browser` | 12 of 12 passed in 18.3 s; integrated M5.5 route proof 5.6 s |
 | `npm audit --audit-level=high` | 0 vulnerabilities |
-| `npm pack --dry-run -w @aval/graph` | passed package inspection |
-| `npm pack --dry-run -w @aval/format` | passed package inspection |
-| `npm pack --dry-run -w @aval/compiler` | passed package inspection |
-| `npm pack --dry-run -w @aval/player-web` | passed package inspection |
+| `npm pack --dry-run -w @pixel-point/aval-graph` | passed package inspection |
+| `npm pack --dry-run -w @pixel-point/aval-format` | passed package inspection |
+| `npm pack --dry-run -w @pixel-point/aval-compiler` | passed package inspection |
+| `npm pack --dry-run -w @pixel-point/aval-player-web` | passed package inspection |
 | `git diff --check` | passed |
 | strict contract/maintainability audit | passed with no P0 blocker; P1 debt recorded above |
 

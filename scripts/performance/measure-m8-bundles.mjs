@@ -14,13 +14,13 @@ const CAPS = Object.freeze({
   decoderWorkerGzipBytes: 20 * KIB
 });
 const alias = Object.freeze({
-  "@aval/format": fileURLToPath(
+  "@pixel-point/aval-format": fileURLToPath(
     new URL("../../packages/format/src/index.ts", import.meta.url)
   ),
-  "@aval/graph": fileURLToPath(
+  "@pixel-point/aval-graph": fileURLToPath(
     new URL("../../packages/graph/src/index.ts", import.meta.url)
   ),
-  "@aval/player-web": fileURLToPath(
+  "@pixel-point/aval-player-web": fileURLToPath(
     new URL("../../packages/player-web/src/index.ts", import.meta.url)
   )
 });

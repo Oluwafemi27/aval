@@ -2,7 +2,7 @@ import {
   inspectAvcAnnexBRendition,
   type AvcConstrainedBaselineProfile,
   type AvcRenditionInspection
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 

@@ -6,13 +6,13 @@
 
 ## Result
 
-M4 passes its implementation gate. The new pure `@aval/format`
+M4 passes its implementation gate. The new pure `@pixel-point/aval-format`
 package writes one byte-canonical 0.1 asset, parses a bounded front index,
 validates the exact complete layout, checks the M4 conformance payload
 envelopes, and adapts the manifest to M3's immutable graph.
 
 The production TypeScript project exposes only `ES2023` types and depends only
-on `@aval/graph`. It has no DOM, WebCodecs, Node, network, or
+on `@pixel-point/aval-graph`. It has no DOM, WebCodecs, Node, network, or
 platform-crypto dependency. Parsed results are detached, recursively frozen
 metadata and numeric ranges; no returned object retains caller media bytes.
 
@@ -96,7 +96,7 @@ npm run build           graph, format, player, and playground passed
 npm run test:browser    7 Chromium regression tests passed
 npm audit --audit-level=high
                         0 vulnerabilities
-npm pack --dry-run -w @aval/format
+npm pack --dry-run -w @pixel-point/aval-format
                         package contents inspected successfully
 git diff --check        passed
 ```

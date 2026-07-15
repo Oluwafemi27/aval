@@ -3,7 +3,7 @@ import {
   deriveAvcRenditionGeometry,
   type AvcRenditionGeometry,
   type Rect
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import { CompilerError, type CompilerErrorDetails } from "../diagnostics.js";
 

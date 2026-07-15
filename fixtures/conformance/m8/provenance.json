@@ -5,11 +5,11 @@
   "license": "CC0-1.0 generated fixture sources",
   "generatedBy": {
     "path": "fixtures/conformance/m8/update-provenance.mjs",
-    "bytes": 10044,
-    "sha256": "d5b50f1f551a4aa765621c74ee3e6c03b2da1524899f8c3de717770054ac42e3"
+    "bytes": 10056,
+    "sha256": "0b57460ef466d5175fc11e41994ed828b075cab084a742a2f1eee2469190ed29"
   },
   "regeneration": {
-    "build": "npm run build -w @aval/compiler",
+    "build": "npm run build -w @pixel-point/aval-compiler",
     "check": "node fixtures/conformance/m8/update-provenance.mjs --check"
   },
   "sourceFrames": {

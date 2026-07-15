@@ -1,5 +1,5 @@
 {
-  "name": "@aval/compiler",
+  "name": "@pixel-point/aval-compiler",
   "version": "1.0.0",
   "description": "CLI and compiler for deterministic AVAL assets.",
   "keywords": ["animation", "compiler", "cli", "motion"],
@@ -23,9 +23,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@aval/element": "1.0.0",
-    "@aval/format": "1.0.0",
-    "@aval/graph": "1.0.0",
-    "@aval/player-web": "1.0.0"
+    "@pixel-point/aval-element": "1.0.0",
+    "@pixel-point/aval-format": "1.0.0",
+    "@pixel-point/aval-graph": "1.0.0",
+    "@pixel-point/aval-player-web": "1.0.0"
   }
 }

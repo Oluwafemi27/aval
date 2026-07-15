@@ -135,15 +135,15 @@ permission to own a decoder, not the decoder object itself.
 Package boundaries remain inward-facing:
 
 ```text
-@aval/format
+@pixel-point/aval-format
   owns header/front-index parsing, canonical byte geometry, and complete-file
   validation; it has no Fetch, Web Crypto, DOM, or page-manager dependency
 
-@aval/player-web
+@pixel-point/aval-player-web
   owns HTTP semantics, Web Crypto digest verification, sparse residency,
   resource leases, visibility/context recovery, and integration with M6
 
-@aval/graph
+@pixel-point/aval-graph
   remains unaware of loading, visibility, and memory
 ```
 

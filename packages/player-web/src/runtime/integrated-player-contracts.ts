@@ -3,7 +3,7 @@ import type {
   MotionGraphResult,
   MotionGraphSnapshot,
   MotionGraphTickOptions
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 
 import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import type { EffectHostEvent } from "./effect-host.js";

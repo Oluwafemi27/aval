@@ -8,7 +8,7 @@ import {
   type AvcCodecV01,
   type RenditionV01,
   type UnitV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import {
   createDecoderWorkerClient,
   durationForFrame,
@@ -16,7 +16,7 @@ import {
   type DecoderWorkerMetrics,
   type DecoderWorkerSample,
   type ManagedDecoderWorkerFrame
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 const WARMUP_OUTPUTS = 24;
 const MEASURED_OUTPUTS = 300;

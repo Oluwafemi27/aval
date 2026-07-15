@@ -24,7 +24,7 @@ test("browser entry reaches only package-root public imports and registers auto 
   expect(facade.after).toBe(true);
 
   const source = await readFile("apps/playground/src/certification/app.ts", "utf8");
-  expect(source).toContain('from "@aval/element"');
-  expect(source).toContain('from "@aval/player-web"');
-  expect(source).not.toMatch(/@aval\/.+\/src\/|packages\/.+\/src\//u);
+  expect(source).toContain('from "@pixel-point/aval-element"');
+  expect(source).toContain('from "@pixel-point/aval-player-web"');
+  expect(source).not.toMatch(/@pixel-point\/aval-.+\/src\/|packages\/.+\/src\//u);
 });

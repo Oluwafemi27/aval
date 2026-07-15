@@ -18,7 +18,7 @@ format, decoder worker, readiness measurements, and renderer.
 
 ## 2. Package Boundary
 
-Create `@aval/graph` as a new npm workspace package:
+Create `@pixel-point/aval-graph` as a new npm workspace package:
 
 - `model.ts` contains public immutable definition, snapshot, presentation,
   effect, and result types;

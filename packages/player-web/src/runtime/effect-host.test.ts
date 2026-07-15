@@ -4,7 +4,7 @@ import {
   type GraphStartPolicy,
   type MotionGraphDefinition,
   type MotionGraphSnapshot
-} from "@aval/graph";
+} from "@pixel-point/aval-graph";
 import { describe, expect, it } from "vitest";
 
 import {

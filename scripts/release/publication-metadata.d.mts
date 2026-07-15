@@ -8,7 +8,7 @@ export interface ApprovedPublicationMetadata {
   readonly repositoryUrl: string;
   readonly homepageUrl: string;
   readonly bugsUrl: string;
-  readonly registryScopeAuthority: Readonly<{ scope: "@aval"; registryUrl: "https://registry.npmjs.org/"; owner: string; evidenceId: string }>;
+  readonly registryScopeAuthority: Readonly<{ scope: "@pixel-point"; registryUrl: "https://registry.npmjs.org/"; owner: string; evidenceId: string }>;
   readonly note: string;
 }
 export function validateApprovedPublicationMetadata(input: unknown): ApprovedPublicationMetadata;

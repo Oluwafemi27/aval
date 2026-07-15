@@ -7,7 +7,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { serializeCanonicalJson } from "@aval/format";
+import { serializeCanonicalJson } from "@pixel-point/aval-format";
 import type { InitCliArguments } from "../cli-args.js";
 import { sha256Hex } from "../compile/hash.js";
 import { encodeCanonicalRgbaPng } from "../compile/png.js";
@@ -69,7 +69,7 @@ export async function runInitCommand(
     ]);
     const provenance = Object.freeze({
       provenanceVersion: "0.1",
-      generator: "@aval/compiler init idle-hover-v2",
+      generator: "@pixel-point/aval-compiler init idle-hover-v2",
       license: "CC0-1.0",
       project: Object.freeze({
         path: PROJECT_FILE,
@@ -314,8 +314,8 @@ const STARTER_PACKAGE = Object.freeze({
     dev: "avl dev motion.json --out starter.avl --force"
   },
   dependencies: {
-    "@aval/compiler": "1.0.0",
-    "@aval/element": "1.0.0"
+    "@pixel-point/aval-compiler": "1.0.0",
+    "@pixel-point/aval-element": "1.0.0"
   }
 });
 
@@ -359,7 +359,7 @@ const HTML_EXAMPLE = `<!doctype html>
 </html>
 `;
 
-const STARTER_SCRIPT = `import "@aval/element/auto";
+const STARTER_SCRIPT = `import "@pixel-point/aval-element/auto";
 `;
 
 const ASSET_LICENSE = `# Generated starter asset license

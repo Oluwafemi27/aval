@@ -4,7 +4,7 @@ import {
   type AvalElement,
   type AvalErrorDetail,
   type AvalVisualStateChangeDetail
-} from "@aval/element";
+} from "@pixel-point/aval-element";
 
 export interface StatusMotionProps {
   readonly state: string;

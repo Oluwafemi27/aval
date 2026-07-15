@@ -1,4 +1,4 @@
-import "@aval/element/auto";
+import "@pixel-point/aval-element/auto";
 
 const motion = document.querySelector("#grass-rabbit");
 const stateLabel = document.querySelector("#rabbit-state");
@@ -86,7 +86,10 @@ function dismissInteractionHotspot() {
     return;
   }
 
-  const hotspotIsVisible = getComputedStyle(interactionHotspot).display !== "none";
+  const hotspotStyle = getComputedStyle(interactionHotspot);
+  const hotspotIsVisible = hotspotStyle.display !== "none" &&
+    hotspotStyle.visibility === "visible" &&
+    Number.parseFloat(hotspotStyle.opacity) > 0;
   if (hotspotIsVisible && !prefersReducedMotion) {
     const revealAfterFade = (event) => {
       if (event.target !== interactionHotspot || event.propertyName !== "opacity") return;

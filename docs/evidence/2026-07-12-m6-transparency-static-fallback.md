@@ -566,10 +566,10 @@ The final dry-run package inspections reported:
 
 | Package | Tarball bytes | Unpacked bytes | Files |
 | --- | ---: | ---: | ---: |
-| `@aval/graph` | 44,159 | 248,987 | 27 |
-| `@aval/format` | 135,099 | 617,900 | 93 |
-| `@aval/compiler` | 320,000 | 1,560,757 | 357 |
-| `@aval/player-web` | 453,548 | 2,350,023 | 216 |
+| `@pixel-point/aval-graph` | 44,159 | 248,987 | 27 |
+| `@pixel-point/aval-format` | 135,099 | 617,900 | 93 |
+| `@pixel-point/aval-compiler` | 320,000 | 1,560,757 | 357 |
+| `@pixel-point/aval-player-web` | 453,548 | 2,350,023 | 216 |
 
 Package inspection found no browser cache, FFmpeg scratch spool, absolute path,
 raw timing trace, source fixture, or unpacked asset introduced as an unintended

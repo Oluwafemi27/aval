@@ -1,4 +1,4 @@
-import type { ValidatedMotionGraph } from "@aval/graph";
+import type { ValidatedMotionGraph } from "@pixel-point/aval-graph";
 import {
   FORMAT_DEFAULT_BUDGETS,
   FormatError,
@@ -13,7 +13,7 @@ import {
   type StateV01,
   type ValidatedAssetLayout,
   type UnitV01
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 
 import {
   buildCatalogMaps,

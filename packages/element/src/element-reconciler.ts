@@ -4,7 +4,7 @@ import type {
   RuntimeReadiness,
   RuntimeReadinessResult,
   StaticReason
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import {
   ElementAssetGeneration,

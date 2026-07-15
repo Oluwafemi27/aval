@@ -1,4 +1,4 @@
-import { AvcIncrementalInspector } from "@aval/format";
+import { AvcIncrementalInspector } from "@pixel-point/aval-format";
 
 import {
   type DecoderWorkerAvcProfile,

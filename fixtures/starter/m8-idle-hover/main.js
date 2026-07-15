@@ -1,1 +1,1 @@
-import "@aval/element/auto";
+import "@pixel-point/aval-element/auto";

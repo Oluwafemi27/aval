@@ -19,7 +19,7 @@ rational timestamps, generation cancellation, request watchdogs, and explicit
 frame ownership. Supported Chromium decoded the checked path and reversible
 fixtures with no boundary configure, reset, or flush.
 
-The prototype `.avl` suffix and `@aval/*` scope remain private
+The prototype `.avl` suffix and `@pixel-point/aval-*` scope remain private
 descriptive labels, not a registered public format or product name.
 
 ## Captured Environment
@@ -132,9 +132,9 @@ npm run build           graph, format, compiler, player, and playground passed
 npm run test:browser    10 Chromium tests passed
 npm audit --audit-level=high
                         0 vulnerabilities
-npm pack --dry-run -w @aval/format
+npm pack --dry-run -w @pixel-point/aval-format
                         74 files inspected; no stale AVC helper
-npm pack --dry-run -w @aval/compiler
+npm pack --dry-run -w @pixel-point/aval-compiler
                         280 files inspected; CLI present; no stale report writer
 git diff --check        passed
 ```

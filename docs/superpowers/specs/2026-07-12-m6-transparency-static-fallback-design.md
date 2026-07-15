@@ -390,7 +390,7 @@ and browser conversion; they are not general compiler acceptance criteria.
 
 ### 7.1 One strict platform-free grammar owner
 
-`@aval/format` replaces the M4 shallow envelope check with one
+`@pixel-point/aval-format` replaces the M4 shallow envelope check with one
 restricted RGBA PNG profile owner. It validates in checked order:
 
 - the standard eight-byte signature;

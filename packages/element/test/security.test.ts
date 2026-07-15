@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   RuntimePlaybackError,
   normalizeRuntimeFailure
-} from "@aval/player-web";
+} from "@pixel-point/aval-player-web";
 
 import { normalizePublicFailure } from "../src/public-failure.js";
 

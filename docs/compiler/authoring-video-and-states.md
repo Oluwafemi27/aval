@@ -319,7 +319,7 @@ The application needs the compiled `.avl` and one element registration import.
 The remaining code is ordinary JavaScript in the application's framework:
 
 ```js
-import { defineAvalElement } from "@aval/element";
+import { defineAvalElement } from "@pixel-point/aval-element";
 
 defineAvalElement();
 

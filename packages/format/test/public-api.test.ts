@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import * as packageApi from "@aval/format";
+import * as packageApi from "@pixel-point/aval-format";
 import * as sourceApi from "../src/index.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -72,7 +72,7 @@ function productionSources(packageName: "format" | "graph"): readonly string[] {
     .map((entry) => resolve(sourceDirectory, entry));
 }
 
-describe("@aval/format public boundary", () => {
+describe("@pixel-point/aval-format public boundary", () => {
   it("exposes exactly the approved runtime surface from source and package root", () => {
     expect(Object.keys(sourceApi).sort()).toEqual([...RUNTIME_EXPORTS].sort());
     expect(Object.keys(packageApi).sort()).toEqual([...RUNTIME_EXPORTS].sort());

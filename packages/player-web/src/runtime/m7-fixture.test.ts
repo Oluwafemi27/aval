@@ -1,4 +1,4 @@
-import { validateCompleteAsset } from "@aval/format";
+import { validateCompleteAsset } from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Vite exposes the checked binary as a data URL in tests.

@@ -1,4 +1,4 @@
-# @aval/element
+# @pixel-point/aval-element
 
 Progressive, web-only `<aval-player>` custom element for interactive
 AVAL assets. It lazy-loads the decoder/runtime only after a source
@@ -6,8 +6,12 @@ is assigned, preserves author-owned fallback content, supports arbitrary
 authored states and events, and leaves that external fallback visible when
 animation is unavailable or reduced motion is requested.
 
+```sh
+npm install @pixel-point/aval-element@1.0.0
+```
+
 ```js
-import "@aval/element/auto";
+import "@pixel-point/aval-element/auto";
 ```
 
 ```html

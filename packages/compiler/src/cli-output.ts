@@ -1,7 +1,7 @@
 import {
   serializeCanonicalJsonWithLimits,
   type CanonicalJsonValue
-} from "@aval/format";
+} from "@pixel-point/aval-format";
 import { boundedUtf8Text } from "./bounded-text.js";
 import type { CompilerDiagnostic, CompilerErrorCode } from "./diagnostics.js";
 

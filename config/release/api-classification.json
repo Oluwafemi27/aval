@@ -3,10 +3,10 @@
   "defaultClassification": "stable",
   "allowed": ["stable", "experimental", "deprecated", "internal"],
   "packages": {
-    "@aval/graph": { "experimental": [], "deprecated": [] },
-    "@aval/format": { "experimental": [], "deprecated": [] },
-    "@aval/compiler": { "experimental": [], "deprecated": [] },
-    "@aval/player-web": { "experimental": [], "deprecated": [] },
-    "@aval/element": { "experimental": [], "deprecated": [] }
+    "@pixel-point/aval-graph": { "experimental": [], "deprecated": [] },
+    "@pixel-point/aval-format": { "experimental": [], "deprecated": [] },
+    "@pixel-point/aval-compiler": { "experimental": [], "deprecated": [] },
+    "@pixel-point/aval-player-web": { "experimental": [], "deprecated": [] },
+    "@pixel-point/aval-element": { "experimental": [], "deprecated": [] }
   }
 }

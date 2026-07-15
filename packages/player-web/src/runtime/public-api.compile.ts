@@ -1,8 +1,8 @@
 import type {
   MotionGraphReadiness,
   MotionGraphResult
-} from "@aval/graph";
-import type { ValidatedAssetLayout } from "@aval/format";
+} from "@pixel-point/aval-graph";
+import type { ValidatedAssetLayout } from "@pixel-point/aval-format";
 
 import {
   RUNTIME_TRACE_CAPACITY,
