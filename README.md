@@ -44,30 +44,25 @@ dist/motion/
 ## Browser integration
 
 Use literal direct-child sources in preference order. The exact codec strings
-and SHA-256 SRI values come from `build.json`; the values below are
-illustrative.
+come from `build.json`; the values below are illustrative.
 
 ```html
 <aval-player width="320" height="320">
   <source
     src="/motion/av1.avl"
     type='application/vnd.aval; codecs="av01.0.00M.10.0.110.01.01.01.0"'
-    integrity="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
   >
   <source
     src="/motion/vp9.avl"
     type='application/vnd.aval; codecs="vp09.00.10.08.01.01.01.01.00"'
-    integrity="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
   >
   <source
     src="/motion/h265.avl"
     type='application/vnd.aval; codecs="hvc1.1.6.L93.B0"'
-    integrity="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
   >
   <source
     src="/motion/h264.avl"
     type='application/vnd.aval; codecs="avc1.640028"'
-    integrity="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
   >
   <img slot="fallback" src="/motion.png" alt="">
 </aval-player>
@@ -81,10 +76,10 @@ import { defineAvalElement } from "@pixel-point/aval-element";
 defineAvalElement();
 ```
 
-The `<aval-player>` host does not carry `src` or `integrity`; those belong to
-each codec candidate. If no candidate is supported, the author-owned fallback
-remains visible. Applications can select any authored state without media
-seeking code:
+The `<aval-player>` host does not carry `src`; URLs belong to each codec
+candidate. If no candidate is supported, the author-owned fallback remains
+visible. Applications can select any authored state without media seeking
+code:
 
 ```js
 const motion = document.querySelector("aval-player");
