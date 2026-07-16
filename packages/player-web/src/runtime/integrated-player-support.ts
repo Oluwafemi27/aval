@@ -100,13 +100,6 @@ export function validateIntegratedPlayerOptions(
     throw new TypeError("integrated player requires a fallback-store factory");
   }
   if (
-    options.selectedRendition === null ||
-    typeof options.selectedRendition !== "object" ||
-    Array.isArray(options.selectedRendition)
-  ) {
-    throw new TypeError("integrated player requires a selected video rendition");
-  }
-  if (
     options.candidateFactory === null ||
     typeof options.candidateFactory !== "object" ||
     typeof options.candidateFactory.create !== "function" ||

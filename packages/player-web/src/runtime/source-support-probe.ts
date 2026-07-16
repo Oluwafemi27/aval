@@ -77,5 +77,22 @@ export class SourceSupportProbe {
 export function createSourceSupportProbe(
   options: SourceSupportProbeCreationOptions = {}
 ): SourceSupportProbe {
+  if (
+    options.workerFactory === undefined &&
+    options.entryUrl === undefined &&
+    typeof Worker === "undefined"
+  ) {
+    return new SourceSupportProbe(STATIC_FALLBACK_SUPPORT_CLIENT);
+  }
   return new SourceSupportProbe(createDecoderWorkerClient(options));
 }
+
+/**
+ * Worker availability is evaluated again by the animated candidate factory.
+ * Until then, accept one resource-eligible rendition so the runtime can load
+ * manifest metadata and publish its deterministic worker-unavailable fallback.
+ */
+const STATIC_FALLBACK_SUPPORT_CLIENT: SourceSupportProbeClient = Object.freeze({
+  async probeConfig(): Promise<boolean> { return true; },
+  async dispose(): Promise<void> {}
+});

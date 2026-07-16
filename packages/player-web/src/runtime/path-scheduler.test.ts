@@ -21,7 +21,6 @@ import {
 } from "./asset-test-support.js";
 import { DecodeTimeline } from "./decode-timeline.js";
 import { inspectSelectedVideoRendition } from "./video-rendition-inspection.js";
-import { createVideoRenditionCandidates } from "./video-rendition-selection.js";
 import {
   PathScheduler,
   type PathSchedulerResidentFrame,
@@ -677,7 +676,7 @@ function createFixture(options: FakeWorkerOptions = {}) {
   const rendition = options.integratedPathAsset === true
     ? "opaque-path"
     : "opaque";
-  const candidate = createVideoRenditionCandidates(catalog.manifest)
+  const candidate = catalog.videoRenditions
     .find((value) => value.rendition.id === rendition);
   if (candidate === undefined) throw new Error("test rendition is missing");
   const inspection = inspectSelectedVideoRendition(

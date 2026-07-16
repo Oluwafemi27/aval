@@ -14,8 +14,7 @@ import {
   ManualTimers
 } from "./integrated-player-preparation-test-support.js";
 import {
-  createIntegratedTestVideoSource,
-  selectIntegratedTestVideoRendition
+  createIntegratedTestVideoSource
 } from "./integrated-player-video-test-support.js";
 import type { MotionPolicy } from "./motion-policy.js";
 import type {
@@ -34,7 +33,7 @@ describe("IntegratedPlayer construction and resource admission", () => {
     try {
       new IntegratedPlayer({
         bytes,
-        selectedRendition: selectIntegratedTestVideoRendition(bytes),
+        selectedRenditionIndex: 0,
         createFallbackStore,
         candidateFactory: factory,
         hostMaxRuntimeBytes: bytes.byteLength

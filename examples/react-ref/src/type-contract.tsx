@@ -6,7 +6,6 @@ const motion = createRef<AvalElement>();
 void (
   <aval-player
     ref={motion}
-    src="/status.avl"
     state="loading"
     motion="reduce"
     autoplay="manual"
@@ -15,7 +14,17 @@ void (
     width={160}
     height="160"
     aria-label="Decorative status motion"
-  />
+  >
+    <source
+      src="/status/h264.avl"
+      type='application/vnd.aval; codecs="avc1.64000A"'
+    />
+  </aval-player>
+);
+
+void (
+  // @ts-expect-error source URLs belong to direct-child source elements
+  <aval-player src="/status.avl" />
 );
 
 void (

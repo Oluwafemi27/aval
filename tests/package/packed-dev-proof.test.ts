@@ -22,8 +22,10 @@ describe("packed dev proof", () => {
     expect(source).toContain("await starterFailures.assertWorkerExecuted()");
     expect(source).toContain("await browserFailures.assertWorkerExecuted()");
     expect(source).toContain("__avalWorkerEvidence");
-    expect(source).toContain('new URL("asset.avl", url)');
-    expect(source).not.toContain("asset.avl?v=");
+    expect(source).toContain('new URL(`${asset.codec}.avl`, url)');
+    expect(source).toContain('["av1", "vp9", "h265", "h264"]');
+    expect(source).toContain('new URL("build.json", url)');
+    expect(source).not.toContain('new URL("asset.avl", url)');
     expect(source).toContain("[A-Za-z0-9_-]{43}");
     expect(source).toContain("unscoped dev origin unexpectedly returned");
     expect(localProof).toContain("--test-only-packed-proof");

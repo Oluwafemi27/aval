@@ -14,7 +14,10 @@ import {
   type PathFramePlan,
   type PathSequenceState
 } from "./path-sequence.js";
-import type { WorkerSampleFactory } from "./worker-samples.js";
+import {
+  planWorkerSampleGroupCredit,
+  type WorkerSampleFactory
+} from "./worker-samples.js";
 
 const DEFAULT_PUMP_TIMEOUT_MS = 2_000;
 const MAX_PUMP_ITERATIONS = 256;
@@ -85,18 +88,10 @@ export async function pumpPathScheduler(
     const metrics = await input.worker.snapshotMetrics();
     const deficit = targetRingFrames - ringSize -
       input.output.presentableExpectedCount();
-    const pendingCredit = Math.max(
-      0,
-      input.limits.maxPendingSamples - metrics.pendingSamples
-    );
     const outstanding = checkedAdd(
       metrics.submittedFrames,
       metrics.leasedFrames,
       "worker outstanding frames"
-    );
-    const outstandingCredit = Math.max(
-      0,
-      input.limits.maxOutstandingFrames - outstanding
     );
     const reorderWaitCandidate =
       ringSize < targetRingFrames &&
@@ -106,8 +101,8 @@ export async function pumpPathScheduler(
       metrics.decodeQueueSize === 0 &&
       metrics.submittedFrames > 0;
     if (
-      pendingCredit > 0 &&
-      outstandingCredit > 0 &&
+      metrics.pendingSamples < input.limits.maxPendingSamples &&
+      outstanding < input.limits.maxOutstandingFrames &&
       (deficit > 0 || reorderWaitCandidate)
     ) {
       const draft = clonePathSequenceState(build);
@@ -118,6 +113,14 @@ export async function pumpPathScheduler(
           unitId: first.unitId,
           unitFrame: first.unitFrame
         });
+        const credit = planWorkerSampleGroupCredit(
+          requirement,
+          {
+            pendingSamples: metrics.pendingSamples,
+            outstandingFrames: outstanding
+          },
+          input.limits
+        );
         if (
           !Number.isSafeInteger(requirement.reorderFrameCount) ||
           requirement.reorderFrameCount < 0 ||
@@ -150,8 +153,7 @@ export async function pumpPathScheduler(
         const unblocksReorderedOutput =
           reorderWaitCandidate && requirement.reorderFrameCount > 0;
         if (
-          requirement.frameCount <= outstandingCredit &&
-          requirement.chunkCount <= pendingCredit &&
+          credit.fits &&
           (fitsReorderAdjustedRing || unblocksReorderedOutput)
         ) {
           plans.push(first);

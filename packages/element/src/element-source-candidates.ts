@@ -1,3 +1,5 @@
+import { parseVideoCodecString } from "@pixel-point/aval-player-web";
+
 import { normalizeIntegrity, normalizeSource } from "./element-configuration.js";
 import type { AvalSourceCandidate } from "./public-types.js";
 
@@ -8,15 +10,6 @@ export const MAX_AVAL_SOURCE_CODEC_CODE_UNITS = 128;
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const TYPE_PREFIX = `${AVAL_SOURCE_MEDIA_TYPE}; codecs="`;
 const TYPE_SUFFIX = "\"";
-const VP9_LEVEL = "(?:10|11|20|21|30|31|40|41|50|51|52|60|61|62)";
-
-const CODEC_PATTERNS = Object.freeze([
-  /^avc1\.[0-9A-F]{6}$/u,
-  /^hvc1\.(?:[ABC])?(?:0|[1-9][0-9]*)\.(?:0|[1-9A-F][0-9A-F]*)\.[LH](?:0|[1-9][0-9]*)(?:\.(?:[0-9A-F]{2}\.){0,5}(?!00)[0-9A-F]{2})?$/u,
-  new RegExp(`^vp09\\.00\\.${VP9_LEVEL}\\.08(?:\\.01\\.01\\.01\\.01\\.00)?$`, "u"),
-  /^av01\.0\.(?:0[0-9]|[12][0-9]|3[01])[MH]\.(?:08|10)(?:\.0\.11[0-3]\.01\.01\.01\.0)?$/u
-]);
-
 export type AvalSourceAttribute = "src" | "type" | "integrity";
 
 export interface ElementSourceCandidateFailure {
@@ -72,7 +65,7 @@ export function parseAvalSourceType(value: unknown): Readonly<{
   if (
     codec.length === 0 ||
     codec.length > MAX_AVAL_SOURCE_CODEC_CODE_UNITS ||
-    !CODEC_PATTERNS.some((pattern) => pattern.test(codec))
+    parseVideoCodecString(codec) === undefined
   ) {
     throw new TypeError("source type contains an unsupported codec identifier");
   }

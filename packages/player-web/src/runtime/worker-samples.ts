@@ -45,11 +45,51 @@ export interface WorkerSampleGroupRequirement {
   readonly reorderFrameCount: number;
 }
 
+export interface WorkerSampleCreditState {
+  readonly pendingSamples: number;
+  readonly outstandingFrames: number;
+}
+
+export interface WorkerSampleGroupCreditPlan {
+  readonly chunkCost: number;
+  readonly frameCost: number;
+  readonly fits: boolean;
+}
+
 export interface CreateWorkerSampleBatchInput {
   /** One complete safe presentation group, in local-frame order. */
   readonly frames: readonly WorkerSampleFrameRequest[];
   readonly pendingSamples: number;
   readonly outstandingFrames: number;
+}
+
+/** Canonical worker-credit decision for one atomic codec-safe group. */
+export function planWorkerSampleGroupCredit(
+  requirement: Readonly<
+    Pick<WorkerSampleGroupRequirement, "chunkCount" | "frameCount">
+  >,
+  state: Readonly<WorkerSampleCreditState>,
+  limits: Readonly<DecoderWorkerLimits>
+): Readonly<WorkerSampleGroupCreditPlan> {
+  validatePositiveSafeInteger(requirement.chunkCount, "codec group chunk count");
+  validatePositiveSafeInteger(requirement.frameCount, "codec group frame count");
+  validateNonNegativeSafeInteger(state.pendingSamples, "pending sample count");
+  validateNonNegativeSafeInteger(
+    state.outstandingFrames,
+    "outstanding frame count"
+  );
+  const fits =
+    state.pendingSamples <= limits.maxPendingSamples &&
+    requirement.chunkCount <=
+      limits.maxPendingSamples - state.pendingSamples &&
+    state.outstandingFrames <= limits.maxOutstandingFrames &&
+    requirement.frameCount <=
+      limits.maxOutstandingFrames - state.outstandingFrames;
+  return Object.freeze({
+    chunkCost: requirement.chunkCount,
+    frameCost: requirement.frameCount,
+    fits
+  });
 }
 
 /** One expected displayed frame, independent of its decode-order chunk. */
@@ -639,6 +679,12 @@ function validateBatchCredit(
   frameCount: number,
   limits: Readonly<DecoderWorkerLimits>
 ): void {
+  const plan = planWorkerSampleGroupCredit(
+    { chunkCount, frameCount },
+    input,
+    limits
+  );
+  if (plan.fits) return;
   if (
     input.pendingSamples > limits.maxPendingSamples ||
     chunkCount > limits.maxPendingSamples - input.pendingSamples
@@ -651,6 +697,7 @@ function validateBatchCredit(
   ) {
     throw new RangeError("worker sample batch exceeds the outstanding frame limit");
   }
+  throw new RangeError("worker sample batch exceeds configured credit");
 }
 
 function validateFrameRequest(request: WorkerSampleFrameRequest): void {

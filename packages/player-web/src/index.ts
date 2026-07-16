@@ -12,7 +12,10 @@ export type {
   Canvas,
   CompiledManifest
 } from "@pixel-point/aval-format";
-export { IDENTIFIER_PATTERN } from "@pixel-point/aval-format";
+export {
+  IDENTIFIER_PATTERN,
+  parseVideoCodecString
+} from "@pixel-point/aval-format";
 export {
   DECODER_WORKER_PROTOCOL_VERSION,
   DECODER_WORKER_HARD_LIMITS,
@@ -110,6 +113,7 @@ export {
 export {
   RuntimeAssetCatalog,
   installRuntimeAssetCatalog,
+  type CertifiedVideoRendition,
   type RuntimeCatalogChunk,
   type RuntimeCatalogChunkIndex,
   type RuntimeCatalogIdIndex,
@@ -117,48 +121,15 @@ export {
   type RuntimeCatalogPortIndex
 } from "./runtime/asset-catalog.js";
 export {
-  assertSelectedVideoRenditionCatalogIdentity,
-  inspectSelectedVideoRendition,
-  type InspectedVideoRendition
-} from "./runtime/video-rendition-inspection.js";
-export {
-  VIDEO_CODEC_FAMILIES,
-  inspectBorrowedVideoRendition,
-  type BorrowedVideoChunkPlan,
-  type BorrowedVideoRenditionPlan,
-  type BorrowedVideoUnitPlan,
-  type BorrowVerifiedVideoRange,
-  type VideoCodecAdapterInspection,
-  type VideoCodecAdapterManifest,
-  type VideoCodecFamily,
-  type VideoCodecUnitInspection,
-  type VideoDecodeSubmissionMetadata
-} from "./runtime/video-codec-adapters.js";
-export {
-  createVideoRenditionCandidates,
-  selectVideoRendition,
-  type ExactVideoDecoderConfigProbe,
-  type VideoRenditionAttemptOutcome,
-  type VideoRenditionCandidate,
-  type VideoRenditionDecodedStorage,
-  type VideoRenditionResourceEligibility,
-  type VideoRenditionSelectionAttempt,
-  type VideoRenditionSelectionInput,
-  type VideoRenditionSelectionManifest,
-  type VideoRenditionSelectionResult
-} from "./runtime/video-rendition-selection.js";
-export {
   SourceSupportProbe,
   createSourceSupportProbe,
   type SourceSupportProbeClient,
   type SourceSupportProbeCreationOptions
 } from "./runtime/source-support-probe.js";
 export {
-  VideoSourceCandidateUnsupportedError,
   VideoSourceSelectionError,
   selectVideoSource,
   type AcceptedVideoSource,
-  type VideoSourceAcceptanceInput,
   type VideoSourceAttemptOutcome,
   type VideoSourceDescriptor,
   type VideoSourceSelectionAttempt,

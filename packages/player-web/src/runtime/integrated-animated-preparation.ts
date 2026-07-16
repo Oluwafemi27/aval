@@ -4,7 +4,10 @@ import {
   type MotionGraphSnapshot
 } from "@pixel-point/aval-graph";
 
-import type { RuntimeAssetCatalog } from "./asset-catalog.js";
+import type {
+  CertifiedVideoRendition,
+  RuntimeAssetCatalog
+} from "./asset-catalog.js";
 import {
   IntegratedPlaybackInvariantError,
   PlaybackFallbackError,
@@ -50,7 +53,6 @@ import {
   inspectSelectedVideoRendition,
   type InspectedVideoRendition
 } from "./video-rendition-inspection.js";
-import type { VideoRenditionCandidate } from "./video-rendition-selection.js";
 
 export interface IntegratedAnimatedActivationCommit {
   readonly attempt: IntegratedCandidateAttempt;
@@ -66,7 +68,7 @@ interface IntegratedAnimatedPreparationOptions {
   readonly graph: MotionGraphEngine;
   readonly staticPreparation: IntegratedStaticPreparation;
   readonly candidateFactory: IntegratedCandidateFactory;
-  readonly selectedRendition: Readonly<VideoRenditionCandidate>;
+  readonly selectedRendition: Readonly<CertifiedVideoRendition>;
   readonly availability: Readonly<IntegratedCandidateAvailability>;
   readonly hostMaxRuntimeBytes: number | null;
   readonly residency: Readonly<IntegratedCandidateResidency>;
@@ -99,7 +101,7 @@ export class IntegratedAnimatedPreparation {
   readonly #graph: MotionGraphEngine;
   readonly #staticPreparation: IntegratedStaticPreparation;
   readonly #candidateFactory: IntegratedCandidateFactory;
-  readonly #selectedRendition: Readonly<VideoRenditionCandidate>;
+  readonly #selectedRendition: Readonly<CertifiedVideoRendition>;
   readonly #availability: Readonly<IntegratedCandidateAvailability>;
   readonly #hostMaxRuntimeBytes: number | null;
   readonly #residency: Readonly<IntegratedCandidateResidency>;
@@ -185,262 +187,228 @@ export class IntegratedAnimatedPreparation {
     this.#control = control;
     const reports: RuntimeCandidateReport[] = [];
     const failures: RuntimeFailure[] = [];
-    let hasVideoRendition = false;
 
     try {
       await this.#staticPreparation.ensure(control.controller.signal);
-      const candidates = Object.freeze([this.#selectedRendition]);
-      hasVideoRendition = true;
-
-      // Source/rendition selection finished before this transaction. The
-      // exact immutable rung is the only activation candidate; preparation
-      // never re-ranks or silently falls through to another asset/rendition.
-      for (const candidate of candidates) {
-        throwIfIntegratedAborted(control.controller.signal);
-        try {
-          if (this.#residency.requiresEnsure) {
-            await raceIntegratedAbort(
-              this.#residency.ensureCandidate(
-                candidate.rendition.id,
-                control.controller.signal
-              ),
+      const candidate = this.#selectedRendition;
+      throwIfIntegratedAborted(control.controller.signal);
+      try {
+        if (this.#residency.requiresEnsure) {
+          await raceIntegratedAbort(
+            this.#residency.ensureCandidate(
+              candidate.rendition.id,
               control.controller.signal
-            );
-          }
-        } catch (error) {
-          if (control.controller.signal.aborted) {
-            this.#releaseFailedResidency(candidate.rendition.id);
-            throw integratedAbortReason(control.controller.signal);
-          }
-          const failure = normalizeIntegratedCandidateFailure(
-            error,
-            candidate.rendition.id,
-            candidate.authoredIndex
+            ),
+            control.controller.signal
           );
-          failures.push(failure);
-          reports.push(createRuntimeCandidateReport({
-            rendition: candidate.rendition.id,
-            rank: candidate.authoredIndex,
-            outcome: "rejected",
-            failure
-          }));
-          this.#reportFailure(failure);
+        }
+      } catch (error) {
+        if (control.controller.signal.aborted) {
           this.#releaseFailedResidency(candidate.rendition.id);
-          continue;
+          throw integratedAbortReason(control.controller.signal);
         }
-        let inspected: Readonly<InspectedVideoRendition>;
-        try {
-          inspected = inspectSelectedVideoRendition(this.#catalog, candidate);
-        } catch (error) {
-          const failure = normalizeIntegratedCandidateFailure(
-            error,
-            candidate.rendition.id,
-            candidate.authoredIndex
-          );
-          failures.push(failure);
-          reports.push(createRuntimeCandidateReport({
-            rendition: candidate.rendition.id,
-            rank: candidate.authoredIndex,
-            outcome: "rejected",
-            failure
-          }));
-          this.#reportFailure(failure);
-          this.#releaseFailedResidency(candidate.rendition.id);
-          continue;
-        }
-
-        let attempt: IntegratedCandidateAttempt | null = null;
-        try {
-          let activation: Readonly<IntegratedPreparedActivation>;
-          let expectedPresentation: Readonly<GraphPresentation>;
-          // Accepted graph input remains responsive while candidate media is
-          // asynchronous. Restage from the newest semantic snapshot whenever
-          // the activation prepared above is stale.
-          for (;;) {
-            attempt = this.#candidateFactory.create(Object.freeze({
-              catalog: this.#catalog,
-              candidate,
-              inspection: inspected.inspection,
-              graphSnapshot: this.#graph.snapshot(),
-              hostMaxRuntimeBytes: this.#hostMaxRuntimeBytes
-            }));
-            validateIntegratedCandidateAttempt(attempt);
-            this.#attempt = attempt;
-            await raceIntegratedAbort(
-              attempt.prepare({
-                signal: control.controller.signal,
-                deadlineMs: control.deadlineMs
-              }),
-              control.controller.signal
-            );
-            throwIfIntegratedAborted(control.controller.signal);
-
-            const activationSnapshot = this.#graph.snapshot();
-            expectedPresentation = purpose === "initial"
-              ? createIntegratedActivationPresentation(
-                  this.#catalog.graph,
-                  activationSnapshot
-                )
-              : createIntegratedResumePresentation(
-                  this.#catalog.graph,
-                  activationSnapshot
-                );
-            activation = await raceIntegratedAbort(
-              attempt.prepareActivation({
-                signal: control.controller.signal,
-                deadlineMs: control.deadlineMs,
-                graphSnapshot: activationSnapshot,
-                expectedPresentation
-              }),
-              control.controller.signal
-            );
-            validateIntegratedPreparedActivation(
-              activation,
-              expectedPresentation
-            );
-            throwIfIntegratedAborted(control.controller.signal);
-            if (sameActivationState(
-              this.#graph.snapshot(),
-              activationSnapshot
-            )) break;
-
-            await attempt.dispose();
-            if (this.#attempt === attempt) this.#attempt = null;
-            attempt = null;
-          }
-
-          reports.push(createRuntimeCandidateReport({
-            rendition: candidate.rendition.id,
-            rank: candidate.authoredIndex,
-            outcome: "selected",
-            failure: null
-          }));
-          const report = createRuntimeReadinessReport({
-            readiness: "interactiveReady",
-            selectedRendition: candidate.rendition.id,
-            candidates: reports
-          });
-          const result = Object.freeze({
-            mode: "animated" as const,
-            assurance: "best-effort" as const,
-            report
-          });
-          if (attempt === null) {
-            throw new IntegratedPlaybackInvariantError(
-              "candidate activation completed without an owned attempt"
-            );
-          }
-
-          const commit = Object.freeze({
-            attempt,
-            activation,
-            expectedPresentation,
-            renditionId: candidate.rendition.id,
-            result,
-            signal: control.controller.signal
-          });
-          const committed = purpose === "initial"
-            ? this.#commitActivation(commit)
-            : this.#commitReentryActivation(commit);
-          if (this.#attempt === attempt) this.#attempt = null;
-          return committed;
-        } catch (error) {
-          const aborted = control.controller.signal.aborted;
-          const failure = normalizeIntegratedCandidateFailure(
-            error,
-            candidate.rendition.id,
-            candidate.authoredIndex
-          );
-          if (this.#graph.snapshot().readiness === "animated") {
-            if (this.#attempt === attempt) this.#attempt = null;
-            const recovered = await this.#recoverActivation(failure);
-            this.#releaseFailedResidency(candidate.rendition.id);
-            if (aborted) throw integratedAbortReason(control.controller.signal);
-            if (recovered?.mode !== "static") {
-              throw new IntegratedPlaybackInvariantError(
-                "animated activation recovery produced no static result"
-              );
-            }
-            return recovered;
-          }
-
-          if (attempt !== null) this.#rollbackActivation(attempt);
-          let cleanupFailure: Readonly<RuntimeFailure> | null = null;
-          let attemptRetired = attempt === null;
-          if (attempt !== null) {
-            try {
-              await attempt.dispose();
-              attemptRetired = true;
-            } catch (disposeError) {
-              cleanupFailure = normalizeRuntimeFailure(
-                "readiness-failure",
-                disposeError,
-                {
-                  rendition: candidate.rendition.id,
-                  rank: candidate.authoredIndex,
-                  operation: "candidate-cleanup"
-                }
-              );
-              this.#reportFailure(cleanupFailure);
-              if (!aborted) failures.push(cleanupFailure);
-            }
-          }
-          if (this.#attempt === attempt) this.#attempt = null;
-          if (attemptRetired) {
-            this.#releaseFailedResidency(candidate.rendition.id);
-          }
-          if (aborted) throw integratedAbortReason(control.controller.signal);
-          failures.push(failure);
-          reports.push(createRuntimeCandidateReport({
-            rendition: candidate.rendition.id,
-            rank: candidate.authoredIndex,
-            outcome: "rejected",
-            failure
-          }));
-          this.#reportFailure(failure);
-          if (cleanupFailure !== null) {
-            throw new RuntimePlaybackError(cleanupFailure);
-          }
-          if (isDecoderQueuedFailure(failure)) {
-            if (purpose === "reentry") {
-              return createReentryFailureResult("decoder-queued", reports);
-            }
-            return await this.#staticPreparation.finish(
-              "decoder-queued",
-              reports,
-              control.controller.signal
-            );
-          }
-        }
-      }
-
-      if (purpose === "reentry") {
-        return createReentryFailureResult(
-          summarizeStaticReason({
-            phase: "preparation",
-            staticReady: this.#staticPreparation.staticReady,
-            deadlineExpired: false,
-            hasVideoRendition: hasVideoRendition,
-            workerAvailable: this.#availability.workerAvailable,
-            rendererAvailable: this.#availability.rendererAvailable,
-            candidateFailures: failures
-          }) ?? "readiness-failed",
-          reports
+        const failure = normalizeIntegratedCandidateFailure(
+          error,
+          candidate.rendition.id,
+          candidate.authoredIndex
+        );
+        failures.push(failure);
+        reports.push(rejectedCandidateReport(candidate, failure));
+        this.#reportFailure(failure);
+        this.#releaseFailedResidency(candidate.rendition.id);
+        return await this.#finishRejected(
+          purpose,
+          reports,
+          failures,
+          control.controller.signal
         );
       }
-      return await this.#staticPreparation.finish(
-        summarizeStaticReason({
-          phase: "preparation",
-          staticReady: this.#staticPreparation.staticReady,
-          deadlineExpired: false,
-          hasVideoRendition: hasVideoRendition,
-          workerAvailable: this.#availability.workerAvailable,
-          rendererAvailable: this.#availability.rendererAvailable,
-          candidateFailures: failures
-        }) ?? "readiness-failed",
-        reports,
-        control.controller.signal
-      );
+
+      let inspected: Readonly<InspectedVideoRendition>;
+      try {
+        inspected = inspectSelectedVideoRendition(this.#catalog, candidate);
+      } catch (error) {
+        const failure = normalizeIntegratedCandidateFailure(
+          error,
+          candidate.rendition.id,
+          candidate.authoredIndex
+        );
+        failures.push(failure);
+        reports.push(rejectedCandidateReport(candidate, failure));
+        this.#reportFailure(failure);
+        this.#releaseFailedResidency(candidate.rendition.id);
+        return await this.#finishRejected(
+          purpose,
+          reports,
+          failures,
+          control.controller.signal
+        );
+      }
+
+      let attempt: IntegratedCandidateAttempt | null = null;
+      try {
+        let activation: Readonly<IntegratedPreparedActivation>;
+        let expectedPresentation: Readonly<GraphPresentation>;
+        // Accepted graph input remains responsive while candidate media is
+        // asynchronous. Restage from the newest semantic snapshot whenever
+        // the activation prepared above is stale.
+        for (;;) {
+          attempt = this.#candidateFactory.create(Object.freeze({
+            catalog: this.#catalog,
+            candidate,
+            inspection: inspected.inspection,
+            graphSnapshot: this.#graph.snapshot(),
+            hostMaxRuntimeBytes: this.#hostMaxRuntimeBytes
+          }));
+          validateIntegratedCandidateAttempt(attempt);
+          this.#attempt = attempt;
+          await raceIntegratedAbort(
+            attempt.prepare({
+              signal: control.controller.signal,
+              deadlineMs: control.deadlineMs
+            }),
+            control.controller.signal
+          );
+          throwIfIntegratedAborted(control.controller.signal);
+
+          const activationSnapshot = this.#graph.snapshot();
+          expectedPresentation = purpose === "initial"
+            ? createIntegratedActivationPresentation(
+                this.#catalog.graph,
+                activationSnapshot
+              )
+            : createIntegratedResumePresentation(
+                this.#catalog.graph,
+                activationSnapshot
+              );
+          activation = await raceIntegratedAbort(
+            attempt.prepareActivation({
+              signal: control.controller.signal,
+              deadlineMs: control.deadlineMs,
+              graphSnapshot: activationSnapshot,
+              expectedPresentation
+            }),
+            control.controller.signal
+          );
+          validateIntegratedPreparedActivation(
+            activation,
+            expectedPresentation
+          );
+          throwIfIntegratedAborted(control.controller.signal);
+          if (sameActivationState(
+            this.#graph.snapshot(),
+            activationSnapshot
+          )) break;
+
+          await attempt.dispose();
+          if (this.#attempt === attempt) this.#attempt = null;
+          attempt = null;
+        }
+
+        reports.push(createRuntimeCandidateReport({
+          rendition: candidate.rendition.id,
+          rank: candidate.authoredIndex,
+          outcome: "selected",
+          failure: null
+        }));
+        const report = createRuntimeReadinessReport({
+          readiness: "interactiveReady",
+          selectedRendition: candidate.rendition.id,
+          candidates: reports
+        });
+        const result = Object.freeze({
+          mode: "animated" as const,
+          assurance: "best-effort" as const,
+          report
+        });
+        if (attempt === null) {
+          throw new IntegratedPlaybackInvariantError(
+            "candidate activation completed without an owned attempt"
+          );
+        }
+
+        const commit = Object.freeze({
+          attempt,
+          activation,
+          expectedPresentation,
+          renditionId: candidate.rendition.id,
+          result,
+          signal: control.controller.signal
+        });
+        const committed = purpose === "initial"
+          ? this.#commitActivation(commit)
+          : this.#commitReentryActivation(commit);
+        if (this.#attempt === attempt) this.#attempt = null;
+        return committed;
+      } catch (error) {
+        const aborted = control.controller.signal.aborted;
+        const failure = normalizeIntegratedCandidateFailure(
+          error,
+          candidate.rendition.id,
+          candidate.authoredIndex
+        );
+        if (this.#graph.snapshot().readiness === "animated") {
+          if (this.#attempt === attempt) this.#attempt = null;
+          const recovered = await this.#recoverActivation(failure);
+          this.#releaseFailedResidency(candidate.rendition.id);
+          if (aborted) throw integratedAbortReason(control.controller.signal);
+          if (recovered?.mode !== "static") {
+            throw new IntegratedPlaybackInvariantError(
+              "animated activation recovery produced no static result"
+            );
+          }
+          return recovered;
+        }
+
+        if (attempt !== null) this.#rollbackActivation(attempt);
+        let cleanupFailure: Readonly<RuntimeFailure> | null = null;
+        let attemptRetired = attempt === null;
+        if (attempt !== null) {
+          try {
+            await attempt.dispose();
+            attemptRetired = true;
+          } catch (disposeError) {
+            cleanupFailure = normalizeRuntimeFailure(
+              "readiness-failure",
+              disposeError,
+              {
+                rendition: candidate.rendition.id,
+                rank: candidate.authoredIndex,
+                operation: "candidate-cleanup"
+              }
+            );
+            this.#reportFailure(cleanupFailure);
+            if (!aborted) failures.push(cleanupFailure);
+          }
+        }
+        if (this.#attempt === attempt) this.#attempt = null;
+        if (attemptRetired) {
+          this.#releaseFailedResidency(candidate.rendition.id);
+        }
+        if (aborted) throw integratedAbortReason(control.controller.signal);
+        failures.push(failure);
+        reports.push(rejectedCandidateReport(candidate, failure));
+        this.#reportFailure(failure);
+        if (cleanupFailure !== null) {
+          throw new RuntimePlaybackError(cleanupFailure);
+        }
+        if (isDecoderQueuedFailure(failure)) {
+          if (purpose === "reentry") {
+            return createReentryFailureResult("decoder-queued", reports);
+          }
+          return await this.#staticPreparation.finish(
+            "decoder-queued",
+            reports,
+            control.controller.signal
+          );
+        }
+        return await this.#finishRejected(
+          purpose,
+          reports,
+          failures,
+          control.controller.signal
+        );
+      }
     } catch (error) {
       if (this.#isDisposed()) throw integratedDisposedError();
       if (this.#graph.snapshot().readiness === "error") throw error;
@@ -497,6 +465,26 @@ export class IntegratedAnimatedPreparation {
     }
   }
 
+  async #finishRejected(
+    purpose: "initial" | "reentry",
+    reports: readonly Readonly<RuntimeCandidateReport>[],
+    failures: readonly Readonly<RuntimeFailure>[],
+    signal: AbortSignal
+  ): Promise<Readonly<RuntimeReadinessResult>> {
+    const reason = summarizeStaticReason({
+      phase: "preparation",
+      staticReady: this.#staticPreparation.staticReady,
+      deadlineExpired: false,
+      hasVideoRendition: true,
+      workerAvailable: this.#availability.workerAvailable,
+      rendererAvailable: this.#availability.rendererAvailable,
+      candidateFailures: failures
+    }) ?? "readiness-failed";
+    return purpose === "reentry"
+      ? createReentryFailureResult(reason, reports)
+      : this.#staticPreparation.finish(reason, reports, signal);
+  }
+
   #releaseFailedResidency(rendition: string): void {
     try {
       this.#residency.releaseFailedCandidate(rendition);
@@ -522,6 +510,18 @@ function createReentryFailureResult(
       selectedRendition: null,
       candidates: reports
     })
+  });
+}
+
+function rejectedCandidateReport(
+  candidate: Readonly<CertifiedVideoRendition>,
+  failure: Readonly<RuntimeFailure>
+): Readonly<RuntimeCandidateReport> {
+  return createRuntimeCandidateReport({
+    rendition: candidate.rendition.id,
+    rank: candidate.authoredIndex,
+    outcome: "rejected",
+    failure
   });
 }
 

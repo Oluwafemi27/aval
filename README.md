@@ -128,8 +128,9 @@ npm run build
 npm run test:browser:reference
 ```
 
-Browser animation is capability-probed. Unsupported WebCodecs/WebGL/AVC
-configurations leave the element's optional host-owned fallback slot visible.
+Browser animation is capability-probed in authored source order. Unsupported
+codec candidates fall through to the next `<source>`; when none can run, the
+element keeps its optional host-owned fallback slot visible.
 
 ## TODO
 

@@ -5,6 +5,24 @@ import { StatusMotion } from "./StatusMotion.js";
 import "./styles.css";
 
 const STATES = ["idle", "loading", "done"] as const;
+const SOURCES = Object.freeze([
+  Object.freeze({
+    src: "/status/av1.avl",
+    type: 'application/vnd.aval; codecs="av01.0.00M.10.0.110.01.01.01.0"'
+  }),
+  Object.freeze({
+    src: "/status/vp9.avl",
+    type: 'application/vnd.aval; codecs="vp09.00.10.08.01.01.01.01.00"'
+  }),
+  Object.freeze({
+    src: "/status/h265.avl",
+    type: 'application/vnd.aval; codecs="hvc1.1.6.L30.90"'
+  }),
+  Object.freeze({
+    src: "/status/h264.avl",
+    type: 'application/vnd.aval; codecs="avc1.64000A"'
+  })
+]);
 
 function App() {
   const [requestedState, setRequestedState] = useState<string>("idle");
@@ -20,11 +38,11 @@ function App() {
     <main>
       <h1>AVAL React ref example</h1>
       <p>
-        Replace <code>public/status.avl</code> with an asset that defines the
-        states used by these controls.
+        Replace <code>public/status/</code> with a codec bundle that defines
+        the states used by these controls.
       </p>
       <StatusMotion
-        src="/status.avl"
+        sources={SOURCES}
         state={requestedState}
         onVisualState={handleVisualState}
         onError={handleError}

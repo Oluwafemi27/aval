@@ -1,6 +1,7 @@
 import {
   isVideoCodecString,
   PACKED_ALPHA_GUTTER,
+  VIDEO_CODECS,
   type AlphaLayout,
   type Rect,
   type VideoBitDepth,
@@ -112,7 +113,7 @@ export function evaluateDecoderThroughputLedger(input: unknown, expected?: Reado
   const renditionInput = exactRecord(root.selectedRendition, EXACT_KEYS.rendition, "$throughput.selectedRendition");
   const codecFamily = enumeration(
     renditionInput.codecFamily,
-    ["h264", "h265", "vp9", "av1"] as const,
+    VIDEO_CODECS,
     "$throughput.selectedRendition.codecFamily"
   );
   const bitDepth = supportedBitDepth(

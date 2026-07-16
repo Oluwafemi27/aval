@@ -1,4 +1,7 @@
-import { serializeCanonicalJson } from "@pixel-point/aval-format";
+import {
+  parseCompileBundleReport,
+  serializeCanonicalJson
+} from "@pixel-point/aval-format";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -72,6 +75,22 @@ describe("compile bundle report", () => {
     expect(Object.isFrozen(built.report.invocations[0]?.arguments)).toBe(true);
     expect(Object.isFrozen(built.report.toolchain.ffmpeg.executableIdentity))
       .toBe(true);
+  });
+
+  it("round-trips every compiler-valid report field through the format parser", () => {
+    const input = reportInput();
+    input.invocations[0]!.arguments = ["", "x".repeat(17 * 1024)];
+    input.warnings = ["w".repeat(5 * 1024)];
+    const built = buildCompileBundleReport(input);
+
+    const parsed = parseCompileBundleReport(
+      JSON.parse(new TextDecoder().decode(built.bytes))
+    );
+
+    expect(parsed).toEqual(built.report);
+    expect(parsed.invocations[0]?.arguments[0]).toBe("");
+    expect(parsed.invocations[0]?.arguments[1]).toHaveLength(17 * 1024);
+    expect(parsed.warnings[0]).toHaveLength(5 * 1024);
   });
 
   it("omits executable, configuration, source, and unknown local paths", () => {

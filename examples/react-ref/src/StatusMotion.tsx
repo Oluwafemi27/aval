@@ -8,14 +8,19 @@ import {
 
 export interface StatusMotionProps {
   readonly state: string;
-  readonly src: string;
+  readonly sources: readonly Readonly<StatusMotionSource>[];
   readonly onError?: (failure: Readonly<AvalErrorDetail>) => void;
   readonly onVisualState?: (state: string | null) => void;
 }
 
+export interface StatusMotionSource {
+  readonly src: string;
+  readonly type: string;
+}
+
 export function StatusMotion({
   state,
-  src,
+  sources,
   onError,
   onVisualState
 }: StatusMotionProps) {
@@ -45,12 +50,14 @@ export function StatusMotion({
   return (
     <aval-player
       ref={motion}
-      src={src}
       state={state}
       width={160}
       height={160}
       aria-hidden="true"
     >
+      {sources.map((source) => (
+        <source key={`${source.src}:${source.type}`} {...source} />
+      ))}
       <span slot="fallback" className="motion-fallback" aria-hidden="true">
         {state}
       </span>

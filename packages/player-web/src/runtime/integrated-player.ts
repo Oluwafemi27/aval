@@ -1,6 +1,12 @@
 import { MotionGraphEngine, type MotionGraphResult } from "@pixel-point/aval-graph";
-import { RuntimeAssetCatalog } from "./asset-catalog.js";
-import { IntegratedPlayerAssetBinding } from "./integrated-player-asset-session.js";
+import {
+  RuntimeAssetCatalog,
+  type CertifiedVideoRendition
+} from "./asset-catalog.js";
+import {
+  IntegratedPlayerAssetBinding,
+  type CapturedIntegratedPlayerAssetSource
+} from "./integrated-player-asset-session.js";
 import { IntegratedPlayerParticipantController } from "./integrated-player-participant-controller.js";
 import { IntegratedPlayerDecoderReentry } from "./integrated-player-decoder-reentry.js";
 import type { IntegratedPlayerParticipantSnapshot } from "./integrated-player-participant.js";
@@ -94,7 +100,6 @@ export class IntegratedPlayer {
     // ownership so a hostile or time-varying getter cannot strand them.
     const createFallbackStore = options.createFallbackStore;
     const candidateFactory = options.candidateFactory;
-    const selectedRendition = options.selectedRendition;
     const candidateAvailability = candidateFactory.availability;
     const contextTarget = candidateFactory.contextTarget;
     const availability = Object.freeze({
@@ -130,6 +135,10 @@ export class IntegratedPlayer {
     let contextCandidate: IntegratedPlayerContextBinding | null = null;
     let participantCandidate: IntegratedPlayerParticipantController | null = null;
     try {
+      const selectedRendition = resolveSelectedRendition(
+        this.#catalog,
+        assetSource
+      );
       assertSelectedVideoRenditionCatalogIdentity(
         this.#catalog,
         selectedRendition
@@ -1033,4 +1042,16 @@ export class IntegratedPlayer {
     }
   }
 
+}
+
+function resolveSelectedRendition(
+  catalog: RuntimeAssetCatalog,
+  source: Readonly<CapturedIntegratedPlayerAssetSource>
+): Readonly<CertifiedVideoRendition> {
+  if (source.kind === "session") return source.selectedRendition;
+  const selected = catalog.videoRenditions[source.selectedRenditionIndex];
+  if (selected === undefined) {
+    throw new RangeError("selectedRenditionIndex is unavailable in the asset catalog");
+  }
+  return selected;
 }

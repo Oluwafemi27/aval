@@ -26,6 +26,13 @@ const policy = JSON.parse(await readFile(
 ));
 const releaseVersion = policy.releaseVersion;
 const expectedPackages = ["compiler", "element", "format", "graph", "player-web"];
+const expectedCodecs = Object.freeze(["av1", "vp9", "h265", "h264"]);
+const expectedCodecPrefixes = Object.freeze({
+  av1: "av01.",
+  vp9: "vp09.",
+  h265: "hvc1.",
+  h264: "avc1."
+});
 const archives = (await readdir(packageDirectory))
   .filter((name) => name.endsWith(".tgz"))
   .sort()
@@ -43,6 +50,7 @@ let viteServer;
 
 try {
   await cp(resolve(root, "fixtures/starter/v1-idle-hover"), project, { recursive: true });
+  await removeHarnessProvidedViteDependency(project);
   run(
     process.platform === "win32" ? "npm.cmd" : "npm",
     [
@@ -74,7 +82,7 @@ try {
     "dev",
     "motion.json",
     "--out",
-    "starter.avl",
+    "motion",
     "--port",
     "0",
     "--force",
@@ -129,7 +137,9 @@ try {
       sourcemap: false
     }
   });
-  await cp(join(project, "starter.avl"), join(project, "dist", "starter.avl"));
+  await cp(join(project, "motion"), join(project, "dist", "motion"), {
+    recursive: true
+  });
   const builtStarter = await readTextTree(join(project, "dist"));
   assert(builtStarter.includes("aval-player"), "generated starter web build omitted the element");
   assertNoFilesystemLeak(builtStarter, [root, project]);
@@ -153,6 +163,10 @@ try {
   const starterSnapshot = await publicSnapshot(starterPage);
   assert(starterSnapshot.stateNames.includes("idle"), "generated starter omitted its idle state");
   assert(starterSnapshot.stateNames.includes("engaged"), "generated starter omitted its engaged state");
+  assert(
+    hasStaticBundleSources(starterSnapshot),
+    "generated starter did not install the ordered codec bundle sources"
+  );
   assert(starterSnapshot.videoCount === 0, "generated starter created a video element");
   await starterPage.locator("#favorite").hover();
   await starterPage.waitForFunction(() =>
@@ -196,7 +210,10 @@ try {
   assert(initialSnapshot.readiness === "interactiveReady", "capable pinned Chromium did not reach interactive readiness");
   assert(initialSnapshot.stateNames.includes("idle"), "packed element omitted the author-defined idle state");
   assert(initialSnapshot.stateNames.includes("engaged"), "packed element omitted the author-defined engaged state");
-  assert(initialSnapshot.src.includes(`v=${String(firstBuild.sequence)}`), "initial build did not install a generation URL");
+  assert(
+    snapshotUsesGeneration(initialSnapshot, firstBuild.sequence),
+    "initial build did not install generation URLs for every codec source"
+  );
   assert(initialSnapshot.videoCount === 0, "packed dev playground created a video element");
 
   await page.locator("#interaction").hover();
@@ -217,20 +234,20 @@ try {
     isBuildEvent(value) && value.sequence > firstBuild.sequence,
   120_000);
   verifyBuildEvent(secondBuild);
-  assert(secondBuild.sha256 !== firstBuild.sha256, "valid project replacement retained the old asset digest");
+  verifyReplacementDigests(firstBuild, secondBuild);
   await waitForReady(page, secondBuild.sequence);
   const replacementSnapshot = await publicSnapshot(page);
   assert(
-    replacementSnapshot.src.includes(`v=${String(secondBuild.sequence)}`),
-    "watch rebuild did not replace the public element source"
+    snapshotUsesGeneration(replacementSnapshot, secondBuild.sequence),
+    "watch rebuild did not replace every public element source"
   );
   assert(
     replacementSnapshot.sourceGeneration > initialSnapshot.sourceGeneration,
     "watch rebuild did not advance the element source generation"
   );
-  await verifyAsset(devUrl, secondBuild);
-  const report = await checkedJson(new URL("report.json", devUrl));
-  assert(report.generation === secondBuild.sequence, "report endpoint retained a stale generation");
+  await verifyAssets(devUrl, secondBuild);
+  const report = await checkedJson(new URL("build.json", devUrl));
+  verifyBuildReport(report, secondBuild);
 
   await browserFailures.assertWorkerExecuted();
   await devContext.close();
@@ -274,6 +291,16 @@ function option(name) {
   const value = process.argv[index + 1];
   if (value === undefined || value.startsWith("--")) throw new Error(`${name} requires a value`);
   return value;
+}
+
+async function removeHarnessProvidedViteDependency(projectRoot) {
+  const manifestPath = join(projectRoot, "package.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const viteVersion = manifest.devDependencies?.vite;
+  assert(typeof viteVersion === "string", "packed-dev fixture omitted its Vite version");
+  const devDependencies = { ...manifest.devDependencies };
+  delete devDependencies.vite;
+  await writeFile(manifestPath, `${JSON.stringify({ ...manifest, devDependencies })}\n`);
 }
 
 async function verifyInstalledGraph(projectRoot, version) {
@@ -325,28 +352,36 @@ async function verifyHttpSurface(url, build, forbiddenPaths) {
   assert(unscoped.status === 404, `unscoped dev origin unexpectedly returned ${unscoped.status}`);
   assertNoFilesystemLeak(`${pageText}\n${clientText}\n${moduleText}\n${workerText}`, forbiddenPaths);
   assert(clientText.includes('/modules/element/auto.js'), "dev client did not use the public auto entry");
-  await verifyAsset(url, build);
-  return Object.freeze({ pageText, clientText, moduleText, workerText });
+  await verifyAssets(url, build);
+  const compilerReport = await checkedJson(new URL("build.json", url));
+  verifyBuildReport(compilerReport, build);
+  return Object.freeze({ pageText, clientText, moduleText, workerText, compilerReport });
 }
 
-async function verifyAsset(url, build) {
-  const assetUrl = new URL("asset.avl", url);
+async function verifyAssets(url, build) {
+  for (const asset of build.assets) await verifyAsset(url, asset);
+}
+
+async function verifyAsset(url, asset) {
+  const assetUrl = new URL(`${asset.codec}.avl`, url);
   const range = await checkedFetch(assetUrl, {
     headers: { Range: "bytes=0-31" }
   });
-  assert(range.status === 206, `asset range returned ${range.status}`);
-  assert(range.headers.get("content-range") === `bytes 0-31/${String(build.bytes)}`, "asset range boundary was not exact");
-  assert(range.headers.get("content-encoding") === "identity", "asset range was not identity encoded");
-  assert(range.headers.get("etag") === `"aval-${build.sha256}"`, "asset ETag did not match its publication");
-  assert((await range.arrayBuffer()).byteLength === 32, "asset range body length was not exact");
+  assert(range.status === 206, `${asset.codec} asset range returned ${range.status}`);
+  assert(range.headers.get("content-type") === asset.type, `${asset.codec} asset range type did not match its publication`);
+  assert(range.headers.get("content-range") === `bytes 0-31/${String(asset.bytes)}`, `${asset.codec} asset range boundary was not exact`);
+  assert(range.headers.get("content-encoding") === "identity", `${asset.codec} asset range was not identity encoded`);
+  assert(range.headers.get("etag") === `"aval-${asset.sha256}"`, `${asset.codec} asset ETag did not match its publication`);
+  assert((await range.arrayBuffer()).byteLength === 32, `${asset.codec} asset range body length was not exact`);
 
   const full = await checkedFetch(assetUrl, {
     headers: { Range: "bytes=0-31", "If-Range": '"stale-entity"' }
   });
-  assert(full.status === 200, `mismatched If-Range returned ${full.status}`);
+  assert(full.status === 200, `${asset.codec} mismatched If-Range returned ${full.status}`);
+  assert(full.headers.get("content-type") === asset.type, `${asset.codec} full asset type did not match its publication`);
   const bytes = Buffer.from(await full.arrayBuffer());
-  assert(bytes.byteLength === build.bytes, "full asset byte length did not match its publication");
-  assert(createHash("sha256").update(bytes).digest("hex") === build.sha256, "full asset digest did not match its publication");
+  assert(bytes.byteLength === asset.bytes, `${asset.codec} full asset byte length did not match its publication`);
+  assert(createHash("sha256").update(bytes).digest("hex") === asset.sha256, `${asset.codec} full asset digest did not match its publication`);
 }
 
 function monitorBrowser(page, baseUrl, forbiddenPaths = []) {
@@ -436,14 +471,20 @@ async function assertPinnedChromiumCapabilities(page) {
 }
 
 async function waitForReady(page, sequence) {
-  await page.waitForFunction((expected) => {
+  await page.waitForFunction(({ sequence: expected, sourceCount }) => {
     const motion = document.querySelector("aval-player");
     const status = document.querySelector("#status")?.textContent ?? "";
+    const sources = motion === null
+      ? []
+      : [...motion.querySelectorAll(":scope > source")];
     return motion !== null &&
       motion.readiness === "interactiveReady" &&
-      motion.src.includes(`v=${String(expected)}`) &&
+      sources.length === sourceCount &&
+      sources.every((source) =>
+        (source.getAttribute("src") ?? "").includes(`#v=${String(expected)}`)
+      ) &&
       status.includes(`Build ${String(expected)}`);
-  }, sequence, { timeout: 30_000 });
+  }, { sequence, sourceCount: expectedCodecs.length }, { timeout: 30_000 });
 }
 
 async function waitForElementReady(page, expectedReadiness) {
@@ -467,10 +508,13 @@ async function waitForElementReady(page, expectedReadiness) {
     const network = await page.evaluate(async () => {
       const motion = document.querySelector("aval-player");
       if (motion === null) return [];
-      const probe = async (headers) => {
-        const response = await fetch(motion.src, { cache: "no-store", headers });
+      const sources = [...motion.querySelectorAll(":scope > source[src]")];
+      const probe = async (source, headers) => {
+        const response = await fetch(source.src, { cache: "no-store", headers });
         const bytes = (await response.arrayBuffer()).byteLength;
         return {
+          source: source.src,
+          sourceType: source.getAttribute("type"),
           requestHeaders: headers,
           status: response.status,
           type: response.type,
@@ -482,7 +526,10 @@ async function waitForElementReady(page, expectedReadiness) {
           bytes
         };
       };
-      return [await probe({ Range: "bytes=0-63" }), await probe({})];
+      return Promise.all(sources.flatMap((source) => [
+        probe(source, { Range: "bytes=0-63" }),
+        probe(source, {})
+      ]));
     }).catch((networkError) => ({ networkError: String(networkError) }));
     throw new Error(
       `packed element did not reach ${expectedReadiness}: ${JSON.stringify({ evidence, network })}`,
@@ -499,20 +546,24 @@ async function publicSnapshot(page) {
     const animatedCanvas = motion.shadowRoot?.querySelector('canvas[data-aval-layer="animated"]');
     const fallbackSlot = motion.shadowRoot?.querySelector('slot[data-aval-layer="fallback"]');
     return ({
-    readiness: motion.readiness,
-    staticReason: motion.staticReason,
-    requestedState: motion.requestedState,
-    visualState: motion.visualState,
-    stateNames: [...motion.stateNames],
-    src: motion.src,
-    sourceGeneration: motion.getDiagnostics().sourceGeneration,
-    videoCount: document.querySelectorAll("video").length,
-    fallbackVisible: fallback !== null && fallbackStyle?.display !== "none" && fallbackStyle?.visibility !== "hidden" && fallback.getBoundingClientRect().width > 0 && fallback.getBoundingClientRect().height > 0,
-    fallbackImageLoaded: fallbackImage === null || (fallbackImage.complete && fallbackImage.naturalWidth > 0),
-    fallbackAuthorOwned: fallback !== null && fallback.parentElement === motion,
-    canvasCount: motion.shadowRoot?.querySelectorAll("canvas").length ?? 0,
-    animatedCanvasHidden: animatedCanvas instanceof HTMLCanvasElement && animatedCanvas.hidden,
-    fallbackSlotHidden: fallbackSlot instanceof HTMLSlotElement && fallbackSlot.hidden
+      readiness: motion.readiness,
+      staticReason: motion.staticReason,
+      requestedState: motion.requestedState,
+      visualState: motion.visualState,
+      stateNames: [...motion.stateNames],
+      sources: [...motion.querySelectorAll(":scope > source")].map((source) => ({
+        src: source.getAttribute("src") ?? "",
+        type: source.getAttribute("type") ?? "",
+        integrity: source.getAttribute("integrity") ?? ""
+      })),
+      sourceGeneration: motion.getDiagnostics().sourceGeneration,
+      videoCount: document.querySelectorAll("video").length,
+      fallbackVisible: fallback !== null && fallbackStyle?.display !== "none" && fallbackStyle?.visibility !== "hidden" && fallback.getBoundingClientRect().width > 0 && fallback.getBoundingClientRect().height > 0,
+      fallbackImageLoaded: fallbackImage === null || (fallbackImage.complete && fallbackImage.naturalWidth > 0),
+      fallbackAuthorOwned: fallback !== null && fallback.parentElement === motion,
+      canvasCount: motion.shadowRoot?.querySelectorAll("canvas").length ?? 0,
+      animatedCanvasHidden: animatedCanvas instanceof HTMLCanvasElement && animatedCanvas.hidden,
+      fallbackSlotHidden: fallbackSlot instanceof HTMLSlotElement && fallbackSlot.hidden
     });
   });
 }
@@ -523,8 +574,94 @@ function isBuildEvent(value) {
 
 function verifyBuildEvent(value) {
   assert(value.sequence >= 1, "dev build sequence was invalid");
-  assert(Number.isSafeInteger(value.bytes) && value.bytes > 32, "dev build byte count was invalid");
-  assert(/^[0-9a-f]{64}$/u.test(value.sha256), "dev build digest was invalid");
+  assert(typeof value.outputPath === "string" && value.outputPath.length > 0, "dev build output path was invalid");
+  assert(value.reportPath === join(value.outputPath, "build.json"), "dev build report path was invalid");
+  assert(Array.isArray(value.assets) && value.assets.length === expectedCodecs.length, "dev build did not publish exactly four codec assets");
+  assert(
+    Array.isArray(value.warnings) && value.warnings.every((warning) => typeof warning === "string"),
+    "dev build warnings were invalid"
+  );
+  const codecs = new Set();
+  for (let index = 0; index < expectedCodecs.length; index += 1) {
+    const expectedCodec = expectedCodecs[index];
+    const asset = value.assets[index];
+    assert(asset !== null && typeof asset === "object", `dev build ${expectedCodec} asset was invalid`);
+    assert(asset.codec === expectedCodec, `dev build codec order drifted at ${String(index)}`);
+    assert(!codecs.has(asset.codec), `dev build repeated the ${expectedCodec} codec`);
+    codecs.add(asset.codec);
+    assert(asset.path === join(value.outputPath, `${expectedCodec}.avl`), `dev build ${expectedCodec} path was invalid`);
+    assert(Number.isSafeInteger(asset.bytes) && asset.bytes > 32, `dev build ${expectedCodec} byte count was invalid`);
+    assert(/^[0-9a-f]{64}$/u.test(asset.sha256), `dev build ${expectedCodec} digest was invalid`);
+    assert(hasCodecSourceMetadata(asset, expectedCodec), `dev build ${expectedCodec} source metadata was invalid`);
+    assert(asset.integrity === integrityForSha256(asset.sha256), `dev build ${expectedCodec} integrity did not match its digest`);
+  }
+}
+
+function verifyBuildReport(report, build) {
+  assert(report !== null && typeof report === "object", "served build report was invalid");
+  assert(report.reportVersion === "1.0", "served build report version was invalid");
+  assert(Array.isArray(report.assets) && report.assets.length === build.assets.length, "served build report asset count was invalid");
+  assert(Array.isArray(report.encodings) && report.encodings.length === build.assets.length, "served build report encoding count was invalid");
+  assert(
+    Array.isArray(report.warnings) && JSON.stringify(report.warnings) === JSON.stringify(build.warnings),
+    "served build report warnings did not match the build event"
+  );
+  for (let index = 0; index < build.assets.length; index += 1) {
+    const published = build.assets[index];
+    const reported = report.assets[index];
+    assert(reported?.codec === published.codec, `served build report codec order drifted at ${String(index)}`);
+    assert(reported.path === `${published.codec}.avl`, `served build report ${published.codec} path was invalid`);
+    assert(reported.bytes === published.bytes, `served build report ${published.codec} byte count drifted`);
+    assert(reported.sha256 === published.sha256, `served build report ${published.codec} digest drifted`);
+    assert(reported.type === published.type, `served build report ${published.codec} type drifted`);
+    assert(reported.integrity === published.integrity, `served build report ${published.codec} integrity drifted`);
+    assert(report.encodings[index]?.codec === published.codec, `served build report ${published.codec} encoding order drifted`);
+  }
+  const sourceMarkup = report.assets.map((asset) =>
+    `<source src="${asset.path}" type='${asset.type}' integrity="${asset.integrity}">`
+  ).join("\n");
+  assert(report.sourceMarkup === sourceMarkup, "served build report source markup was not canonical");
+}
+
+function verifyReplacementDigests(firstBuild, secondBuild) {
+  assert(firstBuild.assets.length === secondBuild.assets.length, "watch rebuild changed the codec asset count");
+  for (let index = 0; index < firstBuild.assets.length; index += 1) {
+    const first = firstBuild.assets[index];
+    const second = secondBuild.assets[index];
+    assert(second.codec === first.codec, `watch rebuild codec order drifted at ${String(index)}`);
+    assert(second.sha256 !== first.sha256, `watch rebuild retained the old ${first.codec} asset digest`);
+  }
+}
+
+function snapshotUsesGeneration(snapshot, sequence) {
+  return Array.isArray(snapshot.sources) &&
+    snapshot.sources.length === expectedCodecs.length &&
+    snapshot.sources.every((source, index) => {
+      const codec = expectedCodecs[index];
+      return source.src.endsWith(`${codec}.avl#v=${String(sequence)}`) &&
+        hasCodecSourceMetadata(source, codec);
+    });
+}
+
+function hasStaticBundleSources(snapshot) {
+  return Array.isArray(snapshot.sources) &&
+    snapshot.sources.length === expectedCodecs.length &&
+    snapshot.sources.every((source, index) => {
+      const codec = expectedCodecs[index];
+      return source.src === `./motion/${codec}.avl` &&
+        hasCodecSourceMetadata(source, codec);
+    });
+}
+
+function hasCodecSourceMetadata(source, codec) {
+  if (typeof source?.type !== "string" || typeof source.integrity !== "string") return false;
+  const codecString = /^application\/vnd\.aval; codecs="([^"]+)"$/u.exec(source.type)?.[1];
+  return codecString?.startsWith(expectedCodecPrefixes[codec]) === true &&
+    /^sha256-[A-Za-z0-9+/]{43}=$/u.test(source.integrity);
+}
+
+function integrityForSha256(value) {
+  return `sha256-${Buffer.from(value, "hex").toString("base64")}`;
 }
 
 function createJsonLineCollector(stream, label) {

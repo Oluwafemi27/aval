@@ -3,12 +3,12 @@ import type {
   ProductionRendition,
   VideoCodec
 } from "@pixel-point/aval-format";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { SourceSupportProbe } from "./source-support-probe.js";
+import { certifyVideoRenditions } from "./video-rendition-certification.js";
 import {
   selectVideoSource,
-  VideoSourceCandidateUnsupportedError,
   VideoSourceSelectionError,
   type VideoSourceDescriptor,
   type VideoSourceSession
@@ -31,17 +31,12 @@ interface Candidate extends VideoSourceDescriptor {
   readonly id: string;
 }
 
-describe("ordered wire-1.0 video source selection", () => {
-  it("preserves source and rendition author order and retires rejection before advancing", async () => {
+describe("ordered catalog-certified video source selection", () => {
+  it("preserves source and rendition order and retires each rejected source", async () => {
     const events: string[] = [];
-    const candidates = Object.freeze([
-      candidate(0, "av1"),
-      candidate(1, "vp9")
-    ]);
     const sessions = new Map<string, FakeSession>();
-
     const result = await selectVideoSource({
-      candidates,
+      candidates: Object.freeze([candidate(0, "av1"), candidate(1, "vp9")]),
       signal: new AbortController().signal,
       async open(source) {
         events.push(`open:${source.id}`);
@@ -59,16 +54,11 @@ describe("ordered wire-1.0 video source selection", () => {
           source.id === "vp9" && call === 2
         );
       },
-      isResourceEligible: () => true,
-      async accept({ candidate: accepted, session, rendition: selected }) {
-        events.push(`accept:${accepted.id}:${selected.rendition.id}`);
-        return Object.freeze({ source: accepted.id, session: session.id });
-      }
+      isResourceEligible: () => true
     });
 
     expect(result.candidate.id).toBe("vp9");
-    expect(result.rendition.rendition.id).toBe("second");
-    expect(result.value).toEqual({ source: "vp9", session: "vp9" });
+    expect(result.rendition).toBe(result.session.catalog.videoRenditions[1]);
     expect(events).toEqual([
       "open:av1",
       "probe:av1:1",
@@ -77,69 +67,17 @@ describe("ordered wire-1.0 video source selection", () => {
       "open:vp9",
       "probe:vp9:1",
       "probe:vp9:2",
-      "probe-dispose:vp9",
-      "accept:vp9:second"
+      "probe-dispose:vp9"
     ]);
     expect(sessions.get("av1")?.disposed).toBe(true);
     expect(sessions.get("vp9")?.disposed).toBe(false);
-    expect(result.attempts.map(({ authoredIndex, outcome }) => ({
-      authoredIndex,
-      outcome
-    }))).toEqual([
-      { authoredIndex: 0, outcome: "all-renditions-unsupported" },
-      { authoredIndex: 1, outcome: "selected" }
-    ]);
-    expect(Object.isFrozen(result)).toBe(true);
-    expect(Object.isFrozen(result.candidate)).toBe(true);
-    expect(Object.isFrozen(result.rendition)).toBe(true);
-    expect(isDeeplyFrozen(result.attempts)).toBe(true);
-  });
-
-  it("falls through only an explicit deterministic pre-activation rejection", async () => {
-    const candidates = Object.freeze([
-      candidate(0, "h264", "unsupported"),
-      candidate(1, "vp9", "selected")
-    ]);
-    const disposed: string[] = [];
-    const accepted: string[] = [];
-
-    const result = await selectVideoSource({
-      candidates,
-      signal: new AbortController().signal,
-      async open(source) {
-        return new FakeSession(
-          source.id,
-          manifest(codecFamily(source.codec)),
-          disposed
-        );
-      },
-      createProbe(source) {
-        return probe(source.id, disposed, () => true);
-      },
-      isResourceEligible: () => true,
-      async accept({ candidate: source, session }) {
-        accepted.push(`${source.id}:${session.id}`);
-        if (source.id === "unsupported") {
-          throw new VideoSourceCandidateUnsupportedError();
-        }
-        return source.id;
-      }
-    });
-
-    expect(result.value).toBe("selected");
-    expect(accepted).toEqual([
-      "unsupported:unsupported",
-      "selected:selected"
-    ]);
     expect(result.attempts.map(({ outcome }) => outcome)).toEqual([
-      "candidate-unsupported",
+      "all-renditions-unsupported",
       "selected"
     ]);
-    expect(disposed).toContain("session-dispose:unsupported");
-    expect(disposed).not.toContain("session-dispose:selected");
   });
 
-  it.each(["open", "mismatch", "format", "probe", "accept"] as const)(
+  it.each(["open", "mismatch", "probe"] as const)(
     "treats %s failures as terminal and never opens a later source",
     async (failureAt) => {
       const events: string[] = [];
@@ -153,13 +91,11 @@ describe("ordered wire-1.0 video source selection", () => {
         async open(source) {
           events.push(`open:${source.id}`);
           if (failureAt === "open") throw terminal;
-          const openedManifest = manifest(
-            failureAt === "mismatch" ? "vp9" : codecFamily(source.codec)
+          return new FakeSession(
+            source.id,
+            manifest(failureAt === "mismatch" ? "vp9" : codecFamily(source.codec)),
+            events
           );
-          if (failureAt === "format") {
-            (openedManifest as { formatVersion: string }).formatVersion = "bad";
-          }
-          return new FakeSession(source.id, openedManifest, events);
         },
         createProbe(source) {
           return probe(source.id, events, () => {
@@ -167,22 +103,16 @@ describe("ordered wire-1.0 video source selection", () => {
             return true;
           });
         },
-        isResourceEligible: () => true,
-        async accept() {
-          if (failureAt === "accept") throw terminal;
-          return "selected";
-        }
+        isResourceEligible: () => true
       });
 
       await expect(operation).rejects.toThrow();
       expect(events).not.toContain("open:must-not-open");
-      if (failureAt !== "open") {
-        expect(events).toContain("session-dispose:first");
-      }
+      if (failureAt !== "open") expect(events).toContain("session-dispose:first");
     }
   );
 
-  it("aborts stale selection, retires the active source, and never opens a later source", async () => {
+  it("aborts stale selection, retires the active source, and opens no successor", async () => {
     const controller = new AbortController();
     const reason = new DOMException("source generation changed", "AbortError");
     const opened: string[] = [];
@@ -191,12 +121,8 @@ describe("ordered wire-1.0 video source selection", () => {
     const probeStarted = new Promise<void>((resolve) => { started = resolve; });
     let release!: () => void;
     const held = new Promise<boolean>((resolve) => { release = () => resolve(true); });
-
     const pending = selectVideoSource({
-      candidates: Object.freeze([
-        candidate(0, "av1"),
-        candidate(1, "vp9")
-      ]),
+      candidates: Object.freeze([candidate(0, "av1"), candidate(1, "vp9")]),
       signal: controller.signal,
       async open(source) {
         opened.push(source.id);
@@ -212,8 +138,7 @@ describe("ordered wire-1.0 video source selection", () => {
           async dispose() { disposed.push(`probe-dispose:${source.id}`); }
         });
       },
-      isResourceEligible: () => true,
-      async accept() { return "must-not-accept"; }
+      isResourceEligible: () => true
     });
 
     await probeStarted;
@@ -225,7 +150,7 @@ describe("ordered wire-1.0 video source selection", () => {
     expect(disposed).toContain("session-dispose:av1");
   });
 
-  it("reports sanitized deterministic exhaustion without retaining failures or URLs", async () => {
+  it("reports sanitized exhaustion without retaining authored URLs", async () => {
     const secret = "https://user:password@example.test/private.avl";
     let error: unknown;
     try {
@@ -234,8 +159,7 @@ describe("ordered wire-1.0 video source selection", () => {
         signal: new AbortController().signal,
         async open() { throw new Error(secret); },
         createProbe() { throw new Error(secret); },
-        isResourceEligible: () => true,
-        async accept() { return null; }
+        isResourceEligible: () => true
       });
     } catch (caught) {
       error = caught;
@@ -251,15 +175,17 @@ describe("ordered wire-1.0 video source selection", () => {
 
 class FakeSession implements VideoSourceSession {
   public disposed = false;
+  public readonly catalog;
 
   public constructor(
     public readonly id: string,
-    public readonly manifest: Readonly<CompiledManifest>,
+    manifestValue: Readonly<CompiledManifest>,
     private readonly events: string[] = []
-  ) {}
-
-  public get catalog(): Readonly<{ manifest: Readonly<CompiledManifest> }> {
-    return Object.freeze({ manifest: this.manifest });
+  ) {
+    this.catalog = Object.freeze({
+      manifest: manifestValue,
+      videoRenditions: certifyVideoRenditions(manifestValue)
+    });
   }
 
   public async dispose(): Promise<void> {
@@ -320,13 +246,7 @@ function manifest(
     codec: family,
     bitstream: SPECS[family].bitstream,
     layout: "opaque",
-    canvas: {
-      width: 64,
-      height: 32,
-      fit: "contain",
-      pixelAspect: [1, 1],
-      colorSpace: "srgb"
-    },
+    canvas: { width: 64, height: 32, fit: "contain", pixelAspect: [1, 1], colorSpace: "srgb" },
     frameRate: { numerator: 30, denominator: 1 },
     renditions,
     units: [],
@@ -343,12 +263,4 @@ function manifest(
       runtimeWorkingSetBytes: 1
     }
   };
-}
-
-function isDeeplyFrozen(value: unknown, seen = new Set<object>()): boolean {
-  if (value === null || typeof value !== "object" || seen.has(value)) return true;
-  seen.add(value);
-  return Object.isFrozen(value) && Object.values(value).every((nested) =>
-    isDeeplyFrozen(nested, seen)
-  );
 }

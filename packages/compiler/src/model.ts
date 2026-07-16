@@ -1,6 +1,19 @@
-import type {
-  CompiledManifestInput,
+import {
+  COMPILE_BUNDLE_H264_PRESETS,
+  COMPILE_BUNDLE_H265_PRESETS,
+  COMPILE_BUNDLE_VP9_DEADLINES,
+  type CompiledManifestInput,
+  type VideoCodec as FormatVideoCodec
 } from "@pixel-point/aval-format";
+
+/*
+ * Keep the compiler's established public names as aliases of the format-owned
+ * build-report contract. This prevents the emitted and parsed preset sets from
+ * drifting independently.
+ */
+export const H264_ENCODER_PRESETS = COMPILE_BUNDLE_H264_PRESETS;
+export const H265_ENCODER_PRESETS = COMPILE_BUNDLE_H265_PRESETS;
+export const VP9_DEADLINES = COMPILE_BUNDLE_VP9_DEADLINES;
 
 export const COMPILER_PROJECT_VERSION = "1.0" as const;
 export const MAX_PROCESS_STDERR_BYTES = 1024 * 1024;
@@ -156,32 +169,12 @@ export interface SourceBinding {
   readonly event: string;
 }
 
-export const H264_ENCODER_PRESETS = Object.freeze([
-  "ultrafast",
-  "superfast",
-  "veryfast",
-  "faster",
-  "fast",
-  "medium",
-  "slow",
-  "slower",
-  "veryslow",
-  "placebo"
-] as const);
-
-export const H265_ENCODER_PRESETS = H264_ENCODER_PRESETS;
-export const VP9_DEADLINES = Object.freeze([
-  "best",
-  "good",
-  "realtime"
-] as const);
-
 export type H264EncoderPreset = typeof H264_ENCODER_PRESETS[number];
 export type H265EncoderPreset = typeof H265_ENCODER_PRESETS[number];
 export type Vp9Deadline = typeof VP9_DEADLINES[number];
 
 export type SourceAlphaPolicy = "auto" | "opaque" | "packed";
-export type VideoCodec = "h264" | "h265" | "vp9" | "av1";
+export type VideoCodec = FormatVideoCodec;
 export type SourceRenditionDimension = number | "auto";
 
 export interface SourceRenditionTarget {

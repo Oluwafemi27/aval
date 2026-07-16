@@ -4,6 +4,7 @@ const SOURCE_ATTRIBUTES = Object.freeze(["src", "type", "integrity"] as const);
 
 export interface ElementSourceMutationObserver {
   observe(target: Node, options?: MutationObserverInit): void;
+  takeRecords(): MutationRecord[];
   disconnect(): void;
 }
 
@@ -57,6 +58,18 @@ export class ElementSourceObserver {
     this.#scheduled = false;
     this.#observer?.disconnect();
     this.#observer = null;
+  }
+
+  /** Publish source mutations still queued by the realm before a command reads configuration. */
+  public flushRecords(): void {
+    const observer = this.#observer;
+    if (observer === null) return;
+    const changed = observer.takeRecords().some((record) =>
+      affectsDirectSource(this.#host, record)
+    );
+    if (!changed && !this.#scheduled) return;
+    this.#scheduled = false;
+    this.#changed();
   }
 
   #records(records: readonly MutationRecord[], token: number): void {

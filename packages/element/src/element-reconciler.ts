@@ -241,6 +241,7 @@ export class ElementReconciler implements ElementOwnerAuthority {
     let ownership: ReturnType<ElementOwnershipLedger["acquire"]> | null = null;
     try {
       ownership = this.#ownership.acquire("command");
+      this.#sourceObserver.flushRecords();
       this.#owners.configuration.flush();
       const invocationSourceToken = this.#desired.snapshot().sourceToken;
       const asset = await capturePreparedSource({

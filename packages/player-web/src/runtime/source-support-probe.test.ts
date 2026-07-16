@@ -23,6 +23,18 @@ const PROBE_CONFIGS = Object.freeze([
 ]);
 
 describe("module-worker source support probe", () => {
+  it("admits a rendition for static fallback when module workers are unavailable", async () => {
+    vi.stubGlobal("Worker", undefined);
+    try {
+      const owner = createSourceSupportProbe();
+
+      await expect(owner.probe(PROBE_CONFIGS[0]!)).resolves.toBe(true);
+      await expect(owner.dispose()).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("probes all codec families before configuration and returns only booleans", async () => {
     const observed: VideoDecoderConfig[] = [];
     const fixture = createProbeFixture(async (config) => {

@@ -138,13 +138,8 @@ export async function createBrowserRuntimePlayer(
       }),
       createProbe: () => createSourceSupportProbe(),
       isResourceEligible: (rendition, _candidate, openedSession) =>
-        rendition.decodedStorage.rgbaBytes <=
-          openedSession.catalog.manifest.limits.maxRuntimeBytes,
-      async accept({ rendition }) {
-        // Preserve the selector-owned immutable rung itself. Passing only its
-        // ID would allow the downstream player to accidentally re-rank.
-        return rendition;
-      }
+        rendition.geometry.decodedRgbaBytes <=
+          openedSession.catalog.manifest.limits.maxRuntimeBytes
     });
     session = sourceSelection.session;
     const catalog = session.catalog;
@@ -173,7 +168,7 @@ export async function createBrowserRuntimePlayer(
     player = new IntegratedPlayer({
       assetSession: session,
       assetSessionOwnership: "external",
-      selectedRendition: sourceSelection.value,
+      selectedRendition: sourceSelection.rendition,
       candidateFactory: composition.factory,
       participantBinding: participant.resources.participant,
       createFallbackStore(runtimeCatalog) {

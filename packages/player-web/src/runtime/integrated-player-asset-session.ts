@@ -1,4 +1,7 @@
-import { RuntimeAssetCatalog } from "./asset-catalog.js";
+import {
+  RuntimeAssetCatalog,
+  type CertifiedVideoRendition
+} from "./asset-catalog.js";
 import { RuntimePlaybackError, normalizeRuntimeFailure } from "./errors.js";
 import type { RuntimeAssetSession } from "./runtime-asset-session.js";
 
@@ -8,11 +11,13 @@ export type CapturedIntegratedPlayerAssetSource =
   | Readonly<{
       kind: "bytes";
       bytes: Uint8Array;
+      selectedRenditionIndex: number;
     }>
   | Readonly<{
       kind: "session";
       session: Readonly<CapturedRuntimeAssetSession>;
       ownership: IntegratedAssetSessionOwnership;
+      selectedRendition: Readonly<CertifiedVideoRendition>;
     }>;
 
 interface CapturedRuntimeAssetSession {
@@ -38,6 +43,8 @@ interface IntegratedPlayerAssetOptionView {
   readonly bytes?: unknown;
   readonly assetSession?: unknown;
   readonly assetSessionOwnership?: unknown;
+  readonly selectedRendition?: unknown;
+  readonly selectedRenditionIndex?: unknown;
 }
 
 /** Snapshot one exact bytes-or-session source before acquiring player owners. */
@@ -47,40 +54,73 @@ export function captureIntegratedPlayerAssetSource(
   const hasBytes = Reflect.has(value, "bytes");
   const hasSession = Reflect.has(value, "assetSession");
   const hasOwnership = Reflect.has(value, "assetSessionOwnership");
+  const hasSelectedRendition = Reflect.has(value, "selectedRendition");
+  const hasSelectedRenditionIndex = Reflect.has(value, "selectedRenditionIndex");
   if (hasBytes === hasSession) {
     throw new TypeError("integrated player requires exactly one asset source");
   }
   if (hasBytes) {
-    if (hasOwnership) {
-      throw new TypeError("byte assets cannot declare assetSessionOwnership");
+    if (hasOwnership || hasSelectedRendition || !hasSelectedRenditionIndex) {
+      throw new TypeError(
+        "byte assets require only a selectedRenditionIndex"
+      );
     }
     let bytes: unknown;
+    let selectedRenditionIndex: unknown;
     try { bytes = Reflect.get(value, "bytes"); } catch {
       throw new TypeError("integrated player bytes are inaccessible");
+    }
+    try {
+      selectedRenditionIndex = Reflect.get(value, "selectedRenditionIndex");
+    } catch {
+      throw new TypeError("selectedRenditionIndex is inaccessible");
     }
     if (!(bytes instanceof Uint8Array)) {
       throw new TypeError("integrated player bytes must be a Uint8Array");
     }
-    return Object.freeze({ kind: "bytes", bytes });
+    if (
+      typeof selectedRenditionIndex !== "number" ||
+      !Number.isSafeInteger(selectedRenditionIndex) ||
+      selectedRenditionIndex < 0
+    ) {
+      throw new TypeError("selectedRenditionIndex must be a non-negative integer");
+    }
+    return Object.freeze({ kind: "bytes", bytes, selectedRenditionIndex });
   }
   if (!hasOwnership) {
     throw new TypeError("assetSessionOwnership is required for assetSession");
   }
+  if (!hasSelectedRendition) {
+    throw new TypeError("selectedRendition is required for assetSession");
+  }
+  if (hasSelectedRenditionIndex) {
+    throw new TypeError("asset sessions cannot declare selectedRenditionIndex");
+  }
   let rawSession: unknown;
   let ownership: unknown;
+  let selectedRendition: unknown;
   try {
     rawSession = Reflect.get(value, "assetSession");
     ownership = Reflect.get(value, "assetSessionOwnership");
+    selectedRendition = Reflect.get(value, "selectedRendition");
   } catch {
     throw new TypeError("integrated player asset session is inaccessible");
   }
   if (ownership !== "external" && ownership !== "player") {
     throw new TypeError("assetSessionOwnership must be external or player");
   }
+  if (
+    selectedRendition === null ||
+    typeof selectedRendition !== "object" ||
+    Array.isArray(selectedRendition)
+  ) {
+    throw new TypeError("selectedRendition must be catalog-certified");
+  }
   return Object.freeze({
     kind: "session",
     session: captureRuntimeAssetSession(rawSession),
-    ownership
+    ownership,
+    selectedRendition: selectedRendition as Readonly<CertifiedVideoRendition>
   });
 }
 

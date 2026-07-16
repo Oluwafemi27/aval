@@ -245,14 +245,51 @@ test("switches every codec control and reports the browser's actual selection", 
     lastFailure: null,
     underflows: 0
   });
+  // The reversible edge's authored portal is body frame zero. Leaving on a
+  // later resident endpoint frame verifies that playback keeps presenting the
+  // body until the next legal portal instead of handing off media too early.
+  await waitForBodyFrame(page, "engaged", 4);
   await page.mouse.move(1, 1);
-  await expect.poll(() => playerState(page)).toMatchObject({
-    readiness: "interactiveReady",
-    requestedState: "idle",
-    visualState: "idle",
-    lastFailure: null,
-    underflows: 0
+  try {
+    await expect.poll(() => playerState(page)).toMatchObject({
+      readiness: "interactiveReady",
+      requestedState: "idle",
+      visualState: "idle",
+      lastFailure: null,
+      underflows: 0
+    });
+  } catch (error) {
+    const evidence = await page.evaluate(() => ({
+      diagnostics: (window as unknown as {
+        avalSourcePlayground: {
+          readonly player: HTMLElement & {
+            getDiagnostics(options?: Readonly<{ trace?: boolean }>): unknown;
+          };
+        };
+      }).avalSourcePlayground.player.getDiagnostics({ trace: true })
+    }));
+    throw new Error(`codec switch failed: ${JSON.stringify(evidence)}`, {
+      cause: error
+    });
+  }
+  const trace = await contentPresentationTrace(page);
+  const departure = trace.findLastIndex((presentation) =>
+    presentation.kind === "body" &&
+    presentation.state === "engaged" &&
+    presentation.frameIndex === 4
+  );
+  expect(departure).toBeGreaterThanOrEqual(0);
+  const afterDeparture = trace.slice(departure + 1);
+  expect(afterDeparture[0]).toMatchObject({
+    kind: "body",
+    state: "engaged",
+    frameIndex: 5
   });
+  expect(afterDeparture.findIndex((presentation) =>
+    presentation.kind === "reversible" &&
+    presentation.edgeId === "engaged.idle" &&
+    presentation.frameIndex === 5
+  )).toBeGreaterThan(0);
 
   generation = await selectCodec(
     page,
@@ -318,6 +355,77 @@ async function sourceGeneration(page: import("@playwright/test").Page): Promise<
       };
     }).avalSourcePlayground.player;
     return player.getDiagnostics?.().sourceGeneration ?? 0;
+  });
+}
+
+async function waitForBodyFrame(
+  page: import("@playwright/test").Page,
+  state: string,
+  frameIndex: number
+): Promise<void> {
+  await page.waitForFunction(({ expectedState, expectedFrame }) => {
+    const diagnostics = (window as unknown as {
+      avalSourcePlayground: {
+        readonly player: HTMLElement & {
+          getDiagnostics?(options?: Readonly<{ trace?: boolean }>): Readonly<{
+            runtimeTrace?: readonly Readonly<{
+              graph?: Readonly<{
+                presentation?: Readonly<{
+                  kind?: string;
+                  state?: string;
+                  frameIndex?: number;
+                }> | null;
+              }>;
+            }>[];
+          }>;
+        };
+      };
+    }).avalSourcePlayground.player.getDiagnostics?.({ trace: true });
+    const presentation = diagnostics?.runtimeTrace?.at(-1)?.graph?.presentation;
+    return presentation?.kind === "body" &&
+      presentation.state === expectedState &&
+      presentation.frameIndex === expectedFrame;
+  }, { expectedState: state, expectedFrame: frameIndex }, {
+    polling: "raf",
+    timeout: 15_000
+  });
+}
+
+async function contentPresentationTrace(
+  page: import("@playwright/test").Page
+): Promise<readonly Readonly<{
+  kind: string;
+  state?: string;
+  edgeId?: string;
+  frameIndex?: number;
+}>[]> {
+  return page.evaluate(() => {
+    const diagnostics = (window as unknown as {
+      avalSourcePlayground: {
+        readonly player: HTMLElement & {
+          getDiagnostics(options?: Readonly<{ trace?: boolean }>): Readonly<{
+            runtimeTrace?: readonly Readonly<{
+              kind: string;
+              graph?: Readonly<{
+                presentation?: Readonly<{
+                  kind: string;
+                  state?: string;
+                  edgeId?: string;
+                  frameIndex?: number;
+                }> | null;
+              }>;
+            }>[];
+          }>;
+        };
+      };
+    }).avalSourcePlayground.player.getDiagnostics({ trace: true });
+    return (diagnostics.runtimeTrace ?? []).flatMap((record) => {
+      const presentation = record.graph?.presentation;
+      return record.kind === "content-tick" && presentation !== null &&
+          presentation !== undefined
+        ? [presentation]
+        : [];
+    });
   });
 }
 

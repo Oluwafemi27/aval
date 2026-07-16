@@ -63,6 +63,11 @@ type BrowserPreparedTick = IntegratedPreparedContentTick & {
 };
 
 interface BrowserVisibleEndpointInverseOwner {
+  readonly visibleEndpoint: boolean;
+  canEnterReversible(
+    edge: Readonly<GraphEdgeDefinition>,
+    presentation: Extract<GraphPresentation, { readonly kind: "body" }>
+  ): boolean;
   reversibleEntryReady(
     edge: Readonly<GraphEdgeDefinition>,
     generation: number,
@@ -84,9 +89,18 @@ export interface BrowserVisibleEndpointInverseHandoff {
 export function handoffBrowserVisibleEndpointToInverse(input: {
   readonly resident: BrowserVisibleEndpointInverseOwner;
   readonly edge: Readonly<GraphEdgeDefinition>;
+  readonly presentation: Extract<
+    GraphPresentation,
+    { readonly kind: "body" }
+  >;
   readonly generation: number;
   readonly ordinal: bigint;
-}): Readonly<BrowserVisibleEndpointInverseHandoff> {
+}): Readonly<BrowserVisibleEndpointInverseHandoff> | null {
+  if (
+    !input.resident.visibleEndpoint ||
+    input.edge.transition?.kind !== "reversible" ||
+    !input.resident.canEnterReversible(input.edge, input.presentation)
+  ) return null;
   const ready = input.resident.reversibleEntryReady(
     input.edge,
     input.generation,
@@ -222,6 +236,10 @@ export class BrowserVideoPlaybackSession
       "browser playback tick context"
     );
     if (this.#prepared !== null) return this.#prepared;
+
+    this.#handoffVisibleEndpointToInverseIfEligible(
+      context.presentationOrdinal
+    );
 
     if (this.#resident.cutReady) {
       const delegated = this.#resident.prepareCut(context);
@@ -558,24 +576,6 @@ export class BrowserVideoPlaybackSession
         return;
       }
       if (
-        this.#resident.visibleEndpoint &&
-        this.#pendingEdge?.transition?.kind === "reversible"
-      ) {
-        const handoff = handoffBrowserVisibleEndpointToInverse({
-          resident: this.#resident,
-          edge: this.#pendingEdge,
-          generation: this.#normal.generation,
-          ordinal: (snapshot.contentOrdinal ?? -1n) + 2n
-        });
-        this.#pendingResidentCheckpoint = handoff.checkpoint;
-        this.#publishReady(
-          handoff.ready,
-          this.#mediaEpoch,
-          this.#runtime.signal
-        );
-        return;
-      }
-      if (
         this.#resident.hasUncommittedCut &&
         snapshot.pendingEdgeId !== this.#resident.activeCutEdge
       ) {
@@ -583,11 +583,11 @@ export class BrowserVideoPlaybackSession
         this.#scheduleBackground();
         return;
       }
-      // A route requested during an already-visible runway belongs after that
-      // runway. Keep the resident owner alive through its first decoded
-      // continuation; routeReady remains false after the cut's entry frame,
-      // so the graph cannot commit this follow-on before normal streaming has
-      // adopted the exact handoff pixels.
+      // Keep the visible endpoint until prepareContentTick observes an exact
+      // authored boundary. That check runs on every tick, so a portal inside
+      // the resident runway is neither entered early nor skipped. If no such
+      // portal arrives, the first decoded continuation hands ownership back
+      // to normal streaming.
       this.#scheduleBackground();
       return;
     }
@@ -609,6 +609,31 @@ export class BrowserVideoPlaybackSession
     // A normal route consumes the exact source frame already prepared before
     // the request. Route planning starts after that frame is drawn.
     this.#scheduleBackground(rebuild);
+  }
+
+  #handoffVisibleEndpointToInverseIfEligible(ordinal: bigint): boolean {
+    const edge = this.#pendingEdge;
+    const presentation = this.#graphSnapshot.presentation;
+    if (
+      this.#ready !== null ||
+      edge === null ||
+      presentation?.kind !== "body"
+    ) return false;
+    const handoff = handoffBrowserVisibleEndpointToInverse({
+      resident: this.#resident,
+      edge,
+      presentation,
+      generation: this.#normal.generation,
+      ordinal
+    });
+    if (handoff === null) return false;
+    this.#pendingResidentCheckpoint = handoff.checkpoint;
+    this.#publishReady(
+      handoff.ready,
+      this.#mediaEpoch,
+      this.#runtime.signal
+    );
+    return true;
   }
 
   #scheduleBackground(rebuild = false): void {

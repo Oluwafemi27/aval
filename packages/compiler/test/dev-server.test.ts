@@ -602,7 +602,7 @@ function devAsset(
   bytes: Uint8Array
 ): Readonly<DevServerAsset> {
   const codecString = {
-    h264: "avc1.42C01E",
+    h264: "avc1.64001E",
     h265: "hvc1.1.6.L93.90",
     vp9: "vp09.00.10.08",
     av1: "av01.0.04M.08"

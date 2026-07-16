@@ -1,4 +1,3 @@
-import type { BigIntStats } from "node:fs";
 import {
   chmod,
   lstat,
@@ -7,22 +6,26 @@ import {
   open,
   readdir,
   rename,
-  rmdir,
-  unlink,
   type FileHandle
 } from "node:fs/promises";
 import { basename, dirname, join, parse, resolve } from "node:path";
 
+import { VIDEO_CODECS } from "@pixel-point/aval-format";
+
 import { throwIfAborted } from "../cancellation.js";
 import { CompilerError } from "../diagnostics.js";
 import type { VideoCodec } from "../model.js";
-
-const VIDEO_CODECS = Object.freeze([
-  "h264",
-  "h265",
-  "vp9",
-  "av1"
-] as const satisfies readonly VideoCodec[]);
+import {
+  assertDirectoryObject,
+  identityFromMetadata,
+  lstatOrUndefined,
+  removeOwnedEmptyDirectory,
+  removeProvenDirectoryTree,
+  requireDirectoryIdentity,
+  sameDirectoryObject,
+  syncDirectory,
+  type DirectoryIdentity
+} from "./publication-fs.js";
 
 export interface CompileBundleAssetInput {
   readonly codec: VideoCodec;
@@ -66,11 +69,6 @@ export interface CompileBundlePublicationDependencies {
     context: Readonly<CompileBundlePublicationContext>
   ) => void | Promise<void>;
   readonly syncDirectory?: (path: string) => Promise<void>;
-}
-
-interface DirectoryIdentity {
-  readonly device: string;
-  readonly inode: string;
 }
 
 interface DirectorySnapshot {
@@ -118,7 +116,7 @@ export async function publishCompileBundleDirectory(
   const frozenInput = freezePublicationInput(input);
   const absoluteTarget = normalizeTargetPath(targetPath);
   const parentPath = dirname(absoluteTarget);
-  const syncDirectory = dependencies.syncDirectory ?? syncDirectoryDefault;
+  const syncPublicationDirectory = dependencies.syncDirectory ?? syncDirectory;
 
   throwIfAborted(options.signal);
   await ensurePublicationParent(parentPath);
@@ -133,7 +131,7 @@ export async function publishCompileBundleDirectory(
   const state = await createTransactionState(absoluteTarget, parentPath);
   let failure: unknown;
   try {
-    await stageAndVerifyBundle(state, frozenInput, syncDirectory);
+    await stageAndVerifyBundle(state, frozenInput, syncPublicationDirectory);
     await checkpoint("after-stage-verified", state, options, dependencies);
 
     await assertTargetUnchanged(absoluteTarget, initialTarget);
@@ -147,7 +145,7 @@ export async function publishCompileBundleDirectory(
     await installStage(state, options, dependencies);
     await checkpoint("after-stage-installed", state, options, dependencies);
 
-    await syncDirectory(parentPath);
+    await syncPublicationDirectory(parentPath);
     await checkpoint("after-parent-synced", state, options, dependencies);
 
     if (state.backupIdentity !== undefined) {
@@ -162,7 +160,10 @@ export async function publishCompileBundleDirectory(
     }
   } catch (error) {
     if (!state.committed) {
-      const rollbackFailures = await rollbackTransaction(state, syncDirectory);
+      const rollbackFailures = await rollbackTransaction(
+        state,
+        syncPublicationDirectory
+      );
       if (rollbackFailures.length > 0) {
         const backupRetained = state.backupIdentity !== undefined;
         failure = new CompilerError(
@@ -194,7 +195,7 @@ export async function publishCompileBundleDirectory(
         state.workspacePath,
         state.workspaceIdentity
       );
-      await syncDirectory(parentPath);
+      await syncPublicationDirectory(parentPath);
     } catch (cleanupError) {
       failure = mergeCleanupFailure(
         failure,
@@ -664,98 +665,6 @@ async function assertPathAbsent(path: string, label: string): Promise<void> {
   }
 }
 
-async function requireDirectoryIdentity(
-  path: string,
-  label: string
-): Promise<Readonly<DirectoryIdentity>> {
-  const metadata = await lstat(path, { bigint: true });
-  if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
-    throw new CompilerError("IO_FAILED", `${label} is not a real directory`, {
-      path
-    });
-  }
-  return identityFromMetadata(metadata);
-}
-
-async function assertDirectoryObject(
-  path: string,
-  expected: Readonly<DirectoryIdentity>,
-  label: string
-): Promise<void> {
-  const metadata = await lstatOrUndefined(path);
-  if (
-    metadata === undefined ||
-    metadata.isSymbolicLink() ||
-    !metadata.isDirectory() ||
-    !sameDirectoryObject(identityFromMetadata(metadata), expected)
-  ) {
-    throw new CompilerError("IO_FAILED", `${label} identity changed`, { path });
-  }
-}
-
-async function removeOwnedEmptyDirectory(
-  path: string,
-  expected: Readonly<DirectoryIdentity>,
-  label: string
-): Promise<void> {
-  const metadata = await lstatOrUndefined(path);
-  if (metadata === undefined) return;
-  if (
-    metadata.isSymbolicLink() ||
-    !metadata.isDirectory() ||
-    !sameDirectoryObject(identityFromMetadata(metadata), expected)
-  ) {
-    throw new CompilerError("IO_FAILED", `Refusing to remove changed ${label}`, {
-      path
-    });
-  }
-  await rmdir(path);
-}
-
-/** Delete only a directory object whose identity the transaction already owns. */
-async function removeProvenDirectoryTree(
-  path: string,
-  expected: Readonly<DirectoryIdentity>
-): Promise<void> {
-  const metadata = await lstatOrUndefined(path);
-  if (metadata === undefined) return;
-  if (
-    metadata.isSymbolicLink() ||
-    !metadata.isDirectory() ||
-    !sameDirectoryObject(identityFromMetadata(metadata), expected)
-  ) {
-    throw new CompilerError(
-      "IO_FAILED",
-      "Refusing to remove an unproven publication directory",
-      { path }
-    );
-  }
-
-  for (const name of await readdir(path)) {
-    const childPath = join(path, name);
-    const child = await lstat(childPath, { bigint: true });
-    const childIdentity = identityFromMetadata(child);
-    if (child.isDirectory() && !child.isSymbolicLink()) {
-      await removeProvenDirectoryTree(childPath, childIdentity);
-    } else {
-      const current = await lstatOrUndefined(childPath);
-      if (
-        current === undefined ||
-        !sameDirectoryObject(identityFromMetadata(current), childIdentity)
-      ) {
-        throw new CompilerError(
-          "IO_FAILED",
-          "Refusing to remove a changed publication entry",
-          { path: childPath }
-        );
-      }
-      await unlink(childPath);
-    }
-  }
-  await assertDirectoryObject(path, expected, "owned publication directory");
-  await rmdir(path);
-}
-
 async function ensurePublicationParent(path: string): Promise<void> {
   try {
     await mkdir(path, { recursive: true, mode: 0o755 });
@@ -774,38 +683,6 @@ async function ensurePublicationParent(path: string): Promise<void> {
       { path }
     );
   }
-}
-
-async function syncDirectoryDefault(path: string): Promise<void> {
-  const handle = await open(path, "r");
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
-async function lstatOrUndefined(path: string): Promise<BigIntStats | undefined> {
-  return lstat(path, { bigint: true }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return undefined;
-    throw error;
-  });
-}
-
-function identityFromMetadata(
-  metadata: Pick<BigIntStats, "dev" | "ino">
-): Readonly<DirectoryIdentity> {
-  return Object.freeze({
-    device: String(metadata.dev),
-    inode: String(metadata.ino)
-  });
-}
-
-function sameDirectoryObject(
-  left: Readonly<DirectoryIdentity>,
-  right: Readonly<DirectoryIdentity>
-): boolean {
-  return left.device === right.device && left.inode === right.inode;
 }
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {

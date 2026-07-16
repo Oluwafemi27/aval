@@ -70,8 +70,13 @@ describe("element source candidates", () => {
     'application/vnd.aval; codecs="avc1.640028"; extra=x',
     'application/vnd.aval; codecs="avc1.640028 "',
     'application/vnd.aval; codecs="vp09.00.99.08"',
+    'application/vnd.aval; codecs="vp09.99.99.08"',
+    'application/vnd.aval; codecs="vp09.00.10.12"',
     'application/vnd.aval; codecs="av01.0.32M.10"',
+    'application/vnd.aval; codecs="av01.2.00M.08.0.110.01.01.01.0"',
     'application/vnd.aval; codecs="hvc1.1.6.L93.B0.00"',
+    'application/vnd.aval; codecs="hvc1.2.4.L93.B0"',
+    'application/vnd.aval; codecs="avc1.000000"',
     'application/vnd.aval; codecs="avc1.640028'.padEnd(257, "x") + '"',
     'application/vnd.aval; codecs="avc1.640028" '
   ])("rejects noncanonical source type without echoing its value", (type) => {

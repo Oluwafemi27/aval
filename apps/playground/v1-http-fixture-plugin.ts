@@ -3,10 +3,15 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  parseCompileBundleReport,
+  VIDEO_CODECS,
+  type VideoCodec
+} from "@pixel-point/aval-format";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin, PreviewServer, ViteDevServer } from "vite";
 
-type Codec = "av1" | "vp9" | "h265" | "h264";
+type Codec = VideoCodec;
 
 interface FixtureAsset {
   readonly codec: Codec;
@@ -30,7 +35,7 @@ interface RequestRecord {
 
 const PREFIX = "/__aval_v1__/";
 const SESSION = /^[A-Za-z0-9_-]{1,64}$/u;
-const CODECS = Object.freeze(["av1", "vp9", "h265", "h264"] as const);
+const CODECS = Object.freeze([...VIDEO_CODECS].reverse());
 const FIXTURE_ROOT = fileURLToPath(new URL("../../fixtures/conformance/v1/", import.meta.url));
 const MAX_SESSIONS = 256;
 const MAX_RECORDS = 512;
@@ -159,24 +164,14 @@ export function v1HttpFixturePlugin(): Plugin {
 
 async function loadFixtureSet(): Promise<FixtureSet> {
   const report = await readFile(join(FIXTURE_ROOT, "build.json"));
-  const parsed = JSON.parse(report.toString("utf8")) as {
-    readonly reportVersion?: unknown;
-    readonly assets?: unknown;
-  };
-  if (parsed.reportVersion !== "1.0" || !Array.isArray(parsed.assets)) {
-    throw new TypeError("v1 fixture build report is invalid");
-  }
+  const parsed = parseCompileBundleReport(JSON.parse(report.toString("utf8")));
+  const reportAssets = new Map(parsed.assets.map((asset) => [asset.codec, asset]));
   const assets = new Map<string, FixtureAsset>();
   for (const codec of CODECS) {
-    const record = parsed.assets.find((candidate: unknown) =>
-      isRecord(candidate) && candidate.codec === codec
-    );
-    if (
-      !isRecord(record) ||
-      record.path !== `${codec}.avl` ||
-      typeof record.type !== "string" ||
-      typeof record.integrity !== "string"
-    ) throw new TypeError(`v1 fixture report is missing ${codec}`);
+    const record = reportAssets.get(codec);
+    if (record === undefined || record.path !== `${codec}.avl`) {
+      throw new TypeError(`v1 fixture report is missing ${codec}`);
+    }
     const bytes = await readFile(join(FIXTURE_ROOT, record.path));
     const digest = createHash("sha256").update(bytes).digest("base64");
     if (record.integrity !== `sha256-${digest}`) {
@@ -192,10 +187,6 @@ async function loadFixtureSet(): Promise<FixtureSet> {
     }));
   }
   return Object.freeze({ report, assets });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function requireSession(value: string | null): string {

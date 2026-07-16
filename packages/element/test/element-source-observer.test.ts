@@ -8,6 +8,56 @@ import {
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 describe("ElementSourceObserver", () => {
+  it("flushes pending direct-source records synchronously", async () => {
+    const host = node("aval-player", null);
+    const direct = node("source", host);
+    let pending: readonly MutationRecord[] = [attributeRecord(direct)];
+    let changes = 0;
+    const observer = new ElementSourceObserver({
+      host: host as unknown as HTMLElement,
+      changed: () => { changes += 1; },
+      factory: () => ({
+        observe: () => undefined,
+        disconnect: () => undefined,
+        takeRecords() {
+          const records = pending;
+          pending = [];
+          return records as MutationRecord[];
+        }
+      } as ElementSourceMutationObserver)
+    });
+    observer.connect();
+
+    observer.flushRecords();
+
+    expect(changes).toBe(1);
+    await Promise.resolve();
+    expect(changes).toBe(1);
+  });
+
+  it("publishes an already delivered source batch once when a command flushes it", async () => {
+    const host = node("aval-player", null);
+    const direct = node("source", host);
+    let callback: MutationCallback | null = null;
+    let changes = 0;
+    const observer = new ElementSourceObserver({
+      host: host as unknown as HTMLElement,
+      changed: () => { changes += 1; },
+      factory: (next) => {
+        callback = next;
+        return fakeObserver([]);
+      }
+    });
+    observer.connect();
+    emit(callback, [attributeRecord(direct)]);
+
+    observer.flushRecords();
+
+    expect(changes).toBe(1);
+    await Promise.resolve();
+    expect(changes).toBe(1);
+  });
+
   it("observes the bounded source surface and coalesces direct-source changes", async () => {
     const host = node("aval-player", null);
     const direct = node("source", host);
@@ -103,6 +153,7 @@ describe("ElementSourceObserver", () => {
         creations += 1;
         return {
           observe: () => undefined,
+          takeRecords: () => [],
           disconnect: () => { disconnections += 1; }
         };
       }
@@ -128,6 +179,7 @@ describe("ElementSourceObserver", () => {
       changed: () => undefined,
       factory: () => ({
         observe: () => { throw new Error("hostile realm"); },
+        takeRecords: () => [],
         disconnect: () => { disconnections += 1; }
       })
     });
@@ -141,6 +193,7 @@ describe("ElementSourceObserver", () => {
 function fakeObserver(observed: MutationObserverInit[]): ElementSourceMutationObserver {
   return {
     observe(_target, options) { observed.push(options ?? {}); },
+    takeRecords: () => [],
     disconnect: () => undefined
   };
 }

@@ -37,16 +37,9 @@ export function validateVideoCandidateAttemptContext(
   }
   const candidate = context.candidate;
   const rendition = candidate.rendition;
-  const installed = context.catalog.manifest.renditions[candidate.authoredIndex];
   const inspection = context.inspection;
   if (
-    installed === undefined ||
-    context.catalog.renditions.require(rendition.id) !== installed ||
-    installed.id !== rendition.id ||
-    installed.codec !== rendition.codec ||
-    installed.bitDepth !== rendition.bitDepth ||
-    installed.codedWidth !== rendition.codedWidth ||
-    installed.codedHeight !== rendition.codedHeight ||
+    !context.catalog.ownsVideoRendition(candidate) ||
     inspection.family !== context.catalog.manifest.codec ||
     inspection.bitstream !== context.catalog.manifest.bitstream ||
     inspection.bitDepth !== rendition.bitDepth ||

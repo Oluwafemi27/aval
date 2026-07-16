@@ -30,17 +30,14 @@ import {
   StateFallbackStore,
   createBrowserVideoCandidateComposition,
   createSourceSupportProbe,
-  createVideoRenditionCandidates,
   createPlayerRuntimeAssetSessionResources,
   createPlayerWebRuntimeResources,
   createRuntimePageResourcePolicy,
   installRuntimeAssetCatalog,
-  inspectSelectedVideoRendition,
   normalizeRuntimeFailure,
   openRuntimeAsset,
   openRuntimeAssetBytes,
   parseExternalIntegrity,
-  selectVideoRendition,
   selectVideoSource,
   summarizeStaticReason,
   translateGraphReadiness,
@@ -73,7 +70,6 @@ import {
   type FrameRendererOptions,
   type FrameRendererSnapshot,
   type FrameRendererTimerHost,
-  type InspectedVideoRendition,
   type NormalizedExternalIntegrity,
   type PageDecoderLeasesSnapshot,
   type PageReclamationSnapshot,
@@ -120,10 +116,8 @@ import {
   type StateFallbackStoreOptions,
   type StaticReason,
   type AcceptedVideoSource,
+  type CertifiedVideoRendition,
   type SourceSupportProbeCreationOptions,
-  type VideoRenditionCandidate,
-  type VideoRenditionSelectionInput,
-  type VideoRenditionSelectionResult,
   type VideoSourceDescriptor,
   type VideoSourceSelectionInput,
   type VideoSourceSession,
@@ -145,32 +139,20 @@ const graphReadiness: MotionGraphReadiness = "preparing";
 const translation = translateGraphReadiness(graphReadiness);
 const catalogFactory: (bytes: Uint8Array) => RuntimeAssetCatalog =
   installRuntimeAssetCatalog;
-const candidateFactory: typeof createVideoRenditionCandidates =
-  createVideoRenditionCandidates;
-const renditionSelector: typeof selectVideoRendition = selectVideoRendition;
-const inspector: typeof inspectSelectedVideoRendition =
-  inspectSelectedVideoRendition;
 const sourceSelector: typeof selectVideoSource = selectVideoSource;
 const sourceProbeFactory: typeof createSourceSupportProbe =
   createSourceSupportProbe;
 const catalogEntry = null as unknown as RuntimeCatalogChunk;
-const videoCandidate = null as unknown as VideoRenditionCandidate;
-const videoInspection = null as unknown as InspectedVideoRendition;
-const renditionSelectionInput =
-  null as unknown as VideoRenditionSelectionInput;
-const renditionSelectionResult =
-  null as unknown as VideoRenditionSelectionResult;
+const videoCandidate = null as unknown as CertifiedVideoRendition;
 const sourceDescriptor = null as unknown as VideoSourceDescriptor;
 const sourceSession = null as unknown as VideoSourceSession;
 const sourceSelectionInput = null as unknown as VideoSourceSelectionInput<
   VideoSourceDescriptor,
-  VideoSourceSession,
-  unknown
+  VideoSourceSession
 >;
 const acceptedSource = null as unknown as AcceptedVideoSource<
   VideoSourceDescriptor,
-  VideoSourceSession,
-  unknown
+  VideoSourceSession
 >;
 const sourceProbeOptions = null as unknown as SourceSupportProbeCreationOptions;
 const frameKey: RuntimeFrameKey = {
@@ -431,16 +413,10 @@ lifecycleSnapshot.pendingWaitCount = 1;
 void readiness;
 void translation;
 void catalogFactory;
-void candidateFactory;
-void renditionSelector;
-void inspector;
 void sourceSelector;
 void sourceProbeFactory;
 void catalogEntry;
 void videoCandidate;
-void videoInspection;
-void renditionSelectionInput;
-void renditionSelectionResult;
 void sourceDescriptor;
 void sourceSession;
 void sourceSelectionInput;

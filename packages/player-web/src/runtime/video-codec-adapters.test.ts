@@ -1,17 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type {
+  CompiledManifest,
   ProductionRendition,
   VideoBitDepth,
-  VideoBitstream
+  VideoBitstream,
+  VideoCodec
 } from "@pixel-point/aval-format";
 
 import {
   inspectBorrowedVideoRendition,
-  type BorrowedVideoRenditionPlan,
-  type VideoCodecAdapterManifest,
-  type VideoCodecFamily
+  type BorrowedVideoRenditionPlan
 } from "./video-codec-adapters.js";
+import { certifyVideoRenditions } from "./video-rendition-certification.js";
 
 const H264_ACCESS_UNITS = Object.freeze([
   Object.freeze({
@@ -172,55 +173,7 @@ describe("codec-neutral borrowed video inspection", () => {
     }
   );
 
-  it("rejects manifest family, bitstream, and bit-depth disagreement", () => {
-    const fixture = createFixture("vp9");
-    const borrow = createBorrow(fixture);
-
-    expect(() => inspectBorrowedVideoRendition({
-      ...fixture.plan,
-      manifest: {
-        ...fixture.plan.manifest,
-        codec: "h265",
-        bitstream: "annex-b"
-      }
-    }, borrow)).toThrow(/codec string disagrees with the manifest codec family/u);
-
-    expect(() => inspectBorrowedVideoRendition({
-      ...fixture.plan,
-      manifest: { ...fixture.plan.manifest, bitstream: "low-overhead" }
-    }, borrow)).toThrow(/VP9 bitstream must be frame/iu);
-
-    expect(() => inspectBorrowedVideoRendition({
-      ...fixture.plan,
-      rendition: { ...fixture.plan.rendition, bitDepth: 10 }
-    }, borrow)).toThrow(/VP9 manifest renditions must be 8-bit/iu);
-
-    const av1 = createFixture("av1");
-    expect(() => inspectBorrowedVideoRendition({
-      ...av1.plan,
-      rendition: { ...av1.plan.rendition, bitDepth: 10 }
-    }, createBorrow(av1))).toThrow(/bit depth/iu);
-  });
-
-  it("rejects coded geometry, exact codec, and BT.709 disagreement", () => {
-    const geometry = createFixture("vp9");
-    expect(() => inspectBorrowedVideoRendition({
-      ...geometry.plan,
-      rendition: {
-        ...geometry.plan.rendition,
-        codedWidth: 66
-      }
-    }, createBorrow(geometry))).toThrow(/coded geometry disagrees/iu);
-
-    const codec = createFixture("vp9");
-    expect(() => inspectBorrowedVideoRendition({
-      ...codec.plan,
-      rendition: {
-        ...codec.plan.rendition,
-        codec: "vp09.00.11.08.01.01.01.01.00"
-      }
-    }, createBorrow(codec))).toThrow(/codec string disagrees/iu);
-
+  it("keeps codec-specific color certification behind the selected adapter", () => {
     const color = createFixture("vp9");
     color.blobs.get("chunk-0")![4] = 0x20;
     expect(() => inspectBorrowedVideoRendition(
@@ -286,24 +239,16 @@ describe("codec-neutral borrowed video inspection", () => {
     }, createBorrow(timeline))).toThrow(/duplicate presentation timestamps/iu);
   });
 
-  it("rejects malformed borrowed views and never accepts sparse plans", () => {
+  it("rejects malformed borrowed views", () => {
     const fixture = createFixture("av1");
     expect(() => inspectBorrowedVideoRendition(
       fixture.plan,
       (_key, _offset, length) => new Uint8Array(length - 1)
     )).toThrow(/borrowed bytes.*malformed/iu);
-
-    const sparse = new Array(2) as unknown as BorrowedVideoRenditionPlan["units"];
-    (sparse as unknown as Array<BorrowedVideoRenditionPlan["units"][number]>)[0] =
-      fixture.plan.units[0]!;
-    expect(() => inspectBorrowedVideoRendition(
-      { ...fixture.plan, units: sparse },
-      createBorrow(fixture)
-    )).toThrow(/units must be dense/iu);
   });
 });
 
-function createFixture(family: VideoCodecFamily): CodecFixture {
+function createFixture(family: VideoCodec): CodecFixture {
   const spec = fixtureSpec(family);
   const blobs = new Map<string, Uint8Array>();
   let byteOffset = 0;
@@ -327,19 +272,6 @@ function createFixture(family: VideoCodecFamily): CodecFixture {
       record
     });
   });
-  const manifest: VideoCodecAdapterManifest = Object.freeze({
-    codec: family,
-    bitstream: spec.bitstream,
-    layout: "opaque",
-    canvas: Object.freeze({
-      width: spec.width,
-      height: spec.height,
-      fit: "contain" as const,
-      pixelAspect: Object.freeze([1, 1] as const),
-      colorSpace: "srgb" as const
-    }),
-    frameRate: Object.freeze(spec.frameRate)
-  });
   const rendition: ProductionRendition = Object.freeze({
     id: "main",
     codec: spec.codec,
@@ -352,10 +284,44 @@ function createFixture(family: VideoCodecFamily): CodecFixture {
     }),
     bitrate: Object.freeze(spec.bitrate)
   });
+  const manifest: CompiledManifest = Object.freeze({
+    formatVersion: "1.0",
+    generator: "adapter-test",
+    codec: family,
+    bitstream: spec.bitstream,
+    layout: "opaque",
+    canvas: Object.freeze({
+      width: spec.width,
+      height: spec.height,
+      fit: "contain" as const,
+      pixelAspect: Object.freeze([1, 1] as const),
+      colorSpace: "srgb" as const
+    }),
+    frameRate: Object.freeze(spec.frameRate),
+    renditions: Object.freeze([rendition]),
+    units: Object.freeze([]),
+    initialState: "idle",
+    states: Object.freeze([]),
+    edges: Object.freeze([]),
+    bindings: Object.freeze([]),
+    readiness: Object.freeze({
+      policy: "all-routes" as const,
+      bootstrapUnits: Object.freeze([]),
+      immediateEdges: Object.freeze([])
+    }),
+    limits: Object.freeze({
+      maxCompiledBytes: 1_000_000,
+      maxRuntimeBytes: 1_000_000,
+      decodedPixelBytes: 1,
+      persistentCacheBytes: 1,
+      runtimeWorkingSetBytes: 1
+    })
+  });
+  const candidate = certifyVideoRenditions(manifest)[0]!;
   return {
     plan: Object.freeze({
-      manifest,
-      rendition,
+      candidate,
+      frameRate: manifest.frameRate,
       units: Object.freeze([Object.freeze({
         id: "unit",
         expectedDisplayedFrames: spec.expectedDisplayedFrames,
@@ -366,7 +332,7 @@ function createFixture(family: VideoCodecFamily): CodecFixture {
   };
 }
 
-function fixtureSpec(family: VideoCodecFamily): {
+function fixtureSpec(family: VideoCodec): {
   readonly codec: string;
   readonly bitstream: VideoBitstream;
   readonly bitDepth: VideoBitDepth;

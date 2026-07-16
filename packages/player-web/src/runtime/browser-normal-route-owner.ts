@@ -25,9 +25,10 @@ import {
 import {
   integratedActivationPresentationOrdinal
 } from "./integrated-player-support.js";
-import type {
-  WorkerSampleGroupRequirement,
-  WorkerSampleOutput
+import {
+  planWorkerSampleGroupCredit,
+  type WorkerSampleGroupRequirement,
+  type WorkerSampleOutput
 } from "./worker-samples.js";
 
 /** Owns the sole streaming scheduler and all normal/intro media preparation. */
@@ -508,12 +509,14 @@ class BrowserInitialPrefix {
       );
       if (
         requirement !== null &&
-        initialRequirementFits(
+        planWorkerSampleGroupCredit(
           requirement,
-          metrics.pendingSamples,
-          outstanding,
+          {
+            pendingSamples: metrics.pendingSamples,
+            outstandingFrames: outstanding
+          },
           this.#candidate.limits
-        )
+        ).fits
       ) {
         const batch = this.#candidate.samples.createBatch({
           frames: Array.from(
@@ -634,19 +637,4 @@ function checkedInitialOutstanding(
     throw new RangeError("initial prefix outstanding frames are invalid");
   }
   return submittedFrames + leasedFrames;
-}
-
-function initialRequirementFits(
-  requirement: Readonly<WorkerSampleGroupRequirement>,
-  pendingSamples: number,
-  outstandingFrames: number,
-  limits: Readonly<VideoCandidateReadinessSessionInput["limits"]>
-): boolean {
-  if (!Number.isSafeInteger(pendingSamples) || pendingSamples < 0) {
-    throw new RangeError("initial prefix pending samples are invalid");
-  }
-  return pendingSamples <= limits.maxPendingSamples &&
-    requirement.chunkCount <= limits.maxPendingSamples - pendingSamples &&
-    outstandingFrames <= limits.maxOutstandingFrames &&
-    requirement.frameCount <= limits.maxOutstandingFrames - outstandingFrames;
 }

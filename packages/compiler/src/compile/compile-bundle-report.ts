@@ -1,43 +1,30 @@
 import {
+  COMPILE_BUNDLE_REPORT_LIMITS,
+  createCompileBundleSourceMarkup,
   FormatError,
-  IDENTIFIER_PATTERN,
   isVideoCodecString,
-  serializeCanonicalJsonWithLimits
+  serializeCanonicalJsonWithLimits,
+  type CompileBundleReportAsset as PublishedCompileBundleReportAsset,
+  type CompileBundleReportTool as PublishedCompileBundleReportTool,
+  type CompileBundleReportToolchain as PublishedCompileBundleReportToolchain,
+  type ParsedCompileBundleReport,
+  VIDEO_CODECS
 } from "@pixel-point/aval-format";
 
 import { CompilerError } from "../diagnostics.js";
 import type { RegularFileIdentity } from "../file-fingerprint.js";
 import {
-  H264_ENCODER_PRESETS,
-  VP9_DEADLINES,
   type CompileInvocationDetails,
-  type NormalizedSourceRenditionTarget,
   type NormalizedVideoEncoding,
   type ToolProvenance,
   type VideoCodec
 } from "../model.js";
 import { sha256Hex } from "./hash.js";
+import { cloneNormalizedVideoEncodings } from "./video-encoding-policy.js";
 
-const CODECS = Object.freeze([
-  "h264",
-  "h265",
-  "vp9",
-  "av1"
-] as const satisfies readonly VideoCodec[]);
 const SHA256_HEX = /^[0-9a-f]{64}$/u;
 const PATH_OR_URL = /(?:^|[\s"'(=])(?:https?:\/\/|file:|[A-Za-z]:[\\/]|\\\\|\/(?!\/)|\.\.?[\\/]|~[\\/])/u;
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/u;
-const MAX_ASSETS = CODECS.length;
-const MAX_RENDITIONS = 4;
-const MAX_INVOCATIONS = 16_384;
-const MAX_INVOCATION_ARGUMENTS = 512;
-const MAX_WARNINGS = 4_096;
-const REPORT_SERIALIZATION_LIMITS = Object.freeze({
-  maxBytes: 64 * 1024 * 1024,
-  maxDepth: 64,
-  maxNodes: 2_000_000,
-  maxStringBytes: 1024 * 1024
-});
 
 export interface CompileBundleAssetFact {
   readonly codec: VideoCodec;
@@ -56,42 +43,10 @@ export interface CompileBundleReportInput {
   readonly provenance: Readonly<ToolProvenance>;
 }
 
-export interface CompileBundleReportAsset {
-  readonly codec: VideoCodec;
-  readonly path: `${VideoCodec}.avl`;
-  readonly bytes: number;
-  readonly sha256: string;
-  readonly codecString: string;
-  readonly type: `application/vnd.aval; codecs="${string}"`;
-  readonly integrity: `sha256-${string}`;
-}
-
-export interface CompileBundleReportTool {
-  readonly executableSha256: string;
-  readonly executableIdentity: Readonly<RegularFileIdentity>;
-  readonly version: string;
-  readonly versionOutputSha256: string;
-}
-
-export interface CompileBundleReportToolchain {
-  readonly ffmpeg: Readonly<CompileBundleReportTool> & {
-    readonly configurationSha256: string;
-    readonly encodersOutputSha256: string;
-    readonly calibrationSha256: string;
-  };
-  readonly ffprobe: Readonly<CompileBundleReportTool>;
-  readonly aggregateMemoryLimit: "derived";
-}
-
-export interface CompileBundleReport {
-  readonly reportVersion: "1.0";
-  readonly assets: readonly Readonly<CompileBundleReportAsset>[];
-  readonly encodings: readonly Readonly<NormalizedVideoEncoding>[];
-  readonly invocations: readonly Readonly<CompileInvocationDetails>[];
-  readonly warnings: readonly string[];
-  readonly toolchain: Readonly<CompileBundleReportToolchain>;
-  readonly sourceMarkup: string;
-}
+export type CompileBundleReportAsset = PublishedCompileBundleReportAsset;
+export type CompileBundleReportTool = PublishedCompileBundleReportTool;
+export type CompileBundleReportToolchain = PublishedCompileBundleReportToolchain;
+export type CompileBundleReport = ParsedCompileBundleReport;
 
 export interface BuiltCompileBundleReport {
   readonly report: Readonly<CompileBundleReport>;
@@ -102,12 +57,12 @@ export interface BuiltCompileBundleReport {
 export function buildCompileBundleReport(
   input: Readonly<CompileBundleReportInput>
 ): Readonly<BuiltCompileBundleReport> {
-  const encodings = cloneEncodingSet(input.encodings);
+  const encodings = cloneNormalizedVideoEncodings(input.encodings);
   const assets = cloneAssetSet(input.assets, encodings);
   const invocations = cloneInvocations(input.invocations);
   const warnings = cloneWarnings(input.warnings);
   const toolchain = cloneToolchain(input.provenance);
-  const sourceMarkup = assets.map(sourceElement).join("\n");
+  const sourceMarkup = createCompileBundleSourceMarkup(assets);
   const report: Readonly<CompileBundleReport> = Object.freeze({
     reportVersion: "1.0",
     assets,
@@ -121,7 +76,7 @@ export function buildCompileBundleReport(
   try {
     const bytes = serializeCanonicalJsonWithLimits(
       report,
-      REPORT_SERIALIZATION_LIMITS
+      COMPILE_BUNDLE_REPORT_LIMITS.serialization
     );
     return Object.freeze({ report, bytes });
   } catch (error) {
@@ -143,7 +98,7 @@ function cloneAssetSet(
   if (
     !Array.isArray(value) ||
     value.length < 1 ||
-    value.length > MAX_ASSETS ||
+    value.length > COMPILE_BUNDLE_REPORT_LIMITS.maxAssets ||
     value.length !== encodings.length
   ) {
     invalid("assets must contain one fact per ordered encoding", "assets");
@@ -189,126 +144,29 @@ function cloneAssetSet(
   }));
 }
 
-function cloneEncodingSet(
-  value: readonly Readonly<NormalizedVideoEncoding>[]
-): readonly Readonly<NormalizedVideoEncoding>[] {
-  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_ASSETS) {
-    invalid("encodings must contain one through four policies", "encodings");
-  }
-  const seen = new Set<VideoCodec>();
-  return Object.freeze(value.map((encoding, index) => {
-    const path = `encodings[${String(index)}]`;
-    const codec = codecValue(encoding.codec, `${path}.codec`);
-    if (seen.has(codec)) invalid(`duplicate ${codec} encoding`, `${path}.codec`);
-    seen.add(codec);
-    const renditions = cloneRenditions(
-      encoding.renditions,
-      path,
-      codec === "vp9" || codec === "av1" ? 63 : 51
-    );
-    switch (codec) {
-      case "h264":
-        return Object.freeze({
-          codec,
-          preset: preset(encoding.preset, `${path}.preset`),
-          renditions
-        });
-      case "h265":
-        return Object.freeze({
-          codec,
-          preset: preset(encoding.preset, `${path}.preset`),
-          threads: integer(encoding.threads, `${path}.threads`, 1, 64),
-          renditions
-        });
-      case "vp9":
-        return Object.freeze({
-          codec,
-          deadline: oneOf(
-            encoding.deadline,
-            VP9_DEADLINES,
-            `${path}.deadline`
-          ),
-          cpuUsed: integer(encoding.cpuUsed, `${path}.cpuUsed`, -8, 8),
-          threads: integer(encoding.threads, `${path}.threads`, 1, 64),
-          renditions
-        });
-      case "av1": {
-        const columns = powerOfTwo(
-          encoding.tiles?.columns,
-          `${path}.tiles.columns`
-        );
-        const rows = powerOfTwo(
-          encoding.tiles?.rows,
-          `${path}.tiles.rows`
-        );
-        if (columns * rows > 64) {
-          invalid("tile product must be at most 64", `${path}.tiles`);
-        }
-        if (encoding.bitDepth !== 8 && encoding.bitDepth !== 10) {
-          invalid("bitDepth must be 8 or 10", `${path}.bitDepth`);
-        }
-        if (typeof encoding.rowMt !== "boolean") {
-          invalid("rowMt must be a boolean", `${path}.rowMt`);
-        }
-        return Object.freeze({
-          codec,
-          bitDepth: encoding.bitDepth,
-          cpuUsed: integer(encoding.cpuUsed, `${path}.cpuUsed`, 0, 8),
-          tiles: Object.freeze({ columns, rows }),
-          rowMt: encoding.rowMt,
-          threads: integer(encoding.threads, `${path}.threads`, 1, 64),
-          renditions
-        });
-      }
-    }
-  }));
-}
-
-function cloneRenditions(
-  value: readonly Readonly<NormalizedSourceRenditionTarget>[],
-  encodingPath: string,
-  maximumCrf: number
-): readonly Readonly<NormalizedSourceRenditionTarget>[] {
-  if (
-    !Array.isArray(value) ||
-    value.length < 1 ||
-    value.length > MAX_RENDITIONS
-  ) {
-    invalid(
-      "encoding must contain one through four renditions",
-      `${encodingPath}.renditions`
-    );
-  }
-  const seen = new Set<string>();
-  return Object.freeze(value.map((rendition, index) => {
-    const path = `${encodingPath}.renditions[${String(index)}]`;
-    const id = identifier(rendition.id, `${path}.id`);
-    if (seen.has(id)) invalid(`duplicate rendition ${id}`, `${path}.id`);
-    seen.add(id);
-    return Object.freeze({
-      id,
-      width: integer(rendition.width, `${path}.width`, 1, 0xffff_ffff),
-      height: integer(rendition.height, `${path}.height`, 1, 0xffff_ffff),
-      crf: integer(rendition.crf, `${path}.crf`, 0, maximumCrf)
-    });
-  }));
-}
-
 function cloneInvocations(
   value: readonly Readonly<CompileInvocationDetails>[]
 ): readonly Readonly<CompileInvocationDetails>[] {
-  if (!Array.isArray(value) || value.length > MAX_INVOCATIONS) {
+  if (
+    !Array.isArray(value) ||
+    value.length > COMPILE_BUNDLE_REPORT_LIMITS.maxInvocations
+  ) {
     invalid("invocation count exceeds the report limit", "invocations");
   }
   return Object.freeze(value.map((invocation, index) => {
     const path = `invocations[${String(index)}]`;
-    const operation = pathFreeText(invocation.operation, `${path}.operation`, 256);
+    const operation = pathFreeText(
+      invocation.operation,
+      `${path}.operation`,
+      COMPILE_BUNDLE_REPORT_LIMITS.maxOperationCodeUnits
+    );
     if (invocation.tool !== "ffmpeg" && invocation.tool !== "ffprobe") {
       invalid("tool must be ffmpeg or ffprobe", `${path}.tool`);
     }
     if (
       !Array.isArray(invocation.arguments) ||
-      invocation.arguments.length > MAX_INVOCATION_ARGUMENTS
+      invocation.arguments.length >
+        COMPILE_BUNDLE_REPORT_LIMITS.maxInvocationArguments
     ) {
       invalid("argument count exceeds the report limit", `${path}.arguments`);
     }
@@ -317,7 +175,7 @@ function cloneInvocations(
       pathFreeText(
         argument,
         `${path}.arguments[${String(argumentIndex)}]`,
-        32 * 1024,
+        COMPILE_BUNDLE_REPORT_LIMITS.maxFreeTextCodeUnits,
         true
       )
     ));
@@ -326,11 +184,18 @@ function cloneInvocations(
 }
 
 function cloneWarnings(value: readonly string[]): readonly string[] {
-  if (!Array.isArray(value) || value.length > MAX_WARNINGS) {
+  if (
+    !Array.isArray(value) ||
+    value.length > COMPILE_BUNDLE_REPORT_LIMITS.maxWarnings
+  ) {
     invalid("warning count exceeds the report limit", "warnings");
   }
   return Object.freeze(value.map((warning, index) =>
-    pathFreeText(warning, `warnings[${String(index)}]`, 32 * 1024)
+    pathFreeText(
+      warning,
+      `warnings[${String(index)}]`,
+      COMPILE_BUNDLE_REPORT_LIMITS.maxFreeTextCodeUnits
+    )
   ));
 }
 
@@ -352,7 +217,7 @@ function cloneToolchain(
     version: pathFreeText(
       provenance.versionLine,
       "provenance.versionLine",
-      32 * 1024
+      COMPILE_BUNDLE_REPORT_LIMITS.maxFreeTextCodeUnits
     ),
     versionOutputSha256: sha256(
       provenance.versionOutputSha256,
@@ -386,7 +251,7 @@ function cloneToolchain(
     version: pathFreeText(
       provenance.ffprobeVersionLine,
       "provenance.ffprobeVersionLine",
-      32 * 1024
+      COMPILE_BUNDLE_REPORT_LIMITS.maxFreeTextCodeUnits
     ),
     versionOutputSha256: sha256(
       provenance.ffprobeVersionOutputSha256,
@@ -415,23 +280,12 @@ function cloneIdentity(
   });
 }
 
-function sourceElement(asset: Readonly<CompileBundleReportAsset>): string {
-  return `<source src="${asset.path}" type='${asset.type}' integrity="${asset.integrity}">`;
-}
-
 function hexDigestBase64(value: string): string {
   return Buffer.from(value, "hex").toString("base64");
 }
 
 function codecValue(value: unknown, path: string): VideoCodec {
-  return oneOf(value, CODECS, path);
-}
-
-function preset(
-  value: unknown,
-  path: string
-): typeof H264_ENCODER_PRESETS[number] {
-  return oneOf(value, H264_ENCODER_PRESETS, path);
+  return oneOf(value, VIDEO_CODECS, path);
 }
 
 function oneOf<const T extends readonly string[]>(
@@ -443,21 +297,6 @@ function oneOf<const T extends readonly string[]>(
     invalid(`must be one of ${values.join(", ")}`, path);
   }
   return value as T[number];
-}
-
-function identifier(value: unknown, path: string): string {
-  if (typeof value !== "string" || !IDENTIFIER_PATTERN.test(value)) {
-    invalid("must be a canonical identifier", path);
-  }
-  return value;
-}
-
-function powerOfTwo(value: unknown, path: string): number {
-  const result = integer(value, path, 1, 64);
-  if ((result & (result - 1)) !== 0) {
-    invalid("must be a power of two", path);
-  }
-  return result;
 }
 
 function positiveSafeInteger(value: unknown, path: string): number {

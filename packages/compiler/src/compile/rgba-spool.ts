@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Writable } from "node:stream";
 
 import { CompilerError } from "../diagnostics.js";
-import { throwIfAborted } from "./output.js";
+import { throwIfAborted } from "../cancellation.js";
 import {
   createMaterializeRgbaInvocation,
   mediaTimeout,

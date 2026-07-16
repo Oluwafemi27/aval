@@ -27,11 +27,13 @@ import {
   invalid
 } from "./manifest-validation.js";
 import { cloneUnits } from "./manifest-unit-schema.js";
+import {
+  VIDEO_BITSTREAM_BY_CODEC,
+  VIDEO_CODECS
+} from "./video/codec-string.js";
 import type {
   CompiledManifest,
-  FormatOptions,
-  VideoBitstream,
-  VideoCodec
+  FormatOptions
 } from "./model.js";
 
 const TOP_LEVEL_KEYS = [
@@ -52,14 +54,6 @@ const TOP_LEVEL_KEYS = [
   "limits"
 ] as const;
 
-const BITSTREAM_BY_CODEC: Readonly<Record<VideoCodec, VideoBitstream>> =
-  Object.freeze({
-    h264: "annex-b",
-    h265: "annex-b",
-    vp9: "frame",
-    av1: "low-overhead"
-  });
-
 /** Validate, detach, and recursively freeze the sole production manifest. */
 export function validateCompiledManifest(
   value: unknown,
@@ -71,14 +65,17 @@ export function validateCompiledManifest(
     exactKeys(input, TOP_LEVEL_KEYS, "manifest");
     literal(input.formatVersion, "1.0", "formatVersion");
     const generator = generatorString(input.generator, "generator");
-    const codec = oneOf(input.codec, ["h264", "h265", "vp9", "av1"], "codec");
+    const codec = oneOf(input.codec, VIDEO_CODECS, "codec");
     const bitstream = oneOf(
       input.bitstream,
       ["annex-b", "frame", "low-overhead"],
       "bitstream"
     );
-    if (bitstream !== BITSTREAM_BY_CODEC[codec]) {
-      invalid("bitstream", `must be ${BITSTREAM_BY_CODEC[codec]} for ${codec}`);
+    if (bitstream !== VIDEO_BITSTREAM_BY_CODEC[codec]) {
+      invalid(
+        "bitstream",
+        `must be ${VIDEO_BITSTREAM_BY_CODEC[codec]} for ${codec}`
+      );
     }
     const layout = oneOf(input.layout, ["opaque", "packed-alpha"], "layout");
     const canvas = cloneCanvas(input.canvas, "canvas");

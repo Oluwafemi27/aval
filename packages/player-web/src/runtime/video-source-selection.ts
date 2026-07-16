@@ -4,10 +4,10 @@ import {
   type VideoCodec
 } from "@pixel-point/aval-format";
 
+import type { CertifiedVideoRendition } from "./asset-catalog.js";
 import type { SourceSupportProbe } from "./source-support-probe.js";
 import {
   selectVideoRendition,
-  type VideoRenditionCandidate,
   type VideoRenditionSelectionAttempt
 } from "./video-rendition-selection.js";
 
@@ -21,6 +21,7 @@ export interface VideoSourceDescriptor {
 export interface VideoSourceSession {
   readonly catalog: Readonly<{
     readonly manifest: Readonly<CompiledManifest>;
+    readonly videoRenditions: readonly Readonly<CertifiedVideoRendition>[];
   }>;
   dispose(): void | PromiseLike<void>;
 }
@@ -28,7 +29,6 @@ export interface VideoSourceSession {
 export type VideoSourceAttemptOutcome =
   | "invalid-codec-hint"
   | "all-renditions-unsupported"
-  | "candidate-unsupported"
   | "selected";
 
 export interface VideoSourceSelectionAttempt {
@@ -39,30 +39,17 @@ export interface VideoSourceSelectionAttempt {
 
 export interface AcceptedVideoSource<
   TCandidate extends VideoSourceDescriptor,
-  TSession extends VideoSourceSession,
-  TValue
-> {
-  readonly candidate: Readonly<TCandidate>;
-  readonly session: TSession;
-  readonly rendition: Readonly<VideoRenditionCandidate>;
-  readonly value: TValue;
-  readonly attempts: readonly Readonly<VideoSourceSelectionAttempt>[];
-}
-
-export interface VideoSourceAcceptanceInput<
-  TCandidate extends VideoSourceDescriptor,
   TSession extends VideoSourceSession
 > {
   readonly candidate: Readonly<TCandidate>;
   readonly session: TSession;
-  readonly rendition: Readonly<VideoRenditionCandidate>;
-  readonly signal: AbortSignal;
+  readonly rendition: Readonly<CertifiedVideoRendition>;
+  readonly attempts: readonly Readonly<VideoSourceSelectionAttempt>[];
 }
 
 export interface VideoSourceSelectionInput<
   TCandidate extends VideoSourceDescriptor,
-  TSession extends VideoSourceSession,
-  TValue
+  TSession extends VideoSourceSession
 > {
   readonly candidates: readonly Readonly<TCandidate>[];
   readonly signal: AbortSignal;
@@ -72,19 +59,10 @@ export interface VideoSourceSelectionInput<
   ): Promise<TSession>;
   createProbe(candidate: Readonly<TCandidate>): SourceSupportProbe;
   isResourceEligible(
-    rendition: Readonly<VideoRenditionCandidate>,
+    rendition: Readonly<CertifiedVideoRendition>,
     candidate: Readonly<TCandidate>,
     session: TSession
   ): boolean;
-  /**
-   * Perform the candidate-local configuration/decode construction. Resolving
-   * transfers session ownership to the returned value. Only
-   * VideoSourceCandidateUnsupportedError advances to the next source; every
-   * other rejection is terminal after this candidate has been retired.
-   */
-  accept(
-    input: Readonly<VideoSourceAcceptanceInput<TCandidate, TSession>>
-  ): Promise<TValue>;
 }
 
 /** Exhaustion contains only authored positions and closed outcomes, never URLs. */
@@ -100,25 +78,16 @@ export class VideoSourceSelectionError extends Error {
   }
 }
 
-/** Deterministic pre-activation construction rejection safe for fallthrough. */
-export class VideoSourceCandidateUnsupportedError extends Error {
-  public constructor() {
-    super("selected source candidate is deterministically unsupported");
-    this.name = "VideoSourceCandidateUnsupportedError";
-  }
-}
-
 /**
- * Sequential, generation-scoped source selection. No work for a later source
- * starts until the previous source's probe and metadata session have retired.
+ * Sequential, generation-scoped source selection. Successful return transfers
+ * ownership of one open session and its exact catalog-certified rendition.
  */
 export async function selectVideoSource<
   TCandidate extends VideoSourceDescriptor,
-  TSession extends VideoSourceSession,
-  TValue
+  TSession extends VideoSourceSession
 >(
-  input: Readonly<VideoSourceSelectionInput<TCandidate, TSession, TValue>>
-): Promise<Readonly<AcceptedVideoSource<TCandidate, TSession, TValue>>> {
+  input: Readonly<VideoSourceSelectionInput<TCandidate, TSession>>
+): Promise<Readonly<AcceptedVideoSource<TCandidate, TSession>>> {
   validateInput(input);
   const candidates = detachCandidates(input.candidates);
   const attempts: VideoSourceSelectionAttempt[] = [];
@@ -135,63 +104,46 @@ export async function selectVideoSource<
     let probe: SourceSupportProbe | null = null;
     let renditionAttempts: readonly Readonly<VideoRenditionSelectionAttempt>[] =
       Object.freeze([]);
-    let outcome: VideoSourceAttemptOutcome | null = null;
     try {
-      session = await input.open(candidate, input.signal);
+      const opened = await input.open(candidate, input.signal);
       throwIfAborted(input.signal);
-      validateSession(session);
-      const manifest = session.catalog.manifest;
-      if (manifest.codec !== family) {
+      validateSession(opened);
+      session = opened;
+      const catalog = opened.catalog;
+      if (catalog.manifest.codec !== family) {
         throw new TypeError(
           "opened AVAL asset codec disagrees with its source type"
         );
       }
 
-      probe = input.createProbe(candidate);
-      validateProbe(probe);
+      const candidateProbe = input.createProbe(candidate);
+      validateProbe(candidateProbe);
+      probe = candidateProbe;
       const selection = await selectVideoRendition({
-        manifest,
+        renditions: catalog.videoRenditions,
         isResourceEligible: (rendition) => input.isResourceEligible(
           rendition,
           candidate,
-          session as TSession
+          opened
         ),
-        probeDecoderConfig: (config) => probe!.probe(config, {
+        probeDecoderConfig: (config) => candidateProbe.probe(config, {
           signal: input.signal
         })
       });
       renditionAttempts = selection.attempts;
       throwIfAborted(input.signal);
       if (selection.outcome === "all-unsupported") {
-        outcome = "all-renditions-unsupported";
         throw new CandidateRejected();
       }
 
-      await disposeProbe(probe);
+      await candidateProbe.dispose();
       probe = null;
-      throwIfAborted(input.signal);
-      let value: TValue;
-      try {
-        value = await input.accept(Object.freeze({
-          candidate,
-          session,
-          rendition: selection.selected,
-          signal: input.signal
-        }));
-      } catch (error) {
-        if (!(error instanceof VideoSourceCandidateUnsupportedError)) {
-          throw error;
-        }
-        outcome = "candidate-unsupported";
-        throw new CandidateRejected();
-      }
       throwIfAborted(input.signal);
       attempts.push(createAttempt(candidate, "selected", renditionAttempts));
       return Object.freeze({
         candidate,
-        session,
+        session: opened,
         rendition: selection.selected,
-        value,
         attempts: freezeAttempts(attempts)
       });
     } catch (error) {
@@ -204,10 +156,12 @@ export async function selectVideoSource<
           "rejected AVAL source cleanup failed"
         );
       }
-      if (!(error instanceof CandidateRejected) || outcome === null) {
-        throw error;
-      }
-      attempts.push(createAttempt(candidate, outcome, renditionAttempts));
+      if (!(error instanceof CandidateRejected)) throw error;
+      attempts.push(createAttempt(
+        candidate,
+        "all-renditions-unsupported",
+        renditionAttempts
+      ));
     }
   }
 
@@ -217,13 +171,13 @@ export async function selectVideoSource<
 class CandidateRejected extends Error {}
 
 function validateInput(input: unknown): asserts input is Readonly<
-  VideoSourceSelectionInput<VideoSourceDescriptor, VideoSourceSession, unknown>
+  VideoSourceSelectionInput<VideoSourceDescriptor, VideoSourceSession>
 > {
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("video source selection input must be an object");
   }
   const value = input as Partial<
-    VideoSourceSelectionInput<VideoSourceDescriptor, VideoSourceSession, unknown>
+    VideoSourceSelectionInput<VideoSourceDescriptor, VideoSourceSession>
   >;
   if (!Array.isArray(value.candidates) || value.candidates.length === 0) {
     throw new TypeError("video source selection requires authored candidates");
@@ -234,8 +188,7 @@ function validateInput(input: unknown): asserts input is Readonly<
   for (const callback of [
     value.open,
     value.createProbe,
-    value.isResourceEligible,
-    value.accept
+    value.isResourceEligible
   ]) {
     if (typeof callback !== "function") {
       throw new TypeError("video source selection callback is unavailable");
@@ -264,8 +217,6 @@ function detachCandidates<TCandidate extends VideoSourceDescriptor>(
       throw new TypeError("video source candidate is invalid");
     }
     seen.add(candidate.authoredIndex);
-    // Detach only selection authority. Unknown host fields remain on the frozen
-    // descriptor without being read by this module.
     result.push(Object.freeze({ ...candidate }));
   }
   return Object.freeze(result);
@@ -287,7 +238,8 @@ function validateSession(value: VideoSourceSession): void {
     value.catalog === null ||
     typeof value.catalog !== "object" ||
     value.catalog.manifest === null ||
-    typeof value.catalog.manifest !== "object"
+    typeof value.catalog.manifest !== "object" ||
+    !Array.isArray(value.catalog.videoRenditions)
   ) {
     throw new TypeError("opened video source session is malformed");
   }
@@ -347,10 +299,6 @@ async function retireRejected(
     : failures.length === 1
       ? failures[0]
       : new AggregateError(failures, "source cleanup failed");
-}
-
-async function disposeProbe(probe: SourceSupportProbe): Promise<void> {
-  await probe.dispose();
 }
 
 function throwIfAborted(signal: AbortSignal): void {

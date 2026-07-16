@@ -1,6 +1,7 @@
 import {
   FORMAT_DEFAULT_BUDGETS,
-  parseVideoCodecString
+  parseVideoCodecString,
+  VIDEO_CODECS
 } from "@pixel-point/aval-format";
 
 import type {
@@ -34,12 +35,6 @@ export interface DevServerBuild {
 export const MAX_ASSET_BYTES = FORMAT_DEFAULT_BUDGETS.maxFileBytes;
 export const MAX_BUILD_REPORT_BYTES = 64 * 1024 * 1024;
 const MAX_WARNINGS = 64;
-const VIDEO_CODECS = Object.freeze([
-  "h264",
-  "h265",
-  "vp9",
-  "av1"
-] as const satisfies readonly VideoCodec[]);
 const SHA256_HEX = /^[0-9a-f]{64}$/u;
 const SOURCE_TYPE = /^application\/vnd\.aval; codecs="([^"]+)"$/u;
 

@@ -41,6 +41,12 @@ import {
   type VerifiedBlobDescriptor,
   type VerifiedBlobStoreSnapshot
 } from "./verified-blob-store.js";
+import {
+  certifyVideoRenditions,
+  type CertifiedVideoRendition
+} from "./video-rendition-certification.js";
+
+export type { CertifiedVideoRendition } from "./video-rendition-certification.js";
 
 export type {
   RuntimeCatalogChunk,
@@ -99,6 +105,7 @@ interface CatalogInstallation {
  * and downstream copy method.
  */
 export class RuntimeAssetCatalog {
+  public readonly videoRenditions: readonly Readonly<CertifiedVideoRendition>[];
   public readonly renditions: RuntimeCatalogIdIndex<ProductionRendition>;
   public readonly units: RuntimeCatalogIdIndex<Unit>;
   public readonly states: RuntimeCatalogIdIndex<State>;
@@ -134,6 +141,7 @@ export class RuntimeAssetCatalog {
       frontIndex: installed.frontIndex,
       declaredFileLength: installed.declaredFileLength
     });
+    this.videoRenditions = certifyVideoRenditions(installed.frontIndex.manifest);
 
     this.renditions = createCatalogIdIndex(
       "rendition",
@@ -161,6 +169,18 @@ export class RuntimeAssetCatalog {
 
   public get disposed(): boolean {
     return this.#disposed;
+  }
+
+  /** Exact identity proof for a byte-free rendition certified by this catalog. */
+  public ownsVideoRendition(value: unknown): value is Readonly<CertifiedVideoRendition> {
+    this.#throwIfDisposed();
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return false;
+    }
+    const authoredIndex = Reflect.get(value, "authoredIndex");
+    return typeof authoredIndex === "number" &&
+      Number.isSafeInteger(authoredIndex) && authoredIndex >= 0 &&
+      this.videoRenditions[authoredIndex] === value;
   }
 
   /** Current retained source ownership plus verified payload copies. */

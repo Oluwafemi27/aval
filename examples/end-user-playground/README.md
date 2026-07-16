@@ -1,7 +1,9 @@
 # End-user playground
 
 This permanent example exercises the public `@pixel-point/aval-element` API
-with a real checked-in, two-state asset. From the repository root, run:
+with real checked-in AV1, VP9, H.265, and H.264 renditions of one two-state
+asset. The browser selects the first supported source. From the repository
+root, run:
 
 ```sh
 npm install

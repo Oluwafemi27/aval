@@ -2,13 +2,29 @@ import { describe, expect, it } from "vitest";
 
 import {
   isVideoCodecString,
-  parseVideoCodecString
+  parseVideoCodecString,
+  VIDEO_BITSTREAM_BY_CODEC,
+  VIDEO_CODECS
 } from "../src/video/codec-string.js";
 
 describe("canonical WebCodecs codec strings", () => {
+  it("owns the immutable codec order and bitstream mapping", () => {
+    expect(VIDEO_CODECS).toEqual(["h264", "h265", "vp9", "av1"]);
+    expect(VIDEO_BITSTREAM_BY_CODEC).toEqual({
+      h264: "annex-b",
+      h265: "annex-b",
+      vp9: "frame",
+      av1: "low-overhead"
+    });
+    expect(Object.isFrozen(VIDEO_CODECS)).toBe(true);
+    expect(Object.isFrozen(VIDEO_BITSTREAM_BY_CODEC)).toBe(true);
+  });
+
   it("recognizes every production codec family", () => {
-    expect(parseVideoCodecString("avc1.640020")).toEqual({ family: "h264" });
-    expect(parseVideoCodecString("hvc1.1.6.L93.B0")).toEqual({ family: "h265" });
+    expect(parseVideoCodecString("avc1.640020"))
+      .toEqual({ family: "h264", bitDepth: 8 });
+    expect(parseVideoCodecString("hvc1.1.6.L93.B0"))
+      .toEqual({ family: "h265", bitDepth: 8 });
     expect(parseVideoCodecString("vp09.00.10.08.01.01.01.01.00"))
       .toEqual({ family: "vp9", bitDepth: 8 });
     expect(parseVideoCodecString("av01.0.08M.10.0.110.01.01.01.0"))
@@ -34,5 +50,20 @@ describe("canonical WebCodecs codec strings", () => {
     ]) {
       expect(parseVideoCodecString(value)).toBeUndefined();
     }
+  });
+
+  it.each([
+    "avc1.000000",
+    "vp09.99.99.08",
+    "av01.2.00M.08.0.110.01.01.01.0",
+    "vp09.00.10.12",
+    "hvc1.1.6.L0",
+    "hvc1.0.0.L93",
+    "hvc1.A1.6.L93.B0",
+    "hvc1.1.0.L93.B0",
+    "hvc1.2.4.L93.B0",
+    "hvc1.31.1.H255.FF"
+  ])("rejects a syntactically-shaped but unsupported codec string %s", (value) => {
+    expect(parseVideoCodecString(value)).toBeUndefined();
   });
 });

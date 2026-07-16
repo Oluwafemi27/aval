@@ -1,18 +1,11 @@
 import "./style.css";
+import {
+  parseCompileBundleReport,
+  VIDEO_CODECS,
+  type VideoCodec
+} from "@pixel-point/aval-format";
 
-type Codec = "av1" | "vp9" | "h265" | "h264";
-
-interface BuildAsset {
-  readonly codec: Codec;
-  readonly path: string;
-  readonly type: string;
-  readonly integrity: string;
-}
-
-interface BuildReport {
-  readonly reportVersion: "1.0";
-  readonly assets: readonly BuildAsset[];
-}
+type Codec = VideoCodec;
 
 interface SourcePlaygroundApi {
   readonly ready: Promise<void>;
@@ -44,7 +37,7 @@ declare global {
   }
 }
 
-const CODEC_ORDER = Object.freeze(["av1", "vp9", "h265", "h264"] as const);
+const CODEC_ORDER = Object.freeze([...VIDEO_CODECS].reverse());
 const player = requireElement<HTMLElement>("#motion");
 const status = requireElement<HTMLElement>("#status");
 const codecList = requireElement<HTMLOListElement>("#codec-list");
@@ -88,7 +81,7 @@ async function initialize(): Promise<void> {
       headers: { "X-Aval-Session": session }
     });
     if (!response.ok) throw new Error(`bundle report request failed (${String(response.status)})`);
-    const report = parseBuildReport(await response.json());
+    const report = parseCompileBundleReport(await response.json());
     const assets = new Map(report.assets.map((asset) => [asset.codec, asset]));
     for (const codec of CODEC_ORDER) {
       const source = player.querySelector<HTMLSourceElement>(
@@ -146,9 +139,6 @@ async function switchPreferredCodec(
   let prepared = false;
   try {
     reorderSources(codec);
-    // Direct-child source mutations are coalesced at the next task boundary.
-    // Preparing after that boundary joins the replacement generation.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     await motion.prepare?.({ timeoutMs: 30_000 });
     prepared = true;
   } catch (error) {
@@ -243,34 +233,6 @@ function requireMapValue<K, V>(map: ReadonlyMap<K, V>, key: K): V {
   const value = map.get(key);
   if (value === undefined) throw new Error("required codec source is missing");
   return value;
-}
-
-function parseBuildReport(value: unknown): BuildReport {
-  if (typeof value !== "object" || value === null) throw new TypeError("bundle report is not an object");
-  const candidate = value as Partial<BuildReport>;
-  if (candidate.reportVersion !== "1.0" || !Array.isArray(candidate.assets)) {
-    throw new TypeError("bundle report is not AVAL report 1.0");
-  }
-  const seen = new Set<Codec>();
-  const assets = candidate.assets.map((entry, index): BuildAsset => {
-    if (typeof entry !== "object" || entry === null) {
-      throw new TypeError(`bundle report asset ${String(index)} is invalid`);
-    }
-    const asset = entry as Partial<BuildAsset>;
-    if (
-      !CODEC_ORDER.includes(asset.codec as Codec) ||
-      asset.path !== `${asset.codec}.avl` ||
-      typeof asset.type !== "string" ||
-      !/^application\/vnd\.aval; codecs="[A-Za-z0-9.]+"/u.test(asset.type) ||
-      typeof asset.integrity !== "string" ||
-      !/^sha256-[A-Za-z0-9+/]{43}=$/u.test(asset.integrity)
-    ) throw new TypeError(`bundle report asset ${String(index)} is invalid`);
-    if (seen.has(asset.codec as Codec)) throw new TypeError("bundle report contains a duplicate codec");
-    seen.add(asset.codec as Codec);
-    return Object.freeze(asset as BuildAsset);
-  });
-  if (assets.length !== CODEC_ORDER.length) throw new TypeError("bundle report must contain four codec assets");
-  return Object.freeze({ reportVersion: "1.0", assets: Object.freeze(assets) });
 }
 
 function boundedSession(value: string): string {

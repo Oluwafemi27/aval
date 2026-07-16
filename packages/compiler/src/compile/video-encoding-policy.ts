@@ -1,4 +1,7 @@
-import { FORMAT_DEFAULT_BUDGETS } from "@pixel-point/aval-format";
+import {
+  FORMAT_DEFAULT_BUDGETS,
+  VIDEO_CODECS
+} from "@pixel-point/aval-format";
 
 import type {
   Av1Encoding,
@@ -27,19 +30,31 @@ import {
   record
 } from "../schema-validation.js";
 
-const CODECS = ["h264", "h265", "vp9", "av1"] as const;
-
 /** Validate and normalize the ordered codec-major encoding list. */
 export function cloneVideoEncodings(
   value: unknown,
   canvas: Readonly<Canvas>
 ): readonly NormalizedVideoEncoding[] {
-  const inputs = boundedArray(value, "encodings", 1, CODECS.length);
+  return cloneEncodingSet(value, canvas);
+}
+
+/** Validate and detach an already dimension-normalized encoding set. */
+export function cloneNormalizedVideoEncodings(
+  value: unknown
+): readonly NormalizedVideoEncoding[] {
+  return cloneEncodingSet(value, undefined);
+}
+
+function cloneEncodingSet(
+  value: unknown,
+  canvas: Readonly<Canvas> | undefined
+): readonly NormalizedVideoEncoding[] {
+  const inputs = boundedArray(value, "encodings", 1, VIDEO_CODECS.length);
   const seen = new Set<VideoCodec>();
   const encodings = inputs.map((entry, index) => {
     const path = `encodings[${String(index)}]`;
     const input = record(entry, path);
-    const codec = oneOf(input.codec, CODECS, `${path}.codec`);
+    const codec = oneOf(input.codec, VIDEO_CODECS, `${path}.codec`);
     if (seen.has(codec)) invalid(`${path}.codec`, `duplicates codec ${codec}`);
     seen.add(codec);
     switch (codec) {
@@ -95,7 +110,7 @@ export function videoCompressionArguments(
 function cloneH264Encoding(
   input: Record<string, unknown>,
   path: string,
-  canvas: Readonly<Canvas>
+  canvas: Readonly<Canvas> | undefined
 ): H264Encoding<NormalizedSourceRenditionTarget> {
   exactKeys(input, ["codec", "preset", "renditions"], path);
   return Object.freeze({
@@ -108,7 +123,7 @@ function cloneH264Encoding(
 function cloneH265Encoding(
   input: Record<string, unknown>,
   path: string,
-  canvas: Readonly<Canvas>
+  canvas: Readonly<Canvas> | undefined
 ): H265Encoding<NormalizedSourceRenditionTarget> {
   exactKeys(input, ["codec", "preset", "threads", "renditions"], path);
   return Object.freeze({
@@ -122,7 +137,7 @@ function cloneH265Encoding(
 function cloneVp9Encoding(
   input: Record<string, unknown>,
   path: string,
-  canvas: Readonly<Canvas>
+  canvas: Readonly<Canvas> | undefined
 ): Vp9Encoding<NormalizedSourceRenditionTarget> {
   exactKeys(
     input,
@@ -141,7 +156,7 @@ function cloneVp9Encoding(
 function cloneAv1Encoding(
   input: Record<string, unknown>,
   path: string,
-  canvas: Readonly<Canvas>
+  canvas: Readonly<Canvas> | undefined
 ): Av1Encoding<NormalizedSourceRenditionTarget> {
   exactKeys(
     input,
@@ -172,7 +187,7 @@ function cloneAv1Encoding(
 function cloneRenditions(
   value: unknown,
   encodingPath: string,
-  canvas: Readonly<Canvas>,
+  canvas: Readonly<Canvas> | undefined,
   maximumCrf: number
 ): readonly NormalizedSourceRenditionTarget[] {
   const inputs = boundedArray(
@@ -189,13 +204,21 @@ function cloneRenditions(
     const id = identifier(input.id, `${path}.id`);
     if (seen.has(id)) invalid(`${path}.id`, `duplicates id ${id}`);
     seen.add(id);
-    const target = Object.freeze({
+    const crf = integer(input.crf, `${path}.crf`, 0, maximumCrf);
+    if (canvas === undefined) {
+      return Object.freeze({
+        id,
+        width: integer(input.width, `${path}.width`, 1, 0xffff_ffff),
+        height: integer(input.height, `${path}.height`, 1, 0xffff_ffff),
+        crf
+      });
+    }
+    return normalizeRendition(Object.freeze({
       id,
       width: dimension(input.width, `${path}.width`, canvas.width),
       height: dimension(input.height, `${path}.height`, canvas.height),
-      crf: integer(input.crf, `${path}.crf`, 0, maximumCrf)
-    });
-    return normalizeRendition(target, path, canvas);
+      crf
+    }), path, canvas);
   });
   return Object.freeze(renditions);
 }

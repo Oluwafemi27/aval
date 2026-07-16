@@ -11,6 +11,7 @@ import type {
   VideoDecodeSubmissionMetadata
 } from "./video-codec-adapters.js";
 import {
+  planWorkerSampleGroupCredit,
   WorkerSampleFactory,
   type WorkerSampleCatalog,
   type WorkerSampleFrameRequest,
@@ -91,6 +92,29 @@ const PAYLOADS = Object.freeze(SUBMISSIONS.map(({ decodeIndex }) =>
 ));
 
 describe("WorkerSampleFactory", () => {
+  it("uses one credit decision for chunks and displayed frames", () => {
+    const requirement = {
+      chunkCount: 2,
+      frameCount: 1
+    } as const;
+    expect(planWorkerSampleGroupCredit(requirement, {
+      pendingSamples: 6,
+      outstandingFrames: 7
+    }, LIMITS)).toEqual({
+      chunkCost: 2,
+      frameCost: 1,
+      fits: true
+    });
+    expect(planWorkerSampleGroupCredit(requirement, {
+      pendingSamples: 7,
+      outstandingFrames: 7
+    }, LIMITS).fits).toBe(false);
+    expect(() => planWorkerSampleGroupCredit(requirement, {
+      pendingSamples: -1,
+      outstandingFrames: 0
+    }, LIMITS)).toThrow("pending sample count");
+  });
+
   it("reports the smallest safe groups for hidden and reordered chunks", () => {
     const { factory } = createFixture();
 

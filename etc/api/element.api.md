@@ -4,7 +4,7 @@
 
 ```ts
 
-import type { BindingV01 } from '@pixel-point/aval-player-web';
+import type { Binding } from '@pixel-point/aval-player-web';
 import type { MotionPolicy } from '@pixel-point/aval-player-web';
 import type { RuntimeFailureCode } from '@pixel-point/aval-player-web';
 import type { RuntimeReadiness } from '@pixel-point/aval-player-web';
@@ -65,7 +65,7 @@ export interface AvalDiagnostics {
     // (undocumented)
     readonly hostReducedMotion: boolean | null;
     // (undocumented)
-    readonly inputBindings: readonly Readonly<BindingV01>[];
+    readonly inputBindings: readonly Readonly<Binding>[];
     // (undocumented)
     readonly inputGeneration: number;
     // (undocumented)
@@ -114,7 +114,8 @@ export interface AvalDiagnostics {
     // (undocumented)
     readonly runtime: Readonly<{
         selectedRendition: string | null;
-        selectedProfile: string | null;
+        selectedCodec: string | null;
+        selectedBitDepth: 8 | 10 | null;
         transportMode: "range" | "full" | null;
         declaredFileBytes: number;
         metadataBytes: number;
@@ -191,7 +192,7 @@ export interface AvalElement extends HTMLElement {
     // (undocumented)
     height: number | null;
     // (undocumented)
-    readonly inputBindings: readonly Readonly<BindingV01>[];
+    readonly inputBindings: readonly Readonly<Binding>[];
     // (undocumented)
     interactionFor: string;
     // (undocumented)
@@ -490,7 +491,7 @@ export interface AvalVisualStateChangeDetail {
     readonly to: string;
 }
 
-export { BindingV01 }
+export { Binding }
 
 // @public (undocumented)
 export function defineAvalElement(): AvalElementConstructor;

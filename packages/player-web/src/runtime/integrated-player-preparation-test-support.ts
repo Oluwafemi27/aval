@@ -24,7 +24,6 @@ import {
 } from "./integrated-player.js";
 import type { MotionPolicy } from "./motion-policy.js";
 import type { BrowserContextRecoveryEventTarget } from "./browser-context-recovery.js";
-import { selectIntegratedTestVideoRendition } from "./integrated-player-video-test-support.js";
 
 export type CandidateBehavior =
   | { readonly kind: "success"; readonly cleanupFailure?: boolean }
@@ -77,10 +76,7 @@ export function createPreparationHarness(
   let player: IntegratedPlayer | null = null;
   player = new IntegratedPlayer({
     bytes,
-    selectedRendition: selectIntegratedTestVideoRendition(
-      bytes,
-      options.selectedRenditionIndex ?? 0
-    ),
+    selectedRenditionIndex: options.selectedRenditionIndex ?? 0,
     createFallbackStore: () => fallbackStore,
     candidateFactory: factory,
     eventSink: (event) => {

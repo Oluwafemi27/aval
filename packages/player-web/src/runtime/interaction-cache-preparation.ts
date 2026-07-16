@@ -39,8 +39,11 @@ import type {
   FrameRenderer,
   ResidentFrameHandle
 } from "./frame-renderer.js";
-import type { WorkerSampleFactory } from "./worker-samples.js";
-import type { WorkerSampleOutput } from "./worker-samples.js";
+import {
+  planWorkerSampleGroupCredit,
+  type WorkerSampleFactory,
+  type WorkerSampleOutput
+} from "./worker-samples.js";
 
 export {
   InteractionCachePreparationTimeoutError
@@ -350,12 +353,15 @@ export async function prepareInteractionCache(
             "codec presentation group exceeds cache preparation limits"
           );
         }
-        const hasCredit =
-          requirement.chunkCount <=
-            input.limits.maxPendingSamples - metrics.pendingSamples &&
-          requirement.frameCount <=
-            input.limits.maxOutstandingFrames - outstanding;
-        if (hasCredit) {
+        const credit = planWorkerSampleGroupCredit(
+          requirement,
+          {
+            pendingSamples: metrics.pendingSamples,
+            outstandingFrames: outstanding
+          },
+          input.limits
+        );
+        if (credit.fits) {
         const draft = draftFrames(preparations, cursor, requirement.frameCount);
         const batch = input.samples.createBatch({
           frames: draft.frames.map(({ unitId, unitFrame }) => ({

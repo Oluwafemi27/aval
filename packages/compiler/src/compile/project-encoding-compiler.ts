@@ -1,6 +1,7 @@
 import {
   FormatError,
   isVideoCodecString,
+  VIDEO_BITSTREAM_BY_CODEC,
   writeCanonicalAsset,
   type Bitrate,
   type CanonicalAssetInput,
@@ -9,7 +10,6 @@ import {
   type ProductionRendition,
   type UnitInput,
   type VideoBitDepth,
-  type VideoBitstream,
   type VideoLayout,
   type VideoRenditionGeometry
 } from "@pixel-point/aval-format";
@@ -25,13 +25,6 @@ import { ffmpegGenerator } from "./output.js";
 import { validateCompiledOutput } from "./output-validation.js";
 import { deriveReadiness } from "./readiness-plan.js";
 import { estimateRuntimeLimits } from "./resource-estimate.js";
-
-const BITSTREAM_BY_CODEC = Object.freeze({
-  h264: "annex-b",
-  h265: "annex-b",
-  vp9: "frame",
-  av1: "low-overhead"
-} satisfies Readonly<Record<NormalizedVideoEncoding["codec"], VideoBitstream>>);
 
 export interface PreparedEncodingChunk {
   readonly bytes: Uint8Array;
@@ -121,7 +114,7 @@ export function compileProjectEncoding(
     formatVersion: "1.0",
     generator: ffmpegGenerator(),
     codec: input.encoding.codec,
-    bitstream: BITSTREAM_BY_CODEC[input.encoding.codec],
+    bitstream: VIDEO_BITSTREAM_BY_CODEC[input.encoding.codec],
     layout: input.layout,
     canvas: input.project.canvas,
     frameRate: input.project.frameRate,

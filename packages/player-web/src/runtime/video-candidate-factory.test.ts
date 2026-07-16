@@ -6,7 +6,7 @@ import type { RuntimeAssetCatalog } from "./asset-catalog.js";
 import type { IntegratedCandidateAttemptContext } from "./integrated-player-contracts.js";
 import { createVideoCandidateWorkerSetup } from "./video-candidate-config.js";
 import { VideoCandidateFactory } from "./video-candidate-factory.js";
-import { createVideoRenditionCandidates } from "./video-rendition-selection.js";
+import { certifyVideoRenditions } from "./video-rendition-certification.js";
 
 const SPECS = Object.freeze({
   h264: Object.freeze({ codec: "avc1.640020", bitstream: "annex-b" as const }),
@@ -82,9 +82,12 @@ function createContext(
   family: keyof typeof SPECS
 ): Readonly<IntegratedCandidateAttemptContext> {
   const manifest = createManifest(family);
-  const candidate = createVideoRenditionCandidates(manifest)[0]!;
+  const videoRenditions = certifyVideoRenditions(manifest);
+  const candidate = videoRenditions[0]!;
   const catalog = {
     manifest,
+    videoRenditions,
+    ownsVideoRendition: (value: unknown) => value === candidate,
     renditions: {
       require(id: string) {
         const rendition = manifest.renditions.find((value) => value.id === id);

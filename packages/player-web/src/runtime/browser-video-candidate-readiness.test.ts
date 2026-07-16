@@ -7,7 +7,7 @@ import type {
 import type { ManagedDecoderWorkerFrame } from "../decoder-worker/client.js";
 import {
   BrowserReadinessProbe
-} from "./browser-video-candidate-readiness.js";
+} from "./browser-readiness-probe.js";
 import type {
   VideoCandidateReadinessSessionInput
 } from "./video-candidate-model.js";

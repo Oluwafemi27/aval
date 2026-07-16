@@ -5,7 +5,10 @@ import type {
   MotionGraphTickOptions
 } from "@pixel-point/aval-graph";
 
-import type { RuntimeAssetCatalog } from "./asset-catalog.js";
+import type {
+  CertifiedVideoRendition,
+  RuntimeAssetCatalog
+} from "./asset-catalog.js";
 import type { EffectHostEvent } from "./effect-host.js";
 import type { RuntimeFailure } from "./errors.js";
 import type {
@@ -18,7 +21,6 @@ import type {
   RuntimeVisibilityState
 } from "./model.js";
 import type { VideoCodecAdapterInspection } from "./video-codec-adapters.js";
-import type { VideoRenditionCandidate } from "./video-rendition-selection.js";
 import type { RealtimeUnderflowEvent } from "./realtime-driver.js";
 import type { MotionPolicy } from "./motion-policy.js";
 import type { RuntimeCanvasResourceHost } from "./canvas-resource-plan.js";
@@ -54,7 +56,7 @@ export interface IntegratedFallbackStore {
 export interface IntegratedCandidateAttemptContext {
   readonly catalog: RuntimeAssetCatalog;
   /** Exact authored rung selected before candidate construction. */
-  readonly candidate: Readonly<VideoRenditionCandidate>;
+  readonly candidate: Readonly<CertifiedVideoRendition>;
   /** Byte-free inspection for that exact catalog/rendition pair. */
   readonly inspection: Readonly<VideoCodecAdapterInspection>;
   readonly graphSnapshot: Readonly<MotionGraphSnapshot>;
@@ -175,8 +177,6 @@ interface IntegratedPlayerCommonOptions {
     catalog: RuntimeAssetCatalog
   ) => IntegratedFallbackStore;
   readonly candidateFactory: IntegratedCandidateFactory;
-  /** Selection authority; IntegratedPlayer never re-ranks or reselects it. */
-  readonly selectedRendition: Readonly<VideoRenditionCandidate>;
   readonly eventSink?: (event: Readonly<EffectHostEvent>) => void;
   readonly diagnosticsSink?: (failure: Readonly<RuntimeFailure>) => void;
   readonly hostMaxRuntimeBytes?: number;
@@ -195,14 +195,20 @@ interface IntegratedPlayerCommonOptions {
 export type IntegratedPlayerOptions = IntegratedPlayerCommonOptions & (
   | {
       readonly bytes: Uint8Array;
+      /** Authored rendition selected by the caller before the byte catalog exists. */
+      readonly selectedRenditionIndex: number;
+      readonly selectedRendition?: never;
       readonly assetSession?: never;
       readonly assetSessionOwnership?: never;
     }
   | {
       readonly bytes?: never;
+      readonly selectedRenditionIndex?: never;
       readonly assetSession: RuntimeAssetSession;
       /** Required capability boundary; external sessions remain host-owned. */
       readonly assetSessionOwnership: "external" | "player";
+      /** Exact selection authority certified by the supplied session catalog. */
+      readonly selectedRendition: Readonly<CertifiedVideoRendition>;
     }
 );
 

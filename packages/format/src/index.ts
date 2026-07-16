@@ -68,12 +68,36 @@ export type {
 } from "./chunk-plan.js";
 export {
   isVideoCodecString,
-  parseVideoCodecString
+  parseVideoCodecString,
+  VIDEO_BITSTREAM_BY_CODEC,
+  VIDEO_CODECS
 } from "./video/codec-string.js";
 export { deriveVideoRenditionGeometry, PACKED_ALPHA_GUTTER } from "./video/geometry.js";
 export type {
   ParsedVideoCodecString
 } from "./video/codec-string.js";
+export {
+  COMPILE_BUNDLE_H264_PRESETS,
+  COMPILE_BUNDLE_H265_PRESETS,
+  COMPILE_BUNDLE_REPORT_LIMITS,
+  COMPILE_BUNDLE_VP9_DEADLINES,
+  createCompileBundleSourceMarkup,
+  parseCompileBundleReport
+} from "./compile-bundle-report.js";
+export type {
+  CompileBundleReportAsset,
+  CompileBundleReportAv1Encoding,
+  CompileBundleReportEncoding,
+  CompileBundleReportExecutableIdentity,
+  CompileBundleReportH264Encoding,
+  CompileBundleReportH265Encoding,
+  CompileBundleReportInvocation,
+  CompileBundleReportRendition,
+  CompileBundleReportTool,
+  CompileBundleReportToolchain,
+  CompileBundleReportVp9Encoding,
+  ParsedCompileBundleReport
+} from "./compile-bundle-report.js";
 export type {
   VideoRenditionGeometry,
   VideoRenditionGeometryInput,

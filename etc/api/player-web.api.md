@@ -4,18 +4,13 @@
 
 ```ts
 
-import type { AccessUnitRecord } from '@pixel-point/aval-format';
-import type { AvcCodecV01 } from '@pixel-point/aval-format';
-import { AvcConstrainedBaselineProfile } from '@pixel-point/aval-format';
-import type { AvcQuantizationPolicy } from '@pixel-point/aval-format';
-import { AvcRenditionGeometry } from '@pixel-point/aval-format';
-import { AvcRenditionInspection } from '@pixel-point/aval-format';
-import { BindingSourceV01 } from '@pixel-point/aval-format';
-import { BindingV01 } from '@pixel-point/aval-format';
+import { Binding } from '@pixel-point/aval-format';
+import { BindingSource } from '@pixel-point/aval-format';
 import type { ByteRange } from '@pixel-point/aval-format';
-import { CanvasV01 } from '@pixel-point/aval-format';
-import { CompiledManifestV01 } from '@pixel-point/aval-format';
-import { EdgeV01 } from '@pixel-point/aval-format';
+import { Canvas } from '@pixel-point/aval-format';
+import { CompiledManifest } from '@pixel-point/aval-format';
+import { Edge } from '@pixel-point/aval-format';
+import type { EncodedChunkRecord } from '@pixel-point/aval-format';
 import { FormatHeader } from '@pixel-point/aval-format';
 import { GraphBodyDefinition } from '@pixel-point/aval-graph';
 import { GraphEdgeDefinition } from '@pixel-point/aval-graph';
@@ -31,14 +26,31 @@ import type { MotionGraphResult } from '@pixel-point/aval-graph';
 import type { MotionGraphSnapshot } from '@pixel-point/aval-graph';
 import type { MotionGraphTickOptions } from '@pixel-point/aval-graph';
 import { ParsedFrontIndex } from '@pixel-point/aval-format';
-import type { PortV01 } from '@pixel-point/aval-format';
-import { RenditionV01 } from '@pixel-point/aval-format';
-import type { ResidencyEndpointV01 } from '@pixel-point/aval-format';
-import { StateV01 } from '@pixel-point/aval-format';
+import { parseVideoCodecString } from '@pixel-point/aval-format';
+import type { Port } from '@pixel-point/aval-format';
+import { ProductionRendition } from '@pixel-point/aval-format';
+import type { Rational } from '@pixel-point/aval-format';
+import type { ResidencyEndpoint } from '@pixel-point/aval-format';
+import { State } from '@pixel-point/aval-format';
+import { Unit } from '@pixel-point/aval-format';
 import type { UnitBlobRange } from '@pixel-point/aval-format';
-import { UnitV01 } from '@pixel-point/aval-format';
 import { ValidatedAssetLayout } from '@pixel-point/aval-format';
 import type { ValidatedMotionGraph } from '@pixel-point/aval-graph';
+import type { VideoBitDepth } from '@pixel-point/aval-format';
+import type { VideoCodec } from '@pixel-point/aval-format';
+import type { VideoRenditionGeometry } from '@pixel-point/aval-format';
+
+// @public (undocumented)
+export interface AcceptedVideoSource<TCandidate extends VideoSourceDescriptor, TSession extends VideoSourceSession> {
+    // (undocumented)
+    readonly attempts: readonly Readonly<VideoSourceSelectionAttempt>[];
+    // (undocumented)
+    readonly candidate: Readonly<TCandidate>;
+    // (undocumented)
+    readonly rendition: Readonly<CertifiedVideoRendition>;
+    // (undocumented)
+    readonly session: TSession;
+}
 
 // @public (undocumented)
 export type ActualMotionMode = "unprepared" | "animated" | "static" | "disposed";
@@ -72,7 +84,7 @@ export interface AllRoutesReadinessInput {
     // (undocumented)
     readonly graph: Readonly<ValidatedMotionGraph>;
     // (undocumented)
-    readonly manifest: Readonly<CompiledManifestV01>;
+    readonly manifest: Readonly<CompiledManifest>;
 }
 
 // @public (undocumented)
@@ -99,208 +111,9 @@ export function asInteractionCachePreparationRenderer(renderer: FrameRenderer): 
 // @public
 export function asInteractionCachePreparationWorker(worker: DecoderWorkerClient): InteractionCachePreparationWorker;
 
-// @public
-export function asResidentUploadTarget(renderer: WebGlFrameRenderer): ResidentFrameUploadTarget;
+export { Binding }
 
-// @public (undocumented)
-export interface AvcCandidateActivationInput {
-    // (undocumented)
-    readonly deadlineMs: number;
-    // (undocumented)
-    readonly expectedPresentation: Readonly<GraphPresentation>;
-    // (undocumented)
-    readonly finalResourcePlan: Readonly<RuntimeResourcePlan>;
-    // (undocumented)
-    readonly graphSnapshot: Readonly<MotionGraphSnapshot>;
-    // (undocumented)
-    readonly scheduler: PathScheduler;
-    // (undocumented)
-    readonly signal: AbortSignal;
-}
-
-// @public (undocumented)
-export type AvcCandidateCachePreparer = (input: Readonly<InteractionCachePreparationInput>, options?: Readonly<PrepareInteractionCacheOptions>) => Promise<Readonly<InteractionCachePreparationReport>>;
-
-// @public
-class AvcCandidateFactory implements IntegratedCandidateFactory {
-    constructor(options: Readonly<AvcCandidateFactoryOptions>);
-    // (undocumented)
-    readonly availability: IntegratedCandidateFactory["availability"];
-    // (undocumented)
-    readonly contextTarget?: NonNullable<IntegratedCandidateFactory["contextTarget"]>;
-    // (undocumented)
-    create(context: Readonly<IntegratedCandidateAttemptContext>): IntegratedCandidateAttempt;
-    // (undocumented)
-    readonly resourceHost?: NonNullable<IntegratedCandidateFactory["resourceHost"]>;
-}
-export { AvcCandidateFactory }
-export { AvcCandidateFactory as OpaqueCandidateFactory }
-
-// @public (undocumented)
-export interface AvcCandidateFactoryOptions {
-    // (undocumented)
-    readonly clock?: PathSchedulerClock;
-    // (undocumented)
-    readonly contextTarget?: BrowserContextRecoveryEventTarget;
-    readonly prepareCache?: AvcCandidateCachePreparer;
-    // (undocumented)
-    readonly readinessFactory: AvcCandidateReadinessFactory;
-    // (undocumented)
-    readonly rendererFactory: AvcCandidateRendererFactory;
-    // (undocumented)
-    readonly resourceAuthority?: AvcCandidateResourceAuthority;
-    // (undocumented)
-    readonly resourceHost?: RuntimeCanvasResourceHost;
-    // (undocumented)
-    readonly timers?: AvcCandidateTimerHost;
-    // (undocumented)
-    readonly workerFactory: AvcCandidateWorkerFactory;
-}
-
-// @public
-export interface AvcCandidatePreparedMedia {
-    // Warning: (ae-forgotten-export) The symbol "Awaitable_2" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    dispose(): Awaitable_2<void>;
-    // (undocumented)
-    drawInitial(): void;
-    // (undocumented)
-    readonly playback: IntegratedPlaybackSession;
-}
-
-// @public (undocumented)
-export interface AvcCandidateReadinessFactory {
-    // (undocumented)
-    create(input: Readonly<AvcCandidateReadinessSessionInput>): AvcCandidateReadinessSession;
-}
-
-// @public
-export interface AvcCandidateReadinessSession {
-    // (undocumented)
-    readonly adapters: Readonly<ReadinessRunnerAdapters>;
-    // (undocumented)
-    dispose(): Awaitable_2<void>;
-    // (undocumented)
-    observeResult?(result: Readonly<ReadinessRunnerResult>): void;
-    // (undocumented)
-    prepareActivation(input: Readonly<AvcCandidateActivationInput>): Awaitable_2<AvcCandidatePreparedMedia>;
-}
-
-// @public (undocumented)
-export interface AvcCandidateReadinessSessionInput {
-    // (undocumented)
-    readonly clock: PathSchedulerClock;
-    // (undocumented)
-    readonly context: Readonly<IntegratedCandidateAttemptContext>;
-    // (undocumented)
-    readonly deadlineMs: number;
-    // (undocumented)
-    readonly interactionCache: Readonly<InteractionCachePlan>;
-    // (undocumented)
-    readonly limits: Readonly<DecoderWorkerLimits>;
-    // (undocumented)
-    readonly provisionalResourcePlan: Readonly<RuntimeResourcePlan>;
-    // (undocumented)
-    readonly renderer: FrameRenderer;
-    // (undocumented)
-    readonly samples: WorkerSampleFactory;
-    // (undocumented)
-    readonly signal: AbortSignal;
-    // (undocumented)
-    readonly timeline: DecodeTimeline;
-    // (undocumented)
-    readonly worker: AvcCandidateWorker;
-}
-
-// @public (undocumented)
-export interface AvcCandidateRendererFactory {
-    // (undocumented)
-    readonly available: boolean;
-    // (undocumented)
-    create(context: Readonly<IntegratedCandidateAttemptContext>): AvcCandidateRendererReservation;
-}
-
-// @public
-export interface AvcCandidateRendererReservation {
-    // Warning: (ae-forgotten-export) The symbol "FrameTextureLayout_2" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    allocate(layout: Readonly<FrameTextureLayout_2>): FrameRenderer;
-    // (undocumented)
-    dispose(): Awaitable_2<void>;
-    // (undocumented)
-    readonly limits: Readonly<InteractionCacheDeviceLimits>;
-}
-
-// @public
-export interface AvcCandidateResourceAuthority {
-    // (undocumented)
-    requestDecoder(): RuntimeDecoderTicket;
-    // (undocumented)
-    reservePlan(allocation: Readonly<RuntimeResourceAllocationSnapshot>): AvcCandidateResourcePlanLease | PromiseLike<AvcCandidateResourcePlanLease>;
-}
-
-// @public (undocumented)
-export interface AvcCandidateResourcePlanLease {
-    // (undocumented)
-    assertAllocation(allocation: Readonly<RuntimeResourceAllocationSnapshot>): void;
-    // (undocumented)
-    claimWorkerTransfer(byteLength: number): WorkerSampleTransferLease;
-    // (undocumented)
-    release(): void;
-    // (undocumented)
-    snapshot(): Readonly<AvcCandidateResourcePlanLeaseSnapshot>;
-}
-
-// @public (undocumented)
-export interface AvcCandidateResourcePlanLeaseSnapshot {
-    // (undocumented)
-    readonly categories: readonly Readonly<RuntimeCategoryBytesSnapshot>[];
-    // (undocumented)
-    readonly released: boolean;
-    // (undocumented)
-    readonly totalBytes: number;
-}
-
-// @public (undocumented)
-export interface AvcCandidateTimerHost {
-    // (undocumented)
-    clearTimeout(handle: unknown): void;
-    // (undocumented)
-    setTimeout(callback: () => void, milliseconds: number): unknown;
-}
-
-// @public
-export interface AvcCandidateWorker extends PathSchedulerWorkerAdapter {
-    // (undocumented)
-    configure(options: DecoderWorkerConfigureOptions): Promise<void>;
-    // (undocumented)
-    dispose(): Promise<void>;
-}
-
-// @public (undocumented)
-export interface AvcCandidateWorkerFactory {
-    // (undocumented)
-    readonly available: boolean;
-    // (undocumented)
-    create(context: Readonly<IntegratedCandidateAttemptContext>): AvcCandidateWorker;
-}
-
-// @public (undocumented)
-export interface AvcCandidateWorkerSetup {
-    // (undocumented)
-    readonly configure: Readonly<DecoderWorkerConfigureOptions>;
-    // (undocumented)
-    readonly limits: Readonly<DecoderWorkerLimits>;
-}
-
-// @public (undocumented)
-export type BackendTextureKind = FrameTextureKind;
-
-export { BindingSourceV01 }
-
-export { BindingV01 }
+export { BindingSource }
 
 // @public (undocumented)
 export interface BorrowedVideoFrame {
@@ -308,156 +121,6 @@ export interface BorrowedVideoFrame {
     close(): void;
     // (undocumented)
     readonly frame: CopyableVideoFrame;
-}
-
-// @public (undocumented)
-export interface BrowserAvcCandidateComposition {
-    // (undocumented)
-    readonly controls: BrowserAvcCandidateControls;
-    // (undocumented)
-    readonly factory: AvcCandidateFactory;
-}
-
-// @public (undocumented)
-export interface BrowserAvcCandidateCompositionOptions {
-    // (undocumented)
-    readonly canvas: HTMLCanvasElement;
-    // (undocumented)
-    readonly clock?: PathSchedulerClock;
-    // (undocumented)
-    readonly diagnosticsSink?: (failure: Readonly<RuntimeFailure>) => void;
-    readonly presentationPlanes?: Pick<BrowserPresentationPlanes, "createFrameBackend" | "currentCanvasBacking" | "reserveCanvasResources" | "ownsAnimatedCanvas"> & Partial<Pick<BrowserPresentationPlanes, "animatedContextTarget">>;
-    // (undocumented)
-    readonly renderer?: Readonly<BrowserFrameBackendOptions>;
-    readonly resourceAuthority?: AvcCandidateResourceAuthority;
-    // Warning: (ae-forgotten-export) The symbol "BrowserAvcCandidateTestDependencies" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly testDependencies?: BrowserAvcCandidateTestDependencies;
-    // (undocumented)
-    readonly timers?: AvcCandidateTimerHost;
-    // (undocumented)
-    readonly worker?: CreateDecoderWorkerClientOptions;
-}
-
-// @public (undocumented)
-export interface BrowserAvcCandidateControls {
-    // (undocumented)
-    induceWorkerFailure(): void;
-    // (undocumented)
-    readPixels(): Readonly<BrowserAvcReadPixelsResult>;
-    // (undocumented)
-    settled(): Promise<void>;
-    // (undocumented)
-    snapshot(): Readonly<BrowserAvcCandidateSnapshot>;
-}
-
-// @public (undocumented)
-export interface BrowserAvcCandidateSnapshot {
-    // (undocumented)
-    readonly activeRendition: string | null;
-    // Warning: (ae-forgotten-export) The symbol "BrowserAvcCandidateOrderEntry" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly candidateOrder: readonly Readonly<BrowserAvcCandidateOrderEntry>[];
-    // (undocumented)
-    readonly cleanup: Readonly<BrowserAvcCleanupSnapshot>;
-    // (undocumented)
-    readonly diagnostics: readonly Readonly<RuntimeFailure>[];
-    // (undocumented)
-    readonly playback: Readonly<BrowserAvcPlaybackSnapshot>;
-    // (undocumented)
-    readonly readiness: Readonly<BrowserAvcReadinessSnapshot>;
-    // (undocumented)
-    readonly renderer: Readonly<BrowserAvcRendererSnapshot>;
-    // (undocumented)
-    readonly worker: Readonly<BrowserAvcWorkerSnapshot>;
-}
-
-// @public (undocumented)
-export interface BrowserAvcCleanupSnapshot {
-    // (undocumented)
-    readonly complete: boolean;
-    // (undocumented)
-    readonly glResourceCount: number;
-    // (undocumented)
-    readonly openFrames: number;
-    // (undocumented)
-    readonly pendingOperations: number;
-    // (undocumented)
-    readonly renderersAlive: number;
-    // (undocumented)
-    readonly rendererStagingBytes: number;
-    // (undocumented)
-    readonly sourceCopiesInFlight: number;
-    // (undocumented)
-    readonly workersAlive: number;
-}
-
-// @public (undocumented)
-export interface BrowserAvcPlaybackSnapshot {
-    // (undocumented)
-    readonly cut: Readonly<CutPresentationSnapshot> | null;
-    // (undocumented)
-    readonly pendingCallbacks: number;
-    // (undocumented)
-    readonly pendingPromises: number;
-    // (undocumented)
-    readonly readbackTags: readonly string[];
-    // (undocumented)
-    readonly reversible: Readonly<ReversiblePresentationSnapshot> | null;
-    // (undocumented)
-    readonly scheduler: Readonly<PathSchedulerSnapshot> | null;
-}
-
-// @public (undocumented)
-export interface BrowserAvcReadinessSnapshot {
-    // (undocumented)
-    readonly evaluation: Readonly<AllRoutesReadinessReport> | null;
-    // (undocumented)
-    readonly evidence: Readonly<AllRoutesReadinessEvidence> | null;
-    // (undocumented)
-    readonly passed: boolean | null;
-    // (undocumented)
-    readonly policy: "all-routes";
-    // Warning: (ae-forgotten-export) The symbol "BrowserProductionReadinessReport" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly production: Readonly<BrowserProductionReadinessReport> | null;
-}
-
-// @public (undocumented)
-export interface BrowserAvcReadPixelsResult {
-    // (undocumented)
-    readonly height: number;
-    // (undocumented)
-    readonly rgba: Uint8Array;
-    // (undocumented)
-    readonly width: number;
-}
-
-// @public (undocumented)
-export interface BrowserAvcRendererSnapshot {
-    // (undocumented)
-    readonly backendAlive: boolean;
-    // (undocumented)
-    readonly glResourceCount: number;
-    // (undocumented)
-    readonly snapshot: Readonly<FrameRendererSnapshot> | null;
-}
-
-// @public (undocumented)
-export interface BrowserAvcWorkerSnapshot {
-    // (undocumented)
-    readonly alive: boolean;
-    // (undocumented)
-    readonly metrics: Readonly<DecoderWorkerMetrics> | null;
-    // (undocumented)
-    readonly openFrames: number;
-    // (undocumented)
-    readonly pendingRequests: number;
-    // (undocumented)
-    readonly pendingWaiters: number;
 }
 
 // @public
@@ -574,19 +237,17 @@ export interface BrowserContextRetirementInput {
 // @public (undocumented)
 export type BrowserDecoderWorkerFactory = (url: URL, options: WorkerOptions) => OwnedDecoderWorkerPort;
 
-// Warning: (ae-forgotten-export) The symbol "FrameRendererBackend_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export class BrowserFrameBackend implements FrameRendererBackend_2 {
+export class BrowserFrameBackend implements FrameRendererBackend {
     constructor(canvas: HTMLCanvasElement, options?: Readonly<BrowserFrameBackendOptions>);
     // (undocumented)
-    allocate(layout: FrameTextureLayout_2, streamingSlots: number): void;
+    allocate(layout: FrameTextureLayout, streamingSlots: number): void;
     // (undocumented)
     dispose(): void;
     // (undocumented)
     draw(kind: FrameTextureKind, index: number): void;
     // (undocumented)
-    readonly limits: Readonly<OpaqueFrameRendererBackendLimits>;
+    readonly limits: Readonly<FrameRendererBackendLimits>;
     // (undocumented)
     readPixels(): Uint8Array;
     setPresentationGeometry(geometry: Readonly<PresentationGeometry>): boolean;
@@ -597,61 +258,10 @@ export class BrowserFrameBackend implements FrameRendererBackend_2 {
 }
 
 // @public (undocumented)
-interface BrowserFrameBackendOptions {
+export interface BrowserFrameBackendOptions {
     readonly checkErrors?: boolean;
     readonly preserveDrawingBuffer?: boolean;
 }
-export { BrowserFrameBackendOptions }
-export { BrowserFrameBackendOptions as BrowserOpaqueFrameBackendOptions }
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueCandidateComposition = BrowserAvcCandidateComposition;
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueCandidateCompositionOptions = BrowserAvcCandidateCompositionOptions;
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueCandidateControls = BrowserAvcCandidateControls;
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueCandidateSnapshot = BrowserAvcCandidateSnapshot;
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueCleanupSnapshot = BrowserAvcCleanupSnapshot;
-
-// @public @deprecated (undocumented)
-export class BrowserOpaqueFrameBackend implements OpaqueFrameRendererBackend {
-    constructor(canvas: HTMLCanvasElement, options?: Readonly<BrowserFrameBackendOptions>);
-    // (undocumented)
-    allocate(layout: OpaqueFrameTextureLayout, streamingSlots: number): void;
-    // (undocumented)
-    dispose(): void;
-    // (undocumented)
-    draw(kind: FrameTextureKind, index: number): void;
-    // (undocumented)
-    get limits(): Readonly<OpaqueFrameRendererBackendLimits>;
-    // (undocumented)
-    readPixels(): Uint8Array;
-    // (undocumented)
-    upload(kind: FrameTextureKind, index: number, pixels: Uint8Array): void;
-    // (undocumented)
-    uploadFrame(kind: FrameTextureKind, index: number, frame: CopyableVideoFrame, layout: Readonly<FrameSourceLayout>): void;
-}
-
-// @public @deprecated (undocumented)
-export type BrowserOpaquePlaybackSnapshot = BrowserAvcPlaybackSnapshot;
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueReadinessSnapshot = BrowserAvcReadinessSnapshot;
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueReadPixelsResult = BrowserAvcReadPixelsResult;
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueRendererSnapshot = BrowserAvcRendererSnapshot;
-
-// @public @deprecated (undocumented)
-export type BrowserOpaqueWorkerSnapshot = BrowserAvcWorkerSnapshot;
 
 // @public
 export class BrowserPresentationPlanes implements RuntimeCanvasResourceHost {
@@ -681,7 +291,7 @@ export interface BrowserPresentationPlanesOptions {
     // (undocumented)
     readonly backingResources?: BrowserCanvasBackingResourceHost;
     // (undocumented)
-    readonly canvas: Readonly<CanvasV01>;
+    readonly canvas: Readonly<Canvas>;
     // (undocumented)
     readonly createBackend?: (canvas: HTMLCanvasElement, options?: Readonly<BrowserFrameBackendOptions>) => PresentableFrameBackend;
     readonly initialPresentation?: Readonly<BrowserPresentationResizeInput>;
@@ -731,21 +341,167 @@ export interface BrowserPresentationResizeInput {
     readonly maxBackingBytes?: number;
 }
 
+// @public (undocumented)
+export interface BrowserVideoCandidateCleanupSnapshot {
+    // (undocumented)
+    readonly complete: boolean;
+    // (undocumented)
+    readonly glResourceCount: number;
+    // (undocumented)
+    readonly openFrames: number;
+    // (undocumented)
+    readonly pendingOperations: number;
+    // (undocumented)
+    readonly renderersAlive: number;
+    // (undocumented)
+    readonly rendererStagingBytes: number;
+    // (undocumented)
+    readonly sourceCopiesInFlight: number;
+    // (undocumented)
+    readonly workersAlive: number;
+}
+
+// @public (undocumented)
+export interface BrowserVideoCandidateComposition {
+    // (undocumented)
+    readonly controls: BrowserVideoCandidateControls;
+    // (undocumented)
+    readonly factory: VideoCandidateFactory;
+}
+
+// @public (undocumented)
+export interface BrowserVideoCandidateCompositionOptions {
+    // (undocumented)
+    readonly canvas: HTMLCanvasElement;
+    // (undocumented)
+    readonly clock?: PathSchedulerClock;
+    // (undocumented)
+    readonly diagnosticsSink?: (failure: Readonly<RuntimeFailure>) => void;
+    readonly presentationPlanes?: Pick<BrowserPresentationPlanes, "createFrameBackend" | "currentCanvasBacking" | "reserveCanvasResources" | "ownsAnimatedCanvas"> & Partial<Pick<BrowserPresentationPlanes, "animatedContextTarget">>;
+    // (undocumented)
+    readonly renderer?: Readonly<BrowserFrameBackendOptions>;
+    readonly resourceAuthority?: VideoCandidateResourceAuthority;
+    // (undocumented)
+    readonly testDependencies?: BrowserVideoCandidateTestDependencies;
+    // (undocumented)
+    readonly timers?: VideoCandidateTimerHost;
+    // (undocumented)
+    readonly worker?: CreateDecoderWorkerClientOptions;
+}
+
+// @public (undocumented)
+export interface BrowserVideoCandidateControls {
+    // (undocumented)
+    induceWorkerFailure(): void;
+    // (undocumented)
+    readPixels(): Readonly<BrowserVideoReadPixelsResult>;
+    // (undocumented)
+    settled(): Promise<void>;
+    // (undocumented)
+    snapshot(): Readonly<BrowserVideoCandidateSnapshot>;
+}
+
+// @public (undocumented)
+export interface BrowserVideoCandidateOrderEntry {
+    readonly area: number;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly peakBitrate: number;
+}
+
+// @public (undocumented)
+export interface BrowserVideoCandidateSnapshot {
+    // (undocumented)
+    readonly activeRendition: string | null;
+    // (undocumented)
+    readonly candidateOrder: readonly Readonly<BrowserVideoCandidateOrderEntry>[];
+    // (undocumented)
+    readonly cleanup: Readonly<BrowserVideoCandidateCleanupSnapshot>;
+    // (undocumented)
+    readonly diagnostics: readonly Readonly<RuntimeFailure>[];
+    // (undocumented)
+    readonly playback: Readonly<BrowserVideoPlaybackSnapshot>;
+    // (undocumented)
+    readonly readiness: Readonly<BrowserVideoReadinessSnapshot>;
+    // (undocumented)
+    readonly renderer: Readonly<BrowserVideoRendererSnapshot>;
+    // (undocumented)
+    readonly worker: Readonly<BrowserVideoWorkerSnapshot>;
+}
+
 // @public
-export class BrowserWebGl2FrameBackend implements FrameRendererBackend {
-    constructor(canvas: HTMLCanvasElement);
+export interface BrowserVideoCandidateTestDependencies {
     // (undocumented)
-    allocate(layout: FrameTextureLayout, streamingSlots: number): void;
+    readonly createFrameBackend?: (canvas: HTMLCanvasElement) => FrameRendererBackend;
     // (undocumented)
-    dispose(): void;
+    readonly createWorkerPort?: (url: URL, options: WorkerOptions) => OwnedDecoderWorkerPort;
+}
+
+// @public (undocumented)
+export interface BrowserVideoPlaybackSnapshot {
     // (undocumented)
-    draw(kind: BackendTextureKind, index: number): void;
+    readonly cut: Readonly<CutPresentationSnapshot> | null;
     // (undocumented)
-    readonly limits: Readonly<FrameRendererBackendLimits>;
+    readonly pendingCallbacks: number;
     // (undocumented)
-    readPixels(): Uint8Array;
+    readonly pendingPromises: number;
     // (undocumented)
-    upload(kind: BackendTextureKind, index: number, pixels: Uint8Array): void;
+    readonly readbackTags: readonly string[];
+    // (undocumented)
+    readonly reversible: Readonly<ReversiblePresentationSnapshot> | null;
+    // (undocumented)
+    readonly scheduler: Readonly<PathSchedulerSnapshot> | null;
+}
+
+// @public (undocumented)
+export interface BrowserVideoReadinessSnapshot {
+    // (undocumented)
+    readonly evaluation: Readonly<AllRoutesReadinessReport> | null;
+    // (undocumented)
+    readonly evidence: Readonly<AllRoutesReadinessEvidence> | null;
+    // (undocumented)
+    readonly passed: boolean | null;
+    // (undocumented)
+    readonly policy: "all-routes";
+    // Warning: (ae-forgotten-export) The symbol "BrowserProductionReadinessReport" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly production: Readonly<BrowserProductionReadinessReport> | null;
+}
+
+// @public (undocumented)
+export interface BrowserVideoReadPixelsResult {
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly rgba: Uint8Array;
+    // (undocumented)
+    readonly width: number;
+}
+
+// @public (undocumented)
+export interface BrowserVideoRendererSnapshot {
+    // (undocumented)
+    readonly backendAlive: boolean;
+    // (undocumented)
+    readonly glResourceCount: number;
+    // (undocumented)
+    readonly snapshot: Readonly<FrameRendererSnapshot> | null;
+}
+
+// @public (undocumented)
+export interface BrowserVideoWorkerSnapshot {
+    // (undocumented)
+    readonly alive: boolean;
+    // (undocumented)
+    readonly metrics: Readonly<DecoderWorkerMetrics> | null;
+    // (undocumented)
+    readonly openFrames: number;
+    // (undocumented)
+    readonly pendingRequests: number;
+    // (undocumented)
+    readonly pendingWaiters: number;
 }
 
 // @public (undocumented)
@@ -757,7 +513,19 @@ export function calculateReadinessMetrics(input: ReadinessMetricsInput): Readonl
 // @public
 export function calculateRequiredEdgeLeadFrames(input: RequiredEdgeLeadInput): number;
 
-export { CanvasV01 }
+export { Canvas }
+
+// @public (undocumented)
+export interface CertifiedVideoRendition {
+    // (undocumented)
+    readonly authoredIndex: number;
+    // (undocumented)
+    readonly decoderConfig: Readonly<DecoderWorkerProbeConfig>;
+    // (undocumented)
+    readonly geometry: Readonly<VideoRenditionGeometry>;
+    // (undocumented)
+    readonly rendition: Readonly<ProductionRendition>;
+}
 
 // @public (undocumented)
 export function checkedByteNumber(value: bigint, label: string): number;
@@ -773,204 +541,10 @@ export function checkedByteSum(values: readonly ByteOperand[], label: string): b
 // @public (undocumented)
 export function checkedRgbaBytes(width: number, height: number, layers?: number, label?: string): bigint;
 
-export { CompiledManifestV01 }
+export { CompiledManifest }
 
 // @public
 export function computePresentationGeometry(input: Readonly<PresentationGeometryInput>): Readonly<PresentationGeometry>;
-
-// @public
-export class ContinuousLoopDecoder {
-    constructor(unit: EncodedLoopUnit, options?: ContinuousLoopDecoderOptions);
-    dispose(): void;
-    fillToAhead(target?: number, stopBeforeVirtualFrame?: number | bigint): number;
-    // (undocumented)
-    get maxInFlight(): number;
-    // (undocumented)
-    get nextVirtualFrame(): bigint;
-    // (undocumented)
-    snapshotMetrics(): ContinuousLoopDecoderMetrics;
-    takeFrame(): ManagedDecodedFrame | undefined;
-    terminalFlush(): Promise<void>;
-    // (undocumented)
-    get unit(): EncodedLoopUnit;
-    waitForFrames(minimum?: number, options?: WaitForFramesOptions): Promise<void>;
-}
-
-// @public (undocumented)
-export interface ContinuousLoopDecoderMetrics {
-    // (undocumented)
-    readonly boundaryFlushCalls: number;
-    // (undocumented)
-    readonly closedFrames: number;
-    // (undocumented)
-    readonly configureCalls: number;
-    // (undocumented)
-    readonly decodeQueueSize: number;
-    // (undocumented)
-    readonly disposed: boolean;
-    // (undocumented)
-    readonly errors: number;
-    // (undocumented)
-    readonly inFlightFrames: number;
-    // (undocumented)
-    readonly maxQueueDepth: number;
-    // (undocumented)
-    readonly openFrames: number;
-    // (undocumented)
-    readonly outputFrames: number;
-    // (undocumented)
-    readonly queuedFrames: number;
-    // (undocumented)
-    readonly reorderBufferedFrames: number;
-    // (undocumented)
-    readonly resetCalls: number;
-    // (undocumented)
-    readonly submittedChunks: number;
-    // (undocumented)
-    readonly terminalFlushCalls: number;
-    // (undocumented)
-    readonly terminalFlushCompleted: boolean;
-}
-
-// @public (undocumented)
-export interface ContinuousLoopDecoderOptions {
-    // (undocumented)
-    readonly chunkFactory?: EncodedVideoChunkFactory;
-    // (undocumented)
-    readonly decoderFactory?: VideoDecoderFactory;
-    // (undocumented)
-    readonly maxInFlight?: number;
-    // (undocumented)
-    readonly startVirtualFrame?: number | bigint;
-}
-
-// @public (undocumented)
-export interface ContinuousLoopStressOptions {
-    // (undocumented)
-    readonly chunkFactory?: EncodedVideoChunkFactory;
-    // (undocumented)
-    readonly decoderFactory?: VideoDecoderFactory;
-    // (undocumented)
-    readonly maxInFlight?: number;
-    // (undocumented)
-    readonly minimumThroughput?: number;
-    // (undocumented)
-    readonly now?: () => number;
-    // (undocumented)
-    readonly onValidatedFrame?: (expected: StressExpectedFrame, validatedCount: number) => void;
-    readonly readTag?: StressTagReader;
-    readonly validateFrame?: StressFrameValidator;
-    // (undocumented)
-    readonly watchdogMs?: number;
-}
-
-// @public (undocumented)
-export interface ContinuousLoopStressReport {
-    // (undocumented)
-    readonly elapsedMs: number;
-    // (undocumented)
-    readonly iterations: typeof STRESS_LOOP_ITERATIONS;
-    // (undocumented)
-    readonly mediaDurationSeconds: number;
-    // (undocumented)
-    readonly metrics: ContinuousLoopDecoderMetrics;
-    // (undocumented)
-    readonly minimumThroughput: number;
-    // (undocumented)
-    readonly outputFrames: typeof STRESS_LOOP_OUTPUT_FRAMES;
-    // (undocumented)
-    readonly passed: true;
-    // (undocumented)
-    readonly seams: typeof STRESS_LOOP_SEAMS;
-    // (undocumented)
-    readonly throughputMultiple: number;
-    // (undocumented)
-    readonly validatedTags: number;
-}
-
-// @public
-export class ContinuousPathDecoder {
-    constructor(units: readonly ContinuousPathUnit[], options?: ContinuousPathDecoderOptions);
-    // (undocumented)
-    get activeGeneration(): number | null;
-    dispose(): void;
-    fillToAhead(target?: number): number;
-    // (undocumented)
-    get maxInFlight(): number;
-    // (undocumented)
-    snapshotMetrics(): ContinuousPathDecoderMetrics;
-    startPath(unitId: string, options?: StartPathOptions): number;
-    takeFrame(): ManagedPathFrame | undefined;
-    waitForFrames(minimum?: number, options?: WaitForPathFramesOptions): Promise<void>;
-}
-
-// @public (undocumented)
-export interface ContinuousPathDecoderMetrics {
-    // (undocumented)
-    readonly activeGeneration: number | null;
-    // (undocumented)
-    readonly activeUnitId: string | null;
-    // (undocumented)
-    readonly boundaryFlushCalls: number;
-    // (undocumented)
-    readonly cachedRunwayOutputs: number;
-    // (undocumented)
-    readonly closedFrames: number;
-    // (undocumented)
-    readonly configureCalls: number;
-    // (undocumented)
-    readonly continuationOutputFrames: number;
-    // (undocumented)
-    readonly decodeQueueSize: number;
-    // (undocumented)
-    readonly disposed: boolean;
-    // (undocumented)
-    readonly errors: number;
-    // (undocumented)
-    readonly flushCalls: number;
-    // (undocumented)
-    readonly inFlightFrames: number;
-    // (undocumented)
-    readonly maxInFlightFrames: number;
-    // (undocumented)
-    readonly maxQueueDepth: number;
-    // (undocumented)
-    readonly nextDecodeOrdinal: bigint;
-    // (undocumented)
-    readonly openFrames: number;
-    // (undocumented)
-    readonly outputFrames: number;
-    // (undocumented)
-    readonly pathStarts: number;
-    // (undocumented)
-    readonly queuedFrames: number;
-    // (undocumented)
-    readonly reorderBufferedFrames: number;
-    // (undocumented)
-    readonly resetCalls: number;
-    // (undocumented)
-    readonly staleOutputs: number;
-    // (undocumented)
-    readonly submittedChunks: number;
-}
-
-// @public (undocumented)
-export interface ContinuousPathDecoderOptions {
-    // (undocumented)
-    readonly chunkFactory?: EncodedVideoChunkFactory;
-    // (undocumented)
-    readonly decoderFactory?: VideoDecoderFactory;
-    // (undocumented)
-    readonly maxInFlight?: number;
-}
-
-// @public (undocumented)
-export interface ContinuousPathUnit {
-    // (undocumented)
-    readonly id: string;
-    // (undocumented)
-    readonly unit: EncodedLoopUnit;
-}
 
 // @public (undocumented)
 export interface CopyableVideoFrame {
@@ -989,16 +563,7 @@ export interface CopyableVideoFrame {
 }
 
 // @public
-export function createAvcCandidateWorkerSetup(context: Readonly<IntegratedCandidateAttemptContext>): Readonly<AvcCandidateWorkerSetup>;
-
-// @public
-export function createAvcRenditionCandidates(renditions: readonly Readonly<RenditionV01>[], canvas?: Readonly<RuntimeAvcCanvas>): readonly Readonly<RuntimeAvcRenditionCandidate>[];
-
-// @public
-export function createBrowserAvcCandidateComposition(options: Readonly<BrowserAvcCandidateCompositionOptions>): Readonly<BrowserAvcCandidateComposition>;
-
-// @public @deprecated (undocumented)
-export const createBrowserOpaqueCandidateComposition: typeof createBrowserAvcCandidateComposition;
+export function createBrowserVideoCandidateComposition(options: Readonly<BrowserVideoCandidateCompositionOptions>): Readonly<BrowserVideoCandidateComposition>;
 
 // @public
 export function createCanvasRuntimeResourcePlan(input: Readonly<RuntimeCanvasResourcePlanInput>): Readonly<RuntimeCanvasResourcePlan>;
@@ -1017,19 +582,10 @@ export interface CreateDecoderWorkerClientOptions extends DecoderWorkerClientOpt
 }
 
 // @public
-export function createEncodedLoopUnit(input: EncodedLoopUnit): EncodedLoopUnit;
-
-// @public
 export function createInteractionCachePlan(input: InteractionCachePlanInput): Readonly<InteractionCachePlan>;
 
 // @public
 export function createInteractionCachePlanFromSemanticSequences(input: InteractionCacheSemanticInput): Readonly<InteractionCachePlan>;
-
-// @public @deprecated (undocumented)
-export const createOpaqueCandidateWorkerSetup: typeof createAvcCandidateWorkerSetup;
-
-// @public
-export const createOpaqueRenditionCandidates: typeof createAvcRenditionCandidates;
 
 // Warning: (ae-forgotten-export) The symbol "PlayerResourceAdmission" needs to be exported by the entry point index.d.ts
 //
@@ -1038,9 +594,6 @@ export function createPlayerRuntimeAssetSessionResources(account: PlayerResource
 
 // @public
 export function createPlayerWebRuntimeResources(account: PlayerResourceAccount, decoders: PageDecoderLeases, admission?: Readonly<PlayerResourceAdmission>): Readonly<PlayerWebRuntimeResources>;
-
-// @public
-export function createResidentFramePlan(input: ResidentFramePlanInput): Readonly<ResidentFramePlan>;
 
 // @public (undocumented)
 export function createRuntimeCandidateReport(report: RuntimeCandidateReport): Readonly<RuntimeCandidateReport>;
@@ -1054,9 +607,14 @@ export function createRuntimeReadinessReport(report: RuntimeReadinessReport): Re
 // @public
 export function createRuntimeResourcePlan(input: RuntimeResourcePlanInput): Readonly<RuntimeResourcePlan>;
 
+// @public
+export function createSourceSupportProbe(options?: SourceSupportProbeCreationOptions): SourceSupportProbe;
+
+// @public
+export function createVideoCandidateWorkerSetup(context: Readonly<IntegratedCandidateAttemptContext>): Readonly<VideoCandidateWorkerSetup>;
+
 // @public (undocumented)
 export interface CreateWorkerSampleBatchInput {
-    // (undocumented)
     readonly frames: readonly WorkerSampleFrameRequest[];
     // (undocumented)
     readonly outstandingFrames: number;
@@ -1266,21 +824,6 @@ export const DECODER_WORKER_HARD_LIMITS: Readonly<{
 // @public
 export const DECODER_WORKER_PROTOCOL_VERSION: 1;
 
-// @public
-export class DecoderDisposedError extends Error {
-    constructor(message?: string);
-}
-
-// @public
-export class DecoderEndOfStreamError extends Error {
-    constructor(message?: string);
-}
-
-// @public
-export class DecoderWatchdogError extends Error {
-    constructor(message: string);
-}
-
 // @public (undocumented)
 export interface DecoderWorkerAbortGenerationCommand {
     // (undocumented)
@@ -1296,7 +839,7 @@ export interface DecoderWorkerAbortGenerationCommand {
 // @public (undocumented)
 export interface DecoderWorkerAckEvent {
     // (undocumented)
-    readonly operation: DecoderWorkerRequestOperation;
+    readonly operation: DecoderWorkerAckOperation;
     // (undocumented)
     readonly protocolVersion: typeof DECODER_WORKER_PROTOCOL_VERSION;
     // (undocumented)
@@ -1304,6 +847,9 @@ export interface DecoderWorkerAckEvent {
     // (undocumented)
     readonly type: "ack";
 }
+
+// @public (undocumented)
+export type DecoderWorkerAckOperation = Exclude<DecoderWorkerRequestOperation, "probe-config">;
 
 // @public (undocumented)
 export interface DecoderWorkerActivateGenerationCommand {
@@ -1315,45 +861,6 @@ export interface DecoderWorkerActivateGenerationCommand {
     readonly requestId: number;
     // (undocumented)
     readonly type: "activate-generation";
-}
-
-// @public (undocumented)
-export interface DecoderWorkerAvcConfig {
-    // (undocumented)
-    readonly codec: AvcCodecV01;
-    // (undocumented)
-    readonly codedHeight: number;
-    // (undocumented)
-    readonly codedWidth: number;
-    // (undocumented)
-    readonly description?: never;
-    // (undocumented)
-    readonly hardwareAcceleration: HardwareAcceleration;
-    // (undocumented)
-    readonly optimizeForLatency: true;
-}
-
-// @public (undocumented)
-export interface DecoderWorkerAvcProfile {
-    // (undocumented)
-    readonly averageBitrate: number;
-    // (undocumented)
-    readonly codedHeight: number;
-    // (undocumented)
-    readonly codedWidth: number;
-    // (undocumented)
-    readonly cpbBufferBits: number;
-    // (undocumented)
-    readonly frameRate: {
-        readonly numerator: number;
-        readonly denominator: number;
-    };
-    // (undocumented)
-    readonly peakBitrate: number;
-    // (undocumented)
-    readonly quantizationPolicy: AvcQuantizationPolicy;
-    // (undocumented)
-    readonly requireBt709LimitedRange: true;
 }
 
 // @public
@@ -1370,6 +877,8 @@ export class DecoderWorkerClient {
     dispose(): Promise<void>;
     // (undocumented)
     get openFrames(): number;
+    // Warning: (ae-forgotten-export) The symbol "DecoderWorkerProbeOptions" needs to be exported by the entry point index.d.ts
+    probeConfig(config: Readonly<DecoderWorkerProbeConfig>, options?: DecoderWorkerProbeOptions): Promise<boolean>;
     // (undocumented)
     get queuedFrames(): number;
     // (undocumented)
@@ -1422,14 +931,12 @@ export interface DecoderWorkerColorSpaceExpectation {
 }
 
 // @public (undocumented)
-export type DecoderWorkerCommand = DecoderWorkerConfigureCommand | DecoderWorkerActivateGenerationCommand | DecoderWorkerSubmitCommand | DecoderWorkerAbortGenerationCommand | DecoderWorkerReleaseFrameCommand | DecoderWorkerSnapshotCommand | DecoderWorkerDisposeCommand;
+export type DecoderWorkerCommand = DecoderWorkerProbeConfigCommand | DecoderWorkerConfigureCommand | DecoderWorkerActivateGenerationCommand | DecoderWorkerSubmitCommand | DecoderWorkerAbortGenerationCommand | DecoderWorkerReleaseFrameCommand | DecoderWorkerSnapshotCommand | DecoderWorkerDisposeCommand;
 
 // @public (undocumented)
 export interface DecoderWorkerConfigureCommand {
     // (undocumented)
-    readonly avcProfile: DecoderWorkerAvcProfile;
-    // (undocumented)
-    readonly config: DecoderWorkerAvcConfig;
+    readonly config: DecoderWorkerVideoConfig;
     // (undocumented)
     readonly expectedOutput: DecoderWorkerOutputExpectation;
     // (undocumented)
@@ -1440,18 +947,20 @@ export interface DecoderWorkerConfigureCommand {
     readonly requestId: number;
     // (undocumented)
     readonly type: "configure";
+    // (undocumented)
+    readonly videoProfile: DecoderWorkerVideoProfile;
 }
 
 // @public (undocumented)
 export interface DecoderWorkerConfigureOptions {
     // (undocumented)
-    readonly avcProfile: DecoderWorkerAvcProfile;
-    // (undocumented)
-    readonly config: DecoderWorkerAvcConfig;
+    readonly config: DecoderWorkerVideoConfig;
     // (undocumented)
     readonly expectedOutput: DecoderWorkerOutputExpectation;
     // (undocumented)
     readonly limits: DecoderWorkerLimits;
+    // (undocumented)
+    readonly videoProfile: DecoderWorkerVideoProfile;
 }
 
 // @public
@@ -1473,8 +982,6 @@ export interface DecoderWorkerCoreOptions {
     readonly decoderFactory?: WorkerVideoDecoderFactory;
     // (undocumented)
     readonly emit: DecoderWorkerEventSink;
-    // (undocumented)
-    readonly inspectorFactory?: WorkerAvcInspectorFactory;
     // (undocumented)
     readonly supportProbe?: WorkerVideoDecoderSupportProbe;
 }
@@ -1500,7 +1007,7 @@ export interface DecoderWorkerDisposedEvent {
 }
 
 // @public (undocumented)
-export type DecoderWorkerErrorCode = "PROTOCOL_ERROR" | "NOT_CONFIGURED" | "ALREADY_CONFIGURED" | "GENERATION_MISMATCH" | "BACKPRESSURE_LIMIT" | "DECODER_CONFIGURE_FAILED" | "DECODER_SUBMIT_FAILED" | "DECODER_OUTPUT_INVALID" | "DECODED_BYTE_BUDGET_EXCEEDED" | "FRAME_RELEASE_INVALID" | "TRANSPORT_FAILED" | "DISPOSED";
+export type DecoderWorkerErrorCode = "PROTOCOL_ERROR" | "NOT_CONFIGURED" | "ALREADY_CONFIGURED" | "GENERATION_MISMATCH" | "BACKPRESSURE_LIMIT" | "DECODER_PROBE_FAILED" | "DECODER_CONFIGURE_FAILED" | "DECODER_SUBMIT_FAILED" | "DECODER_OUTPUT_INVALID" | "DECODED_BYTE_BUDGET_EXCEEDED" | "FRAME_RELEASE_INVALID" | "TRANSPORT_FAILED" | "DISPOSED";
 
 // @public (undocumented)
 export interface DecoderWorkerErrorEvent {
@@ -1519,7 +1026,7 @@ export interface DecoderWorkerErrorEvent {
 }
 
 // @public (undocumented)
-export type DecoderWorkerEvent = DecoderWorkerAckEvent | DecoderWorkerFrameEvent | DecoderWorkerSnapshotEvent | DecoderWorkerErrorEvent | DecoderWorkerDisposedEvent;
+export type DecoderWorkerEvent = DecoderWorkerAckEvent | DecoderWorkerProbeResultEvent | DecoderWorkerFrameEvent | DecoderWorkerSnapshotEvent | DecoderWorkerErrorEvent | DecoderWorkerDisposedEvent;
 
 // @public (undocumented)
 export type DecoderWorkerEventSink = (event: DecoderWorkerEvent, transfer?: Transferable[]) => void;
@@ -1528,6 +1035,8 @@ export type DecoderWorkerEventSink = (event: DecoderWorkerEvent, transfer?: Tran
 export interface DecoderWorkerFrameEvent {
     // (undocumented)
     readonly decodedBytes: number;
+    // (undocumented)
+    readonly decodeIndex: number;
     // (undocumented)
     readonly duration: number;
     // (undocumented)
@@ -1575,8 +1084,6 @@ export interface DecoderWorkerHostOptions {
     // (undocumented)
     readonly decoderFactory?: WorkerVideoDecoderFactory;
     // (undocumented)
-    readonly inspectorFactory?: WorkerAvcInspectorFactory;
-    // (undocumented)
     readonly supportProbe?: WorkerVideoDecoderSupportProbe;
 }
 
@@ -1602,14 +1109,14 @@ export interface DecoderWorkerMessagePort {
     removeEventListener(type: "messageerror", listener: (event: MessageEvent<unknown>) => void): void;
 }
 
-// @public (undocumented)
+// @public
 export interface DecoderWorkerMetrics {
     // (undocumented)
     readonly acceptedSamples: number;
     // (undocumented)
     readonly activeGeneration: number | null;
     // (undocumented)
-    readonly boundaryFlushCalls: 0;
+    readonly boundaryFlushCalls: number;
     // (undocumented)
     readonly closedFrames: number;
     // (undocumented)
@@ -1623,7 +1130,7 @@ export interface DecoderWorkerMetrics {
     // (undocumented)
     readonly errors: number;
     // (undocumented)
-    readonly flushCalls: 0;
+    readonly flushCalls: number;
     // (undocumented)
     readonly leasedDecodedBytes: number;
     // (undocumented)
@@ -1664,6 +1171,33 @@ export interface DecoderWorkerOutputExpectation {
 }
 
 // @public (undocumented)
+export type DecoderWorkerProbeConfig = DecoderWorkerVideoConfig;
+
+// @public (undocumented)
+export interface DecoderWorkerProbeConfigCommand {
+    // (undocumented)
+    readonly config: DecoderWorkerProbeConfig;
+    // (undocumented)
+    readonly protocolVersion: typeof DECODER_WORKER_PROTOCOL_VERSION;
+    // (undocumented)
+    readonly requestId: number;
+    // (undocumented)
+    readonly type: "probe-config";
+}
+
+// @public (undocumented)
+export interface DecoderWorkerProbeResultEvent {
+    // (undocumented)
+    readonly protocolVersion: typeof DECODER_WORKER_PROTOCOL_VERSION;
+    // (undocumented)
+    readonly requestId: number;
+    // (undocumented)
+    readonly supported: boolean;
+    // (undocumented)
+    readonly type: "probe-result";
+}
+
+// @public (undocumented)
 export interface DecoderWorkerReleaseFrameCommand {
     // (undocumented)
     readonly frameId: number;
@@ -1683,22 +1217,28 @@ export class DecoderWorkerRemoteError extends Error {
 }
 
 // @public (undocumented)
-export type DecoderWorkerRequestOperation = "configure" | "activate-generation" | "submit" | "abort-generation";
+export type DecoderWorkerRequestOperation = "probe-config" | "configure" | "activate-generation" | "submit" | "abort-generation";
 
 // @public
 export interface DecoderWorkerSample {
     // (undocumented)
     readonly data: ArrayBuffer;
     // (undocumented)
+    readonly decodeIndex: number;
+    // (undocumented)
+    readonly displayedFrameCount: number;
+    // (undocumented)
     readonly duration: number;
     // (undocumented)
-    readonly ordinal: number;
+    readonly presentationIndices: readonly number[];
     // (undocumented)
-    readonly timestamp: number;
+    readonly presentationOrdinalBase: number;
     // (undocumented)
-    readonly type: EncodedVideoChunkType;
+    readonly presentationTimestamp: number;
     // (undocumented)
-    readonly unitFrame: number;
+    readonly randomAccess: boolean;
+    // (undocumented)
+    readonly unitChunkCount: number;
     // (undocumented)
     readonly unitFrameCount: number;
     // (undocumented)
@@ -1711,8 +1251,8 @@ export interface DecoderWorkerSample {
 export interface DecoderWorkerSampleBatch {
     // (undocumented)
     readonly generation: number;
+    readonly outputs: readonly Readonly<WorkerSampleOutput>[];
     release(): void;
-    // (undocumented)
     readonly samples: readonly Readonly<DecoderWorkerSample>[];
 }
 
@@ -1755,6 +1295,25 @@ export interface DecoderWorkerSubmitCommand {
 // @public (undocumented)
 export class DecoderWorkerTransportError extends Error {
     constructor(message: string);
+}
+
+// @public
+export type DecoderWorkerVideoConfig = Readonly<VideoDecoderConfig>;
+
+// @public (undocumented)
+export interface DecoderWorkerVideoProfile {
+    // (undocumented)
+    readonly bitDepth: VideoBitDepth;
+    // (undocumented)
+    readonly codecFamily: VideoCodec;
+    // (undocumented)
+    readonly codedHeight: number;
+    // (undocumented)
+    readonly codedWidth: number;
+    // (undocumented)
+    readonly frameRate: Rational;
+    // (undocumented)
+    readonly requireBt709LimitedRange: true;
 }
 
 // @public (undocumented)
@@ -1876,7 +1435,7 @@ export interface EdgeAdapterInput extends WarmupAdapterInput {
     // (undocumented)
     readonly edge: Readonly<GraphEdgeDefinition>;
     // (undocumented)
-    readonly manifestEdge: Readonly<EdgeV01>;
+    readonly manifestEdge: Readonly<Edge>;
     // (undocumented)
     readonly ringCapacity: number;
     // (undocumented)
@@ -2047,30 +1606,9 @@ export interface EffectHostTraceRecord {
 export type EffectiveMotionMode = "reduce" | "full";
 
 // @public (undocumented)
-export interface EncodedLoopUnit {
-    // (undocumented)
-    readonly codedHeight: number;
-    // (undocumented)
-    readonly codedWidth: number;
-    // (undocumented)
-    readonly config: Readonly<VideoDecoderConfig>;
-    // (undocumented)
-    readonly displayHeight: number;
-    // (undocumented)
-    readonly displayWidth: number;
-    // (undocumented)
-    readonly frameRate: Readonly<RationalFrameRate>;
-    // (undocumented)
-    readonly frames: readonly OwnedEncodedFrame[];
-}
-
-// @public (undocumented)
-export type EncodedVideoChunkFactory = (init: EncodedVideoChunkInit) => EncodedVideoChunk;
-
-// @public (undocumented)
 export interface EndpointAdapterInput extends WarmupAdapterInput {
     // (undocumented)
-    readonly endpoint: Readonly<ResidencyEndpointV01>;
+    readonly endpoint: Readonly<ResidencyEndpoint>;
     // (undocumented)
     readonly ringCapacity: number;
     // Warning: (ae-forgotten-export) The symbol "ReversibleUnit" needs to be exported by the entry point index.d.ts
@@ -2111,19 +1649,17 @@ export function evaluateAllRoutesReadiness(input: AllRoutesReadinessInput): Read
 export const FRAME_FRAGMENT_SHADER_SOURCE = "#version 300 es\nprecision highp float;\nprecision highp sampler2DArray;\nuniform sampler2DArray u_frames;\nuniform float u_layer;\nuniform vec4 u_color_uv;\nuniform vec4 u_alpha_uv;\nuniform vec4 u_output_rect;\nuniform float u_has_alpha;\nout vec4 out_color;\nvoid main() {\n  vec2 output_index = gl_FragCoord.xy - u_output_rect.xy - vec2(0.5);\n  vec2 output_span = max(u_output_rect.zw - vec2(1.0), vec2(1.0));\n  vec2 sample_uv = output_index / output_span;\n  sample_uv.y = 1.0 - sample_uv.y;\n  if (u_output_rect.z <= 1.0) sample_uv.x = 0.5;\n  if (u_output_rect.w <= 1.0) sample_uv.y = 0.5;\n  sample_uv = clamp(sample_uv, vec2(0.0), vec2(1.0));\n  vec2 color_uv = u_color_uv.xy + sample_uv * u_color_uv.zw;\n  vec3 color = texture(u_frames, vec3(color_uv, u_layer)).rgb;\n  float alpha = 1.0;\n  if (u_has_alpha > 0.5) {\n    vec2 alpha_uv = u_alpha_uv.xy + sample_uv * u_alpha_uv.zw;\n    alpha = clamp(texture(u_frames, vec3(alpha_uv, u_layer)).r, 0.0, 1.0);\n  }\n  out_color = vec4(color * alpha, alpha);\n}";
 
 // @public (undocumented)
-const FRAME_STREAMING_SLOT_COUNT = 3;
-export { FRAME_STREAMING_SLOT_COUNT }
-export { FRAME_STREAMING_SLOT_COUNT as OPAQUE_STREAMING_SLOT_COUNT }
+export const FRAME_STREAMING_SLOT_COUNT = 3;
 
 // @public
 export class FrameRenderer {
-    constructor(backend: FrameRendererBackend_2, layout: FrameTextureLayout_2, options?: FrameRendererOptions);
+    constructor(backend: FrameRendererBackend, layout: FrameTextureLayout, options?: FrameRendererOptions);
     // (undocumented)
     dispose(): void;
     // (undocumented)
     draw(handle: RenderFrameHandle): void;
     // (undocumented)
-    get limits(): Readonly<OpaqueFrameRendererBackendLimits>;
+    get limits(): Readonly<FrameRendererBackendLimits>;
     markContextLost(): void;
     // (undocumented)
     readPixels(): Uint8Array;
@@ -2131,7 +1667,7 @@ export class FrameRenderer {
     residentHandle(layer: number): ResidentFrameHandle;
     // (undocumented)
     get resourceGeneration(): number;
-    restore(backend: FrameRendererBackend_2): void;
+    restore(backend: FrameRendererBackend): void;
     // (undocumented)
     settled(): Promise<void>;
     // (undocumented)
@@ -2140,27 +1676,33 @@ export class FrameRenderer {
     uploadStreaming(slot: number, pathGeneration: number, source: BorrowedVideoFrame, resourceGeneration?: number): Promise<StreamingFrameHandle | null>;
 }
 
-// @public (undocumented)
+// @public
 export interface FrameRendererBackend {
     // (undocumented)
     allocate(layout: FrameTextureLayout, streamingSlots: number): void;
     // (undocumented)
     dispose(): void;
     // (undocumented)
-    draw(kind: BackendTextureKind, index: number): void;
+    draw(kind: FrameTextureKind, index: number): void;
     // (undocumented)
     readonly limits: Readonly<FrameRendererBackendLimits>;
     // (undocumented)
     readPixels?(): Uint8Array;
     // (undocumented)
-    upload(kind: BackendTextureKind, index: number, pixels: Uint8Array): void;
+    upload(kind: FrameTextureKind, index: number, pixels: Uint8Array): void;
+    uploadFrame?(kind: FrameTextureKind, index: number, frame: CopyableVideoFrame, layout: Readonly<FrameSourceLayout>): void;
 }
 
 // @public (undocumented)
-export type FrameRendererBackendLimits = OpaqueFrameRendererBackendLimits;
+export interface FrameRendererBackendLimits {
+    // (undocumented)
+    readonly maxArrayTextureLayers: number;
+    // (undocumented)
+    readonly maxTextureSize: number;
+}
 
 // @public (undocumented)
-interface FrameRendererOptions {
+export interface FrameRendererOptions {
     readonly contextLossPolicy?: "terminal" | "restorable";
     readonly copyTimeoutMs?: number;
     // (undocumented)
@@ -2168,11 +1710,9 @@ interface FrameRendererOptions {
     // (undocumented)
     readonly timers?: Readonly<FrameRendererTimerHost>;
 }
-export { FrameRendererOptions }
-export { FrameRendererOptions as OpaqueFrameRendererOptions }
 
 // @public (undocumented)
-interface FrameRendererSnapshot {
+export interface FrameRendererSnapshot {
     // (undocumented)
     readonly allocatedLayers: number;
     // (undocumented)
@@ -2197,10 +1737,8 @@ interface FrameRendererSnapshot {
     readonly stagingBytes: number;
     // (undocumented)
     readonly staleUploads: number;
-    // Warning: (ae-forgotten-export) The symbol "FrameRendererState_2" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
-    readonly state: FrameRendererState_2;
+    readonly state: FrameRendererState;
     // (undocumented)
     readonly streamingUploads: number;
     // (undocumented)
@@ -2208,21 +1746,17 @@ interface FrameRendererSnapshot {
     // (undocumented)
     readonly uploadedStreamingSlots: number;
 }
-export { FrameRendererSnapshot }
-export { FrameRendererSnapshot as OpaqueFrameRendererSnapshot }
 
 // @public (undocumented)
-export type FrameRendererState = FrameRendererSnapshot["state"];
+export type FrameRendererState = "active" | "lost" | "error" | "disposed";
 
 // @public (undocumented)
-interface FrameRendererTimerHost {
+export interface FrameRendererTimerHost {
     // (undocumented)
     clearTimeout(handle: unknown): void;
     // (undocumented)
     setTimeout(callback: () => void, milliseconds: number): unknown;
 }
-export { FrameRendererTimerHost }
-export { FrameRendererTimerHost as OpaqueFrameRendererTimerHost }
 
 // @public (undocumented)
 export interface FrameSourceLayout {
@@ -2237,18 +1771,18 @@ export interface FrameSourceLayout {
 }
 
 // @public (undocumented)
-type FrameTextureKind = "resident" | "stream";
-export { FrameTextureKind }
-export { FrameTextureKind as OpaqueTextureKind }
+export type FrameTextureKind = "resident" | "stream";
 
 // @public (undocumented)
 export interface FrameTextureLayout {
     // (undocumented)
-    readonly height: number;
+    readonly geometry: Readonly<VideoRenditionGeometry>;
     // (undocumented)
-    readonly layerCount: number;
+    readonly logicalHeight: number;
     // (undocumented)
-    readonly width: number;
+    readonly logicalWidth: number;
+    // (undocumented)
+    readonly residentLayerCount: number;
 }
 
 // @public (undocumented)
@@ -2292,12 +1826,6 @@ export interface InitialRingReadinessEvidence {
     readonly passed: boolean;
 }
 
-// @public
-export function inspectAvcRenditionCandidate(catalog: RuntimeAssetCatalog, candidate: Readonly<RuntimeAvcRenditionCandidate>): Readonly<RuntimeAvcRenditionInspection>;
-
-// @public
-export const inspectOpaqueRenditionCandidate: typeof inspectAvcRenditionCandidate;
-
 // @public (undocumented)
 export function installDecoderWorker(scope: DecoderWorkerMessagePort, options?: DecoderWorkerHostOptions): DecoderWorkerHost;
 
@@ -2327,18 +1855,15 @@ export interface IntegratedCandidateAttempt {
 
 // @public (undocumented)
 export interface IntegratedCandidateAttemptContext {
-    // (undocumented)
-    readonly candidate: Readonly<RuntimeAvcRenditionCandidate>;
+    readonly candidate: Readonly<CertifiedVideoRendition>;
     // (undocumented)
     readonly catalog: RuntimeAssetCatalog;
     // (undocumented)
     readonly graphSnapshot: Readonly<MotionGraphSnapshot>;
     // (undocumented)
     readonly hostMaxRuntimeBytes: number | null;
-    // Warning: (ae-forgotten-export) The symbol "SuccessfulRenditionInspection" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly inspection: SuccessfulRenditionInspection["inspection"];
+    // Warning: (ae-forgotten-export) The symbol "VideoCodecAdapterInspection" needs to be exported by the entry point index.d.ts
+    readonly inspection: Readonly<VideoCodecAdapterInspection>;
 }
 
 // @public (undocumented)
@@ -2541,12 +2066,16 @@ export interface IntegratedPlayerContextSnapshot extends BrowserContextRecoveryS
 // @public (undocumented)
 export type IntegratedPlayerOptions = IntegratedPlayerCommonOptions & ({
     readonly bytes: Uint8Array;
+    readonly selectedRenditionIndex: number;
+    readonly selectedRendition?: never;
     readonly assetSession?: never;
     readonly assetSessionOwnership?: never;
 } | {
     readonly bytes?: never;
+    readonly selectedRenditionIndex?: never;
     readonly assetSession: RuntimeAssetSession;
     readonly assetSessionOwnership: "external" | "player";
+    readonly selectedRendition: Readonly<CertifiedVideoRendition>;
 });
 
 // @public (undocumented)
@@ -2682,7 +2211,7 @@ export interface InteractionCachePlanInput {
     // (undocumented)
     readonly deviceLimits: Readonly<InteractionCacheDeviceLimits>;
     // (undocumented)
-    readonly manifest: CompiledManifestV01;
+    readonly manifest: CompiledManifest;
     // (undocumented)
     readonly rendition: string;
 }
@@ -2698,7 +2227,7 @@ export interface InteractionCachePreparationInput {
     // (undocumented)
     readonly renderer: InteractionCachePreparationRenderer;
     // (undocumented)
-    readonly samples: Pick<WorkerSampleFactory, "createBatch">;
+    readonly samples: Pick<WorkerSampleFactory, "createBatch" | "nextGroupRequirement">;
     // (undocumented)
     readonly worker: InteractionCachePreparationWorker;
 }
@@ -2743,7 +2272,7 @@ export class InteractionCachePreparationTimeoutError extends Error {
 // @public (undocumented)
 export interface InteractionCachePreparationUnitCatalog {
     // (undocumented)
-    readonly units: Pick<RuntimeCatalogIdIndex<UnitV01>, "require">;
+    readonly units: Pick<RuntimeCatalogIdIndex<Unit>, "require">;
 }
 
 // @public (undocumented)
@@ -2855,68 +2384,6 @@ export interface LoopAdapterInput extends WarmupAdapterInput {
 // @public (undocumented)
 export type LoopAdapterResult = Omit<LoopReadinessEvidence, "unit">;
 
-// @public
-export class LoopCanvasPlayer {
-    constructor(canvas: HTMLCanvasElement, unit: EncodedLoopUnit, options?: LoopCanvasPlayerOptions);
-    // (undocumented)
-    dispose(): void;
-    // (undocumented)
-    pause(): void;
-    // (undocumented)
-    prepare(): Promise<void>;
-    // (undocumented)
-    resume(): Promise<void>;
-    // (undocumented)
-    snapshot(): LoopCanvasPlayerSnapshot;
-    // (undocumented)
-    start(): Promise<void>;
-    // (undocumented)
-    get state(): LoopCanvasPlayerState;
-}
-
-// @public (undocumented)
-export interface LoopCanvasPlayerOptions {
-    // (undocumented)
-    readonly cancelFrame?: typeof cancelAnimationFrame;
-    // (undocumented)
-    readonly decoder?: ContinuousLoopDecoder;
-    // (undocumented)
-    readonly now?: () => number;
-    // (undocumented)
-    readonly onSnapshot?: (snapshot: LoopCanvasPlayerSnapshot) => void;
-    // (undocumented)
-    readonly prebufferFrames?: number;
-    // (undocumented)
-    readonly prepareTimeoutMs?: number;
-    // (undocumented)
-    readonly requestFrame?: typeof requestAnimationFrame;
-}
-
-// @public (undocumented)
-export interface LoopCanvasPlayerSnapshot {
-    // (undocumented)
-    readonly canvasDrawnFrames: number;
-    // (undocumented)
-    readonly canvasSeams: number;
-    // (undocumented)
-    readonly contentFrame: number | null;
-    // (undocumented)
-    readonly decoder: ContinuousLoopDecoderMetrics;
-    // (undocumented)
-    readonly error: string | null;
-    // (undocumented)
-    readonly lateContentFrames: number;
-    // (undocumented)
-    readonly state: LoopCanvasPlayerState;
-    // (undocumented)
-    readonly underflows: number;
-    // (undocumented)
-    readonly virtualFrame: bigint | null;
-}
-
-// @public (undocumented)
-export type LoopCanvasPlayerState = "idle" | "preparing" | "ready" | "running" | "paused" | "error" | "disposed";
-
 // @public (undocumented)
 export interface LoopReadinessEvidence {
     // (undocumented)
@@ -2928,25 +2395,6 @@ export interface LoopReadinessEvidence {
 }
 
 // @public (undocumented)
-export interface ManagedDecodedFrame {
-    // (undocumented)
-    close(): void;
-    // (undocumented)
-    readonly closed: boolean;
-    // (undocumented)
-    readonly contentFrame: number;
-    // (undocumented)
-    readonly duration: number;
-    readonly frame: VideoFrame;
-    // (undocumented)
-    readonly iteration: bigint;
-    // (undocumented)
-    readonly timestamp: number;
-    // (undocumented)
-    readonly virtualFrame: bigint;
-}
-
-// @public (undocumented)
 export interface ManagedDecoderWorkerFrame {
     // (undocumented)
     close(): void;
@@ -2954,6 +2402,8 @@ export interface ManagedDecoderWorkerFrame {
     readonly closed: boolean;
     // (undocumented)
     readonly decodedBytes: number;
+    // (undocumented)
+    readonly decodeIndex: number;
     // (undocumented)
     readonly duration: number;
     // (undocumented)
@@ -2976,34 +2426,6 @@ export interface ManagedDecoderWorkerFrame {
     readonly unitInstance: number;
 }
 
-// @public (undocumented)
-export interface ManagedPathFrame {
-    // (undocumented)
-    close(): void;
-    // (undocumented)
-    readonly closed: boolean;
-    // (undocumented)
-    readonly contentFrame: number;
-    // (undocumented)
-    readonly decodeOrdinal: bigint;
-    // (undocumented)
-    readonly duration: number;
-    readonly frame: VideoFrame;
-    // (undocumented)
-    readonly pathFrame: bigint;
-    // (undocumented)
-    readonly pathGeneration: number;
-    // (undocumented)
-    readonly purpose: "continuation";
-    // (undocumented)
-    readonly timestamp: number;
-    // (undocumented)
-    readonly unitId: string;
-}
-
-// @public (undocumented)
-export const MAX_ENDPOINT_RUNWAY_FRAMES = 12;
-
 // @public
 export const MAX_INTERACTION_CACHE_LAYERS: number;
 
@@ -3019,20 +2441,8 @@ export const MAX_PRESENTATION_RING_CAPACITY: 12;
 // @public (undocumented)
 export const MAX_READINESS_RING_CAPACITY: 12;
 
-// @public
-export const MAX_RESIDENT_FRAME_BYTES: number;
-
-// @public (undocumented)
-export const MAX_RESIDENT_FRAME_LAYERS: number;
-
 // @public (undocumented)
 export const MAX_RESOURCE_RING_CAPACITY = 12;
-
-// @public (undocumented)
-export const MAX_REVERSIBLE_CLIP_BYTES: number;
-
-// @public
-export const MAX_REVERSIBLE_CLIP_FRAMES = 4294967295;
 
 // @public (undocumented)
 export const MAX_REVERSIBLE_ENDPOINT_PAIR_BYTES: number;
@@ -3043,14 +2453,8 @@ export const MAX_RUNTIME_DIAGNOSTIC_TEXT_LENGTH: 128;
 // @public
 export const MAX_RUNTIME_FAILURE_MESSAGE_LENGTH: 512;
 
-// @public (undocumented)
-export const MAX_TRACKED_PLAYER_BYTES: number;
-
 // @public
 export function maximumActualEncodedWindowBytes(catalog: RuntimeResourceCatalogView, rendition: string, frameLimit?: number): number;
-
-// @public (undocumented)
-export const MIN_ENDPOINT_RUNWAY_FRAMES = 6;
 
 // @public (undocumented)
 export const MIN_PRESENTATION_RING_CAPACITY: 6;
@@ -3066,9 +2470,6 @@ export const MIN_READINESS_THROUGHPUT_MULTIPLE: 1.5;
 
 // @public (undocumented)
 export const MIN_RESOURCE_RING_CAPACITY = 6;
-
-// @public (undocumented)
-export const MIN_REVERSIBLE_CLIP_FRAMES = 1;
 
 // @public (undocumented)
 export const MOTION_POLICIES: readonly ["auto", "reduce", "full"];
@@ -3166,92 +2567,6 @@ export interface NormalizedExternalIntegrity {
 // @public
 export function normalizeRuntimeFailure(code: RuntimeFailureCode, cause?: unknown, context?: Readonly<RuntimeFailureContext>): Readonly<RuntimeFailure>;
 
-// @public @deprecated (undocumented)
-export type OpaqueCandidateActivationInput = AvcCandidateActivationInput;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateCachePreparer = AvcCandidateCachePreparer;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateFactoryOptions = AvcCandidateFactoryOptions;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidatePreparedMedia = AvcCandidatePreparedMedia;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateReadinessFactory = AvcCandidateReadinessFactory;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateReadinessSession = AvcCandidateReadinessSession;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateReadinessSessionInput = AvcCandidateReadinessSessionInput;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateRendererFactory = AvcCandidateRendererFactory;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateRendererReservation = AvcCandidateRendererReservation;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateTimerHost = AvcCandidateTimerHost;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateWorker = AvcCandidateWorker;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateWorkerFactory = AvcCandidateWorkerFactory;
-
-// @public @deprecated (undocumented)
-export type OpaqueCandidateWorkerSetup = AvcCandidateWorkerSetup;
-
-// @public @deprecated (undocumented)
-export class OpaqueFrameRenderer extends FrameRenderer {
-    constructor(backend: OpaqueFrameRendererBackend, layout: OpaqueFrameTextureLayout, options?: FrameRendererOptions);
-    // (undocumented)
-    restore(backend: FrameRendererBackend_2 | OpaqueFrameRendererBackend): void;
-}
-
-// @public @deprecated (undocumented)
-export interface OpaqueFrameRendererBackend {
-    // (undocumented)
-    allocate(layout: OpaqueFrameTextureLayout, streamingSlots: number): void;
-    // (undocumented)
-    dispose(): void;
-    // (undocumented)
-    draw(kind: FrameTextureKind, index: number): void;
-    // (undocumented)
-    readonly limits: Readonly<OpaqueFrameRendererBackendLimits>;
-    // (undocumented)
-    readPixels?(): Uint8Array;
-    // (undocumented)
-    upload(kind: FrameTextureKind, index: number, pixels: Uint8Array): void;
-    // (undocumented)
-    uploadFrame?(kind: FrameTextureKind, index: number, frame: CopyableVideoFrame, layout: Readonly<FrameSourceLayout>): void;
-}
-
-// @public (undocumented)
-export interface OpaqueFrameRendererBackendLimits {
-    // (undocumented)
-    readonly maxArrayTextureLayers: number;
-    // (undocumented)
-    readonly maxTextureSize: number;
-}
-
-// @public @deprecated (undocumented)
-export interface OpaqueFrameTextureLayout {
-    // (undocumented)
-    readonly codedHeight: number;
-    // (undocumented)
-    readonly codedWidth: number;
-    // (undocumented)
-    readonly logicalHeight: number;
-    // (undocumented)
-    readonly logicalWidth: number;
-    // (undocumented)
-    readonly residentLayerCount: number;
-}
-
 // @public
 export function openRuntimeAsset(requestValue: Readonly<RuntimeAssetRequest>, optionsValue: Readonly<OpenRuntimeAssetOptions>): Promise<RuntimeAssetSession>;
 
@@ -3294,14 +2609,6 @@ export interface OpenRuntimeAssetOptions {
 export interface OwnedDecoderWorkerPort extends DecoderWorkerClientPort {
     // (undocumented)
     terminate(): void;
-}
-
-// @public (undocumented)
-export interface OwnedEncodedFrame {
-    // (undocumented)
-    readonly data: Uint8Array;
-    // (undocumented)
-    readonly type: EncodedVideoChunkType;
 }
 
 // @public
@@ -3384,30 +2691,7 @@ export class PageResourceManager {
 // @public
 export function parseExternalIntegrity(value: string): Readonly<NormalizedExternalIntegrity>;
 
-// @public (undocumented)
-export class PathDecoderDisposedError extends Error {
-    constructor(message?: string);
-}
-
-// @public (undocumented)
-export class PathDecoderNotStartedError extends Error {
-    constructor(message?: string);
-}
-
-// @public (undocumented)
-export class PathDecoderSupersededError extends Error {
-    constructor(pathGeneration: number);
-    // (undocumented)
-    readonly pathGeneration: number;
-}
-
-// @public (undocumented)
-export class PathDecoderWatchdogError extends Error {
-    constructor(message: string);
-}
-
-// @public (undocumented)
-export type PathFramePurpose = "cached-runway" | "continuation";
+export { parseVideoCodecString }
 
 // @public
 export class PathScheduler {
@@ -3773,7 +3057,7 @@ export interface PlayerWebRuntimeResources {
     // (undocumented)
     readonly assetSession: Readonly<RuntimeAssetSessionResources>;
     // (undocumented)
-    readonly candidate: Readonly<AvcCandidateResourceAuthority>;
+    readonly candidate: Readonly<VideoCandidateResourceAuthority>;
     // (undocumented)
     readonly canvasBacking: Readonly<BrowserCanvasBackingResourceHost>;
     // Warning: (ae-forgotten-export) The symbol "IntegratedPlayerParticipantBinding" needs to be exported by the entry point index.d.ts
@@ -3781,9 +3065,6 @@ export interface PlayerWebRuntimeResources {
     // (undocumented)
     readonly participant: IntegratedPlayerParticipantBinding;
 }
-
-// @public
-export function preflightResidentPathRecovery<TEndpoint extends string>(endpoints: readonly ResidentPathRecoveryEndpoint<TEndpoint>[], options: ResidentPathRecoveryPreflightOptions): Promise<readonly Readonly<ResidentPathRecoveryEndpointReport<TEndpoint>>[]>;
 
 // @public (undocumented)
 export interface PreparedReversiblePresentation {
@@ -3826,19 +3107,6 @@ export interface PrepareInteractionCacheOptions {
     readonly timeoutMs?: number;
 }
 
-// @public
-export function prepareResidentFrames(plan: ResidentFramePlan, units: readonly ResidentPreparationUnit[], renderer: ResidentFrameUploadTarget, options?: PrepareResidentFramesOptions): Promise<ResidentFramePreparationReport>;
-
-// @public (undocumented)
-export interface PrepareResidentFramesOptions {
-    // (undocumented)
-    readonly decoderOptions?: Omit<ContinuousLoopDecoderOptions, "startVirtualFrame" | "maxInFlight">;
-    // (undocumented)
-    readonly signal?: AbortSignal;
-    // (undocumented)
-    readonly timeoutMs?: number;
-}
-
 // @public (undocumented)
 export interface PrepareScheduledRouteInput {
     // (undocumented)
@@ -3855,7 +3123,7 @@ export interface PrepareScheduledRouteInput {
 }
 
 // @public (undocumented)
-export interface PresentableFrameBackend extends FrameRendererBackend_2 {
+export interface PresentableFrameBackend extends FrameRendererBackend {
     // (undocumented)
     setPresentationGeometry(geometry: Readonly<PresentationGeometry>): boolean;
 }
@@ -4274,25 +3542,25 @@ export interface ReadinessRecorderSubmission {
 // @public
 export interface ReadinessRunnerAdapters {
     // (undocumented)
-    readonly dryRunEdge: (input: Readonly<EdgeAdapterInput>) => Awaitable_3<Readonly<EdgeDryRunAdapterResult>>;
+    readonly dryRunEdge: (input: Readonly<EdgeAdapterInput>) => Awaitable_2<Readonly<EdgeDryRunAdapterResult>>;
     // (undocumented)
-    readonly fillInitialRing: (input: Readonly<InitialRingAdapterInput>) => Awaitable_3<Readonly<InitialRingReadinessEvidence>>;
+    readonly fillInitialRing: (input: Readonly<InitialRingAdapterInput>) => Awaitable_2<Readonly<InitialRingReadinessEvidence>>;
     // (undocumented)
-    readonly measureActiveInverse: (input: Readonly<InverseAdapterInput>) => Awaitable_3<Readonly<InverseAdapterResult>>;
+    readonly measureActiveInverse: (input: Readonly<InverseAdapterInput>) => Awaitable_2<Readonly<InverseAdapterResult>>;
     // (undocumented)
-    readonly measureLoop: (input: Readonly<LoopAdapterInput>) => Awaitable_3<Readonly<LoopAdapterResult>>;
+    readonly measureLoop: (input: Readonly<LoopAdapterInput>) => Awaitable_2<Readonly<LoopAdapterResult>>;
     // (undocumented)
-    readonly measureResource: (input: Readonly<ResourceAdapterInput>) => Awaitable_3<Readonly<ResourceReadinessEvidence>>;
-    // Warning: (ae-forgotten-export) The symbol "Awaitable_3" needs to be exported by the entry point index.d.ts
+    readonly measureResource: (input: Readonly<ResourceAdapterInput>) => Awaitable_2<Readonly<ResourceReadinessEvidence>>;
+    // Warning: (ae-forgotten-export) The symbol "Awaitable_2" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
-    readonly measureWarmup: (input: Readonly<WarmupAdapterInput>) => Awaitable_3<Readonly<WarmupAdapterResult>>;
+    readonly measureWarmup: (input: Readonly<WarmupAdapterInput>) => Awaitable_2<Readonly<WarmupAdapterResult>>;
     // (undocumented)
-    readonly prepareCut: (input: Readonly<EdgeAdapterInput>) => Awaitable_3<Readonly<CutAdapterResult>>;
+    readonly prepareCut: (input: Readonly<EdgeAdapterInput>) => Awaitable_2<Readonly<CutAdapterResult>>;
     // (undocumented)
-    readonly prepareEndpoint: (input: Readonly<EndpointAdapterInput>) => Awaitable_3<Readonly<EndpointAdapterResult>>;
+    readonly prepareEndpoint: (input: Readonly<EndpointAdapterInput>) => Awaitable_2<Readonly<EndpointAdapterResult>>;
     // (undocumented)
-    readonly simulateRoutePhases: (input: Readonly<EdgeAdapterInput>) => Awaitable_3<Readonly<RoutePhaseAdapterResult>>;
+    readonly simulateRoutePhases: (input: Readonly<EdgeAdapterInput>) => Awaitable_2<Readonly<RoutePhaseAdapterResult>>;
 }
 
 // @public (undocumented)
@@ -4486,12 +3754,6 @@ export interface RequiredEdgeLeadInput {
 }
 
 // @public (undocumented)
-export const RESIDENT_REVERSAL_STRESS_CHANGES = 1000;
-
-// @public (undocumented)
-export type ResidentFrameDeviceLimits = InteractionCacheDeviceLimits;
-
-// @public (undocumented)
 export interface ResidentFrameHandle {
     // (undocumented)
     readonly kind: "resident";
@@ -4499,404 +3761,6 @@ export interface ResidentFrameHandle {
     readonly layer: number;
     // (undocumented)
     readonly resourceGeneration: number;
-}
-
-// @public (undocumented)
-export type ResidentFrameKey = RuntimeFrameKey;
-
-// @public (undocumented)
-export type ResidentFrameLayer = InteractionCacheLayer;
-
-// @public
-export interface ResidentFramePlan {
-    // (undocumented)
-    readonly bytesPerFrame: number;
-    // (undocumented)
-    readonly clipBytes: number;
-    // (undocumented)
-    readonly clipLayers: readonly number[];
-    // (undocumented)
-    readonly gpuAllocationBytes: number;
-    // (undocumented)
-    readonly height: number;
-    // (undocumented)
-    readonly layerCount: number;
-    // (undocumented)
-    layerFor(key: ResidentFrameKey): number | undefined;
-    // (undocumented)
-    readonly residentAllocationBytes: number;
-    // (undocumented)
-    readonly residentBytes: number;
-    // (undocumented)
-    readonly sourceRunwayLayers: readonly number[];
-    // (undocumented)
-    readonly stagingBytes: number;
-    // (undocumented)
-    readonly streamingAllocationBytes: number;
-    // (undocumented)
-    readonly streamingBytes: number;
-    // (undocumented)
-    readonly targetRunwayLayers: readonly number[];
-    // (undocumented)
-    readonly trackedBytes: number;
-    // (undocumented)
-    readonly uniqueFrames: readonly Readonly<ResidentFrameLayer>[];
-    // (undocumented)
-    readonly width: number;
-}
-
-// @public (undocumented)
-export interface ResidentFramePlanInput {
-    // (undocumented)
-    readonly clip: readonly ResidentFrameKey[];
-    // (undocumented)
-    readonly deviceLimits: Readonly<ResidentFrameDeviceLimits>;
-    // (undocumented)
-    readonly height: number;
-    // (undocumented)
-    readonly sourceRunway: readonly ResidentFrameKey[];
-    // (undocumented)
-    readonly targetRunway: readonly ResidentFrameKey[];
-    // (undocumented)
-    readonly width: number;
-}
-
-// @public (undocumented)
-export interface ResidentFramePreparationReport {
-    // (undocumented)
-    readonly decodedFrames: number;
-    // (undocumented)
-    readonly decoderCount: number;
-    // (undocumented)
-    readonly dependencyFramesClosed: number;
-    // (undocumented)
-    readonly resourceGeneration: number;
-    // (undocumented)
-    readonly sourceFramesClosed: number;
-    // (undocumented)
-    readonly uploadedFrames: number;
-}
-
-// @public (undocumented)
-export interface ResidentFrameUploadTarget {
-    // (undocumented)
-    readonly resourceGeneration: number;
-    // (undocumented)
-    uploadResident(layer: number, source: ManagedDecodedFrame, resourceGeneration?: number): Promise<ResidentFrameHandle | null>;
-}
-
-// @public (undocumented)
-export interface ResidentPathRecoveryEndpoint<TEndpoint extends string = string> {
-    // (undocumented)
-    readonly cachedRunwayFrames: number;
-    // (undocumented)
-    readonly endpoint: TEndpoint;
-    // (undocumented)
-    readonly unit: EncodedLoopUnit;
-    // (undocumented)
-    readonly unitId: string;
-}
-
-// @public (undocumented)
-export interface ResidentPathRecoveryEndpointReport<TEndpoint extends string = string> {
-    // (undocumented)
-    readonly cachedRunwayFrames: number;
-    // (undocumented)
-    readonly elapsedMs: number;
-    // (undocumented)
-    readonly endpoint: TEndpoint;
-    // (undocumented)
-    readonly firstContinuationPathFrame: number;
-    // (undocumented)
-    readonly frameDurationMs: number;
-    // (undocumented)
-    readonly pathGeneration: number;
-    // (undocumented)
-    readonly ready: boolean;
-    readonly requiredContentFrames: number;
-    // (undocumented)
-    readonly unitId: string;
-}
-
-// @public (undocumented)
-export interface ResidentPathRecoveryPreflightOptions {
-    // (undocumented)
-    readonly chunkFactory?: EncodedVideoChunkFactory;
-    // (undocumented)
-    readonly decoderFactory?: VideoDecoderFactory;
-    readonly now?: () => number;
-    // (undocumented)
-    readonly signal?: AbortSignal;
-    // (undocumented)
-    readonly timeoutMs?: number;
-    readonly uploadContinuation: (frame: ManagedPathFrame) => Promise<void>;
-}
-
-// @public
-export class ResidentPathRecoveryReadinessError<TEndpoint extends string = string> extends Error {
-    constructor(endpointReport: Readonly<ResidentPathRecoveryEndpointReport<TEndpoint>>, reports: readonly Readonly<ResidentPathRecoveryEndpointReport<TEndpoint>>[]);
-    // (undocumented)
-    readonly endpointReport: Readonly<ResidentPathRecoveryEndpointReport<TEndpoint>>;
-    // (undocumented)
-    readonly reports: readonly Readonly<ResidentPathRecoveryEndpointReport<TEndpoint>>[];
-}
-
-// @public (undocumented)
-export interface ResidentPreparationUnit {
-    // (undocumented)
-    readonly id: string;
-    // (undocumented)
-    readonly rendition: string;
-    // (undocumented)
-    readonly unit: EncodedLoopUnit;
-}
-
-// @public (undocumented)
-export interface ResidentRecoverySnapshot<TEndpoint extends string> {
-    // (undocumented)
-    readonly endpoint: TEndpoint;
-    // (undocumented)
-    readonly firstContinuationPathFrame: string;
-    // (undocumented)
-    readonly pathGeneration: number;
-    // (undocumented)
-    readonly readyAtTick: number | null;
-    // (undocumented)
-    readonly recoveredBeforeRunwayEnd: boolean | null;
-    // (undocumented)
-    readonly runwayCompletedAtTick: number | null;
-    // (undocumented)
-    readonly runwayFrames: number;
-    // (undocumented)
-    readonly runwayStartedAtTick: number | null;
-    // (undocumented)
-    readonly startedAtTick: number;
-}
-
-// @public (undocumented)
-export interface ResidentReversalDrawTarget {
-    // (undocumented)
-    draw(handle: RenderFrameHandle): void;
-    // (undocumented)
-    residentHandle(layer: number): ResidentFrameHandle;
-}
-
-// @public (undocumented)
-export interface ResidentReversalStressOptions<TEndpoint extends string> {
-    // (undocumented)
-    readonly directionChanges?: number;
-    // (undocumented)
-    readonly plan: ResidentFramePlan;
-    // (undocumented)
-    readonly renderer: ResidentReversalDrawTarget;
-    // (undocumented)
-    readonly sourceEndpoint: TEndpoint;
-    // (undocumented)
-    readonly targetEndpoint: TEndpoint;
-    // (undocumented)
-    readonly validateDraw?: (context: Readonly<ResidentReversalValidationContext<TEndpoint>>) => void | Promise<void>;
-}
-
-// @public (undocumented)
-export interface ResidentReversalStressReport<TEndpoint extends string> {
-    // (undocumented)
-    readonly adjacentFrameFailures: 0;
-    // (undocumented)
-    readonly directionChanges: number;
-    // (undocumented)
-    readonly finalEndpoint: TEndpoint;
-    // (undocumented)
-    readonly finalPhase: "stable";
-    // (undocumented)
-    readonly lowerBounceFrame: number;
-    // (undocumented)
-    readonly residentDraws: number;
-    // (undocumented)
-    readonly upperBounceFrame: number;
-    // (undocumented)
-    readonly validatedDraws: number;
-}
-
-// @public (undocumented)
-export interface ResidentReversalValidationContext<TEndpoint extends string> {
-    // (undocumented)
-    readonly expectedKey: Readonly<ResidentFrameKey>;
-    // (undocumented)
-    readonly presentation: ReversibleClipPresentation<TEndpoint>;
-    // (undocumented)
-    readonly reversal: number | null;
-    // (undocumented)
-    readonly trace: ReversibleClipTraceRecord<TEndpoint>;
-}
-
-// @public (undocumented)
-export type ResidentReversibleDraw = {
-    readonly kind: "resident";
-    readonly layer: number;
-    readonly handle: RenderFrameHandle;
-} | {
-    readonly kind: "stream";
-    readonly slot: number;
-    readonly pathGeneration: number;
-    readonly pathFrame: string;
-    readonly contentFrame: number;
-    readonly handle: StreamingFrameHandle;
-} | {
-    readonly kind: "held";
-    readonly reason: "stream-underflow";
-};
-
-// @public (undocumented)
-export interface ResidentReversibleEndpoint<TEndpoint extends string> {
-    // (undocumented)
-    readonly bodyFrameCount: number;
-    // (undocumented)
-    readonly bodyUnitId: string;
-    // (undocumented)
-    readonly endpoint: TEndpoint;
-    // (undocumented)
-    readonly portalFrames: readonly number[];
-}
-
-// @public
-export class ResidentReversiblePlayer<TEndpoint extends string = string> {
-    constructor(options: ResidentReversiblePlayerOptions<TEndpoint>);
-    // (undocumented)
-    dispose(): void;
-    // (undocumented)
-    pause(): void;
-    // (undocumented)
-    prepare(): Promise<void>;
-    // (undocumented)
-    request(destination: TEndpoint): number;
-    // (undocumented)
-    resume(): Promise<void>;
-    // (undocumented)
-    snapshot(): ResidentReversiblePlayerSnapshot<TEndpoint>;
-    // (undocumented)
-    start(): Promise<void>;
-    // (undocumented)
-    get state(): ResidentReversiblePlayerState;
-    tickOnce(): ResidentReversiblePlayerTick<TEndpoint>;
-}
-
-// @public (undocumented)
-export interface ResidentReversiblePlayerOptions<TEndpoint extends string> {
-    // (undocumented)
-    readonly cancelFrame?: typeof cancelAnimationFrame;
-    // (undocumented)
-    readonly canFollow?: (prospectiveEndpoint: TEndpoint, destination: TEndpoint) => boolean;
-    // (undocumented)
-    readonly decoder: ContinuousPathDecoder;
-    // (undocumented)
-    readonly decodeTimeoutMs?: number;
-    // (undocumented)
-    readonly frameRate: Readonly<RationalFrameRate>;
-    // (undocumented)
-    readonly initialEndpoint?: TEndpoint;
-    // (undocumented)
-    readonly initialStreamLead?: number;
-    // (undocumented)
-    readonly now?: () => number;
-    // (undocumented)
-    readonly onFollowOn?: (followOn: Readonly<ReversibleClipFollowOn<TEndpoint>>) => void;
-    // (undocumented)
-    readonly onSnapshot?: (snapshot: ResidentReversiblePlayerSnapshot<TEndpoint>) => void;
-    // (undocumented)
-    readonly plan: ResidentFramePlan;
-    // (undocumented)
-    readonly renderer: WebGlFrameRenderer;
-    // (undocumented)
-    readonly requestFrame?: typeof requestAnimationFrame;
-    // (undocumented)
-    readonly source: Readonly<ResidentReversibleEndpoint<TEndpoint>>;
-    // (undocumented)
-    readonly target: Readonly<ResidentReversibleEndpoint<TEndpoint>>;
-    // (undocumented)
-    readonly visibilitySource?: ResidentReversibleVisibilitySource;
-}
-
-// @public (undocumented)
-export interface ResidentReversiblePlayerSnapshot<TEndpoint extends string> {
-    // (undocumented)
-    readonly activePathEndpoint: TEndpoint | null;
-    // (undocumented)
-    readonly armedPortal: TEndpoint | null;
-    // (undocumented)
-    readonly canvasDraws: number;
-    // (undocumented)
-    readonly clipFrame: number | null;
-    // (undocumented)
-    readonly contentTicks: number;
-    // (undocumented)
-    readonly decoder: ContinuousPathDecoderMetrics;
-    // (undocumented)
-    readonly direction: ReturnType<ReversibleClipController<TEndpoint>["snapshot"]>["direction"];
-    // (undocumented)
-    readonly directionChanges: number;
-    // (undocumented)
-    readonly error: string | null;
-    // (undocumented)
-    readonly heldFrames: number;
-    // (undocumented)
-    readonly isTransitioning: boolean;
-    // (undocumented)
-    readonly lastBodyContentFrame: number | null;
-    // (undocumented)
-    readonly lastBodyPathFrame: string | null;
-    // (undocumented)
-    readonly lateContentFrames: number;
-    // (undocumented)
-    readonly pathGeneration: number | null;
-    // (undocumented)
-    readonly phase: ReturnType<ReversibleClipController<TEndpoint>["snapshot"]>["phase"];
-    // (undocumented)
-    readonly preparedStreamFrames: number;
-    // (undocumented)
-    readonly recovery: Readonly<ResidentRecoverySnapshot<TEndpoint>> | null;
-    // (undocumented)
-    readonly recoveryMisses: number;
-    // (undocumented)
-    readonly renderer: WebGlFrameRendererSnapshot;
-    // (undocumented)
-    readonly requestedState: TEndpoint;
-    // (undocumented)
-    readonly runwayFrame: number | null;
-    // (undocumented)
-    readonly stalePreparedFrames: number;
-    // (undocumented)
-    readonly state: ResidentReversiblePlayerState;
-    // (undocumented)
-    readonly underflows: number;
-    // (undocumented)
-    readonly visualState: TEndpoint;
-}
-
-// @public (undocumented)
-export type ResidentReversiblePlayerState = "idle" | "preparing" | "ready" | "running" | "paused" | "error" | "disposed";
-
-// @public (undocumented)
-export interface ResidentReversiblePlayerTick<TEndpoint extends string> {
-    // (undocumented)
-    readonly contentTick: number;
-    // (undocumented)
-    readonly controller: ReversibleClipTraceRecord<TEndpoint>;
-    // (undocumented)
-    readonly draw: ResidentReversibleDraw;
-    // (undocumented)
-    readonly pathGeneration: number;
-    // (undocumented)
-    readonly portalEndpoint: TEndpoint | null;
-}
-
-// @public (undocumented)
-export interface ResidentReversibleVisibilitySource {
-    // (undocumented)
-    addEventListener(type: "change", listener: () => void): void;
-    // (undocumented)
-    readonly hidden: boolean;
-    // (undocumented)
-    removeEventListener(type: "change", listener: () => void): void;
 }
 
 // @public
@@ -4921,132 +3785,6 @@ export interface ResourceReadinessEvidence {
     readonly passed: boolean;
     // (undocumented)
     readonly totalBytes: number;
-}
-
-// @public
-export class ReversibleClipController<TEndpoint extends string = string> {
-    constructor(options: ReversibleClipControllerOptions<TEndpoint>);
-    getTrace(): readonly ReversibleClipTraceRecord<TEndpoint>[];
-    request(destination: TEndpoint): number;
-    snapshot(): ReversibleClipSnapshot<TEndpoint>;
-    tick(options?: ReversibleClipTickOptions<TEndpoint>): ReversibleClipTraceRecord<TEndpoint>;
-}
-
-// @public (undocumented)
-export interface ReversibleClipControllerOptions<TEndpoint extends string> {
-    // (undocumented)
-    readonly canFollow?: (prospectiveEndpoint: TEndpoint, destination: TEndpoint) => boolean;
-    // (undocumented)
-    readonly clipFrameCount: number;
-    // (undocumented)
-    readonly initialEndpoint?: TEndpoint;
-    readonly requestCapacity?: number;
-    // (undocumented)
-    readonly sourceEndpoint: TEndpoint;
-    // (undocumented)
-    readonly sourceRunwayFrameCount: number;
-    // (undocumented)
-    readonly targetEndpoint: TEndpoint;
-    // (undocumented)
-    readonly targetRunwayFrameCount: number;
-    readonly traceCapacity?: number;
-}
-
-// @public (undocumented)
-export type ReversibleClipDirection = "forward" | "reverse";
-
-// @public (undocumented)
-export interface ReversibleClipFollowOn<TEndpoint extends string> {
-    // (undocumented)
-    readonly destination: TEndpoint;
-    // (undocumented)
-    readonly fromEndpoint: TEndpoint;
-    // (undocumented)
-    readonly sequence: number;
-}
-
-// @public (undocumented)
-export type ReversibleClipPhase = "stable" | "waiting" | "clip" | "runway";
-
-// @public (undocumented)
-export type ReversibleClipPresentation<TEndpoint extends string> = {
-    readonly kind: "stable";
-    readonly endpoint: TEndpoint;
-} | {
-    readonly kind: "clip";
-    readonly frameIndex: number;
-    readonly direction: ReversibleClipDirection;
-} | {
-    readonly kind: "runway";
-    readonly endpoint: TEndpoint;
-    readonly frameIndex: number;
-    readonly direction: ReversibleClipDirection;
-};
-
-// @public (undocumented)
-export interface ReversibleClipRequest<TEndpoint extends string> {
-    // (undocumented)
-    readonly destination: TEndpoint;
-    // (undocumented)
-    readonly sequence: number;
-}
-
-// @public (undocumented)
-export type ReversibleClipRequestOutcome = "begin" | "cancel" | "continue" | "reverse" | "follow-on" | "ignored";
-
-// @public (undocumented)
-export interface ReversibleClipRequestTrace<TEndpoint extends string> extends ReversibleClipRequest<TEndpoint> {
-    // (undocumented)
-    readonly outcome: ReversibleClipRequestOutcome;
-}
-
-// @public (undocumented)
-export interface ReversibleClipSnapshot<TEndpoint extends string> {
-    // (undocumented)
-    readonly clipFrameIndex: number | null;
-    // (undocumented)
-    readonly direction: ReversibleClipDirection | null;
-    // (undocumented)
-    readonly inTransition: boolean;
-    // (undocumented)
-    readonly pendingFollowOn: TEndpoint | null;
-    // (undocumented)
-    readonly pendingRequestCount: number;
-    // (undocumented)
-    readonly phase: ReversibleClipPhase;
-    // (undocumented)
-    readonly prospectiveEndpoint: TEndpoint;
-    // (undocumented)
-    readonly requestedEndpoint: TEndpoint;
-    // (undocumented)
-    readonly runwayFrameIndex: number | null;
-    // (undocumented)
-    readonly tick: number;
-    // (undocumented)
-    readonly visualEndpoint: TEndpoint;
-}
-
-// @public (undocumented)
-export interface ReversibleClipTickOptions<TEndpoint extends string> {
-    readonly portalEndpoint?: TEndpoint;
-}
-
-// @public (undocumented)
-export interface ReversibleClipTraceRecord<TEndpoint extends string> {
-    // (undocumented)
-    readonly before: ReversibleClipSnapshot<TEndpoint>;
-    // (undocumented)
-    readonly emittedFollowOn: ReversibleClipFollowOn<TEndpoint> | null;
-    // (undocumented)
-    readonly portalEndpoint: TEndpoint | null;
-    // (undocumented)
-    readonly presentation: ReversibleClipPresentation<TEndpoint>;
-    // (undocumented)
-    readonly requests: readonly ReversibleClipRequestTrace<TEndpoint>[];
-    // (undocumented)
-    readonly snapshot: ReversibleClipSnapshot<TEndpoint>;
-    // (undocumented)
-    readonly tick: number;
 }
 
 // @public
@@ -5122,12 +3860,6 @@ export interface RoutePhaseEvidence {
 // @public (undocumented)
 export function runAllRoutesReadiness(input: ReadinessRunnerInput): Promise<Readonly<ReadinessRunnerResult>>;
 
-// @public
-export function runContinuousLoopStress(unit: EncodedLoopUnit, optionsOrReader: ContinuousLoopStressOptions | StressTagReader): Promise<ContinuousLoopStressReport>;
-
-// @public
-export function runResidentReversalStress<TEndpoint extends string>(options: ResidentReversalStressOptions<TEndpoint>): Promise<ResidentReversalStressReport<TEndpoint>>;
-
 // @public (undocumented)
 export const RUNTIME_BLOB_RESIDENCY_STATES: readonly ["absent", "loading", "verified"];
 
@@ -5163,40 +3895,41 @@ export const RUNTIME_TRANSPORT_MODES: readonly ["range", "full"];
 // @public
 export class RuntimeAssetCatalog {
     // @internal
-    [RUNTIME_CATALOG_AVC_INSPECTION](rendition: string, profile: Readonly<AvcConstrainedBaselineProfile>): Readonly<AvcRenditionInspection>;
-    // @internal
     [RUNTIME_CATALOG_COMPLETE_SOURCE](): void;
     constructor(callerBytes: Uint8Array);
     // Warning: (ae-forgotten-export) The symbol "CatalogInstallation" needs to be exported by the entry point index.d.ts
     //
     // @internal
     constructor(value: CatalogInstallation);
-    copySample(rendition: string, unit: string, localFrame: number): ArrayBuffer;
+    // (undocumented)
+    readonly chunks: RuntimeCatalogChunkIndex;
+    copyChunk(rendition: string, unit: string, decodeIndex: number): ArrayBuffer;
     // (undocumented)
     dispose(): void;
     // (undocumented)
     get disposed(): boolean;
     // (undocumented)
-    readonly edges: RuntimeCatalogIdIndex<EdgeV01>;
+    readonly edges: RuntimeCatalogIdIndex<Edge>;
     // (undocumented)
     get graph(): Readonly<ValidatedMotionGraph>;
     // (undocumented)
     get layout(): Readonly<ValidatedAssetLayout>;
     // (undocumented)
-    get manifest(): Readonly<CompiledManifestV01>;
+    get manifest(): Readonly<CompiledManifest>;
     get ownedByteLength(): number;
+    ownsVideoRendition(value: unknown): value is Readonly<CertifiedVideoRendition>;
     // (undocumented)
     readonly ports: RuntimeCatalogPortIndex;
     // (undocumented)
-    readonly records: RuntimeCatalogRecordIndex;
-    // (undocumented)
-    readonly renditions: RuntimeCatalogIdIndex<RenditionV01>;
+    readonly renditions: RuntimeCatalogIdIndex<ProductionRendition>;
     // (undocumented)
     residencySnapshot(): Readonly<RuntimeAssetResidencySnapshot>;
     // (undocumented)
-    readonly states: RuntimeCatalogIdIndex<StateV01>;
+    readonly states: RuntimeCatalogIdIndex<State>;
     // (undocumented)
-    readonly units: RuntimeCatalogIdIndex<UnitV01>;
+    readonly units: RuntimeCatalogIdIndex<Unit>;
+    // (undocumented)
+    readonly videoRenditions: readonly Readonly<CertifiedVideoRendition>[];
 }
 
 // @public (undocumented)
@@ -5282,45 +4015,6 @@ export interface RuntimeAssetSessionSnapshot extends RuntimeAssetResidencySnapsh
 }
 
 // @public (undocumented)
-export interface RuntimeAvcCanvas {
-    // (undocumented)
-    readonly height: number;
-    // (undocumented)
-    readonly width: number;
-}
-
-// @public (undocumented)
-export type RuntimeAvcRendition = Extract<RenditionV01, {
-    readonly profile: "avc-annexb-opaque-v0" | "avc-annexb-packed-alpha-v0" | "avc-annexb-opaque-v1" | "avc-annexb-packed-alpha-v1";
-}>;
-
-// @public (undocumented)
-export interface RuntimeAvcRenditionCandidate {
-    readonly codedArea: number;
-    // (undocumented)
-    readonly geometry: Readonly<AvcRenditionGeometry>;
-    // (undocumented)
-    readonly rank: number;
-    // (undocumented)
-    readonly rendition: Readonly<RuntimeAvcRendition>;
-    // (undocumented)
-    readonly visibleColorArea: number;
-}
-
-// @public (undocumented)
-export type RuntimeAvcRenditionInspection = {
-    readonly ok: true;
-    readonly candidate: Readonly<RuntimeAvcRenditionCandidate>;
-    readonly inspection: Readonly<AvcRenditionInspection>;
-    readonly report: Readonly<RuntimeCandidateReport>;
-} | {
-    readonly ok: false;
-    readonly candidate: Readonly<RuntimeAvcRenditionCandidate>;
-    readonly inspection: null;
-    readonly report: Readonly<RuntimeCandidateReport>;
-};
-
-// @public (undocumented)
 export interface RuntimeBlobResidencySnapshot {
     // (undocumented)
     readonly absent: number;
@@ -5404,7 +4098,7 @@ export interface RuntimeCanvasResourceAllocationSnapshot {
 // @public (undocumented)
 export interface RuntimeCanvasResourceCatalogView {
     // (undocumented)
-    readonly manifest: Readonly<CompiledManifestV01>;
+    readonly manifest: Readonly<CompiledManifest>;
     // (undocumented)
     readonly ownedByteLength: number;
 }
@@ -5457,25 +4151,37 @@ export interface RuntimeCanvasResourcePlanInput {
 }
 
 // @public (undocumented)
-export interface RuntimeCatalogAccessUnit {
+export interface RuntimeCatalogChunk {
     // (undocumented)
     readonly blobKey?: string;
     // (undocumented)
     readonly blobRange?: Readonly<UnitBlobRange>;
     // (undocumented)
-    readonly localFrame: number;
+    readonly decodeIndex: number;
     // (undocumented)
     readonly ordinal: number;
     // (undocumented)
     readonly range: Readonly<ByteRange>;
     // (undocumented)
-    readonly record: Readonly<AccessUnitRecord>;
+    readonly record: Readonly<EncodedChunkRecord>;
     // (undocumented)
     readonly relativeRange?: Readonly<ByteRange>;
     // (undocumented)
     readonly rendition: string;
     // (undocumented)
     readonly unit: string;
+}
+
+// @public (undocumented)
+export interface RuntimeCatalogChunkIndex {
+    // (undocumented)
+    get(rendition: string, unit: string, decodeIndex: number): Readonly<RuntimeCatalogChunk> | undefined;
+    // (undocumented)
+    require(rendition: string, unit: string, decodeIndex: number): Readonly<RuntimeCatalogChunk>;
+    // (undocumented)
+    readonly size: number;
+    // (undocumented)
+    values(): readonly Readonly<RuntimeCatalogChunk>[];
 }
 
 // @public (undocumented)
@@ -5495,7 +4201,7 @@ export interface RuntimeCatalogIdIndex<TValue> {
 // @public (undocumented)
 export interface RuntimeCatalogPortEntry {
     // (undocumented)
-    readonly port: Readonly<PortV01>;
+    readonly port: Readonly<Port>;
     // (undocumented)
     readonly unit: string;
 }
@@ -5510,18 +4216,6 @@ export interface RuntimeCatalogPortIndex {
     readonly size: number;
     // (undocumented)
     values(): readonly Readonly<RuntimeCatalogPortEntry>[];
-}
-
-// @public (undocumented)
-export interface RuntimeCatalogRecordIndex {
-    // (undocumented)
-    get(rendition: string, unit: string, localFrame: number): Readonly<RuntimeCatalogAccessUnit> | undefined;
-    // (undocumented)
-    require(rendition: string, unit: string, localFrame: number): Readonly<RuntimeCatalogAccessUnit>;
-    // (undocumented)
-    readonly size: number;
-    // (undocumented)
-    values(): readonly Readonly<RuntimeCatalogAccessUnit>[];
 }
 
 // @public (undocumented)
@@ -5631,6 +4325,8 @@ export interface RuntimeFailureContext {
     readonly codec?: string;
     // (undocumented)
     readonly declaredTotalBytes?: number;
+    // (undocumented)
+    readonly decodeIndex?: number;
     // (undocumented)
     readonly edge?: string;
     // (undocumented)
@@ -5779,17 +4475,6 @@ export type RuntimeMediaPresentation = {
     readonly timestamp: number;
     readonly intendedPresentationOrdinal: bigint;
 };
-
-// @public @deprecated (undocumented)
-export type RuntimeOpaqueRendition = Extract<RenditionV01, {
-    readonly profile: "avc-annexb-opaque-v0";
-}>;
-
-// @public @deprecated (undocumented)
-export type RuntimeOpaqueRenditionCandidate = RuntimeAvcRenditionCandidate;
-
-// @public @deprecated (undocumented)
-export type RuntimeOpaqueRenditionInspection = RuntimeAvcRenditionInspection;
 
 // @public (undocumented)
 export interface RuntimePageResourceCounterContribution {
@@ -6015,7 +4700,7 @@ export interface RuntimeResourceAllocationSnapshot {
 // @public (undocumented)
 export interface RuntimeResourceCatalogView extends RuntimeCanvasResourceCatalogView {
     // (undocumented)
-    readonly records: Pick<RuntimeAssetCatalog["records"], "require">;
+    readonly chunks: Pick<RuntimeAssetCatalog["chunks"], "require">;
 }
 
 // @public (undocumented)
@@ -6254,6 +4939,9 @@ export interface RuntimeVisibilitySnapshot {
 // @public (undocumented)
 export type RuntimeVisibilityState = "visible" | "hidden";
 
+// @public
+export function selectVideoSource<TCandidate extends VideoSourceDescriptor, TSession extends VideoSourceSession>(input: Readonly<VideoSourceSelectionInput<TCandidate, TSession>>): Promise<Readonly<AcceptedVideoSource<TCandidate, TSession>>>;
+
 // @public (undocumented)
 export interface SemanticCutRunwayInput {
     // (undocumented)
@@ -6309,13 +4997,27 @@ export interface SourceBoundary {
 }
 
 // @public
-export function splitVirtualFrame(virtualFrame: number | bigint, unitFrameCount: number): VirtualFramePosition;
+export class SourceSupportProbe {
+    constructor(client: SourceSupportProbeClient);
+    // (undocumented)
+    dispose(): Promise<void>;
+    // (undocumented)
+    probe(config: Readonly<DecoderWorkerProbeConfig>, options?: DecoderWorkerProbeOptions): Promise<boolean>;
+}
 
 // @public (undocumented)
-export interface StartPathOptions {
-    readonly aheadFrames?: number;
-    readonly cachedRunwayFrames?: number;
+export interface SourceSupportProbeClient {
+    // (undocumented)
+    dispose(): Promise<void>;
+    // (undocumented)
+    probeConfig(config: Readonly<DecoderWorkerProbeConfig>, options?: DecoderWorkerProbeOptions): Promise<boolean>;
 }
+
+// @public (undocumented)
+export type SourceSupportProbeCreationOptions = CreateDecoderWorkerClientOptions;
+
+// @public
+export function splitVirtualFrame(virtualFrame: number | bigint, unitFrameCount: number): VirtualFramePosition;
 
 // @public (undocumented)
 export interface StartResidentRunwayInput {
@@ -6390,7 +5092,7 @@ export interface StateFallbackStoreOptions {
 export const STATIC_REASON_CLASSIFICATIONS: Readonly<Record<StaticReason, StaticReasonClassification>>;
 
 // @public (undocumented)
-export const STATIC_REASONS: readonly ["reduced-motion", "no-avc-rendition", "worker-unavailable", "renderer-unavailable", "codec-unsupported", "resource-budget", "readiness-failed", "preparation-timeout", "animation-failure", "fallback-failure", "visibility-suspended", "decoder-queued"];
+export const STATIC_REASONS: readonly ["reduced-motion", "no-video-rendition", "worker-unavailable", "renderer-unavailable", "codec-unsupported", "resource-budget", "readiness-failed", "preparation-timeout", "animation-failure", "fallback-failure", "visibility-suspended", "decoder-queued"];
 
 // @public (undocumented)
 export type StaticReason = (typeof STATIC_REASONS)[number];
@@ -6405,7 +5107,7 @@ export interface StaticReasonSummaryInput {
     // (undocumented)
     readonly deadlineExpired: boolean;
     // (undocumented)
-    readonly hasAvcRendition: boolean;
+    readonly hasVideoRendition: boolean;
     // (undocumented)
     readonly phase: "preparation" | "recovery";
     // (undocumented)
@@ -6414,9 +5116,6 @@ export interface StaticReasonSummaryInput {
     // (undocumented)
     readonly workerAvailable: boolean;
 }
-
-// @public (undocumented)
-export const STREAMING_SLOT_COUNT = 3;
 
 // @public (undocumented)
 export const STREAMING_TEXTURE_LAYER_COUNT = 3;
@@ -6434,37 +5133,6 @@ export interface StreamingFrameHandle {
     // (undocumented)
     readonly uploadSerial: number;
 }
-
-// @public (undocumented)
-export const STRESS_LOOP_ITERATIONS = 1001;
-
-// @public (undocumented)
-export const STRESS_LOOP_OUTPUT_FRAMES = 2002;
-
-// @public (undocumented)
-export const STRESS_LOOP_SEAMS = 1000;
-
-// @public (undocumented)
-export interface StressExpectedFrame {
-    // (undocumented)
-    readonly contentFrame: number;
-    // (undocumented)
-    readonly duration: number;
-    // (undocumented)
-    readonly iteration: bigint;
-    // (undocumented)
-    readonly timestamp: number;
-    // (undocumented)
-    readonly virtualFrame: bigint;
-}
-
-// Warning: (ae-forgotten-export) The symbol "Awaitable" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type StressFrameValidator = (frame: ManagedDecodedFrame, expected: StressExpectedFrame) => Awaitable<void>;
-
-// @public (undocumented)
-export type StressTagReader = (frame: VideoFrame, expected: StressExpectedFrame) => Awaitable<number>;
 
 // @public (undocumented)
 export type SubmissionHorizonDecision = {
@@ -6559,9 +5227,6 @@ export interface UnresolvedSubmissionHorizonInput {
 }
 
 // @public
-export function validateEncodedLoopUnit(unit: EncodedLoopUnit): void;
-
-// @public
 export function validateFrameRate(rate: RationalFrameRate): void;
 
 // @public (undocumented)
@@ -6573,22 +5238,247 @@ export function validatePositiveSafeInteger(value: number, label: string): void;
 // @public (undocumented)
 export function validatePresentationRingCapacity(capacity: number): void;
 
-// @public
-export interface VideoDecoderAdapter {
+// @public (undocumented)
+export interface VideoCandidateActivationInput {
     // (undocumented)
-    close(): void;
+    readonly deadlineMs: number;
     // (undocumented)
-    configure(config: VideoDecoderConfig): void;
+    readonly expectedPresentation: Readonly<GraphPresentation>;
     // (undocumented)
-    decode(chunk: EncodedVideoChunk): void;
+    readonly finalResourcePlan: Readonly<RuntimeResourcePlan>;
     // (undocumented)
-    readonly decodeQueueSize: number;
+    readonly graphSnapshot: Readonly<MotionGraphSnapshot>;
     // (undocumented)
-    flush(): Promise<void>;
+    readonly scheduler: PathScheduler;
+    // (undocumented)
+    readonly signal: AbortSignal;
 }
 
 // @public (undocumented)
-export type VideoDecoderFactory = (init: VideoDecoderInit) => VideoDecoderAdapter;
+export type VideoCandidateCachePreparer = (input: Readonly<InteractionCachePreparationInput>, options?: Readonly<PrepareInteractionCacheOptions>) => Promise<Readonly<InteractionCachePreparationReport>>;
+
+// @public
+export class VideoCandidateFactory implements IntegratedCandidateFactory {
+    constructor(options: Readonly<VideoCandidateFactoryOptions>);
+    // (undocumented)
+    readonly availability: IntegratedCandidateFactory["availability"];
+    // (undocumented)
+    readonly contextTarget?: NonNullable<IntegratedCandidateFactory["contextTarget"]>;
+    // (undocumented)
+    create(context: Readonly<IntegratedCandidateAttemptContext>): IntegratedCandidateAttempt;
+    // (undocumented)
+    readonly resourceHost?: NonNullable<IntegratedCandidateFactory["resourceHost"]>;
+}
+
+// @public (undocumented)
+export interface VideoCandidateFactoryOptions {
+    // (undocumented)
+    readonly clock?: PathSchedulerClock;
+    // (undocumented)
+    readonly contextTarget?: BrowserContextRecoveryEventTarget;
+    readonly prepareCache?: VideoCandidateCachePreparer;
+    // (undocumented)
+    readonly readinessFactory: VideoCandidateReadinessFactory;
+    // (undocumented)
+    readonly rendererFactory: VideoCandidateRendererFactory;
+    // (undocumented)
+    readonly resourceAuthority?: VideoCandidateResourceAuthority;
+    // (undocumented)
+    readonly resourceHost?: RuntimeCanvasResourceHost;
+    // (undocumented)
+    readonly timers?: VideoCandidateTimerHost;
+    // (undocumented)
+    readonly workerFactory: VideoCandidateWorkerFactory;
+}
+
+// @public
+export interface VideoCandidatePreparedMedia {
+    // Warning: (ae-forgotten-export) The symbol "Awaitable" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    dispose(): Awaitable<void>;
+    // (undocumented)
+    drawInitial(): void;
+    // (undocumented)
+    readonly playback: IntegratedPlaybackSession;
+}
+
+// @public (undocumented)
+export interface VideoCandidateReadinessFactory {
+    // (undocumented)
+    create(input: Readonly<VideoCandidateReadinessSessionInput>): VideoCandidateReadinessSession;
+}
+
+// @public
+export interface VideoCandidateReadinessSession {
+    // (undocumented)
+    readonly adapters: Readonly<ReadinessRunnerAdapters>;
+    // (undocumented)
+    dispose(): Awaitable<void>;
+    // (undocumented)
+    observeResult?(result: Readonly<ReadinessRunnerResult>): void;
+    // (undocumented)
+    prepareActivation(input: Readonly<VideoCandidateActivationInput>): Awaitable<VideoCandidatePreparedMedia>;
+}
+
+// @public (undocumented)
+export interface VideoCandidateReadinessSessionInput {
+    // (undocumented)
+    readonly clock: PathSchedulerClock;
+    // (undocumented)
+    readonly context: Readonly<IntegratedCandidateAttemptContext>;
+    // (undocumented)
+    readonly deadlineMs: number;
+    // (undocumented)
+    readonly interactionCache: Readonly<InteractionCachePlan>;
+    // (undocumented)
+    readonly limits: Readonly<DecoderWorkerLimits>;
+    // (undocumented)
+    readonly provisionalResourcePlan: Readonly<RuntimeResourcePlan>;
+    // (undocumented)
+    readonly renderer: FrameRenderer;
+    // (undocumented)
+    readonly samples: WorkerSampleFactory;
+    // (undocumented)
+    readonly signal: AbortSignal;
+    // (undocumented)
+    readonly timeline: DecodeTimeline;
+    // (undocumented)
+    readonly worker: VideoCandidateWorker;
+}
+
+// @public (undocumented)
+export interface VideoCandidateRendererFactory {
+    // (undocumented)
+    readonly available: boolean;
+    // (undocumented)
+    create(context: Readonly<IntegratedCandidateAttemptContext>): VideoCandidateRendererReservation;
+}
+
+// @public
+export interface VideoCandidateRendererReservation {
+    // (undocumented)
+    allocate(layout: Readonly<FrameTextureLayout>): FrameRenderer;
+    // (undocumented)
+    dispose(): Awaitable<void>;
+    // (undocumented)
+    readonly limits: Readonly<InteractionCacheDeviceLimits>;
+}
+
+// @public
+export interface VideoCandidateResourceAuthority {
+    // (undocumented)
+    requestDecoder(): RuntimeDecoderTicket;
+    // (undocumented)
+    reservePlan(allocation: Readonly<RuntimeResourceAllocationSnapshot>): VideoCandidateResourcePlanLease | PromiseLike<VideoCandidateResourcePlanLease>;
+}
+
+// @public (undocumented)
+export interface VideoCandidateResourcePlanLease {
+    // (undocumented)
+    assertAllocation(allocation: Readonly<RuntimeResourceAllocationSnapshot>): void;
+    // (undocumented)
+    claimWorkerTransfer(byteLength: number): WorkerSampleTransferLease;
+    // (undocumented)
+    release(): void;
+    // (undocumented)
+    snapshot(): Readonly<VideoCandidateResourcePlanLeaseSnapshot>;
+}
+
+// @public (undocumented)
+export interface VideoCandidateResourcePlanLeaseSnapshot {
+    // (undocumented)
+    readonly categories: readonly Readonly<RuntimeCategoryBytesSnapshot>[];
+    // (undocumented)
+    readonly released: boolean;
+    // (undocumented)
+    readonly totalBytes: number;
+}
+
+// @public (undocumented)
+export interface VideoCandidateTimerHost {
+    // (undocumented)
+    clearTimeout(handle: unknown): void;
+    // (undocumented)
+    setTimeout(callback: () => void, milliseconds: number): unknown;
+}
+
+// @public
+export interface VideoCandidateWorker extends PathSchedulerWorkerAdapter {
+    // (undocumented)
+    configure(options: DecoderWorkerConfigureOptions): Promise<void>;
+    // (undocumented)
+    dispose(): Promise<void>;
+}
+
+// @public (undocumented)
+export interface VideoCandidateWorkerFactory {
+    // (undocumented)
+    readonly available: boolean;
+    // (undocumented)
+    create(context: Readonly<IntegratedCandidateAttemptContext>): VideoCandidateWorker;
+}
+
+// @public (undocumented)
+export interface VideoCandidateWorkerSetup {
+    // (undocumented)
+    readonly configure: Readonly<DecoderWorkerConfigureOptions>;
+    // (undocumented)
+    readonly limits: Readonly<DecoderWorkerLimits>;
+}
+
+// @public (undocumented)
+export type VideoSourceAttemptOutcome = "invalid-codec-hint" | "all-renditions-unsupported" | "selected";
+
+// @public (undocumented)
+export interface VideoSourceDescriptor {
+    readonly authoredIndex: number;
+    readonly codec: string;
+}
+
+// @public (undocumented)
+export interface VideoSourceSelectionAttempt {
+    // (undocumented)
+    readonly authoredIndex: number;
+    // (undocumented)
+    readonly outcome: VideoSourceAttemptOutcome;
+    // Warning: (ae-forgotten-export) The symbol "VideoRenditionSelectionAttempt" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly renditionAttempts: readonly Readonly<VideoRenditionSelectionAttempt>[];
+}
+
+// @public
+export class VideoSourceSelectionError extends Error {
+    constructor(attempts: readonly Readonly<VideoSourceSelectionAttempt>[]);
+    // (undocumented)
+    readonly attempts: readonly Readonly<VideoSourceSelectionAttempt>[];
+}
+
+// @public (undocumented)
+export interface VideoSourceSelectionInput<TCandidate extends VideoSourceDescriptor, TSession extends VideoSourceSession> {
+    // (undocumented)
+    readonly candidates: readonly Readonly<TCandidate>[];
+    // (undocumented)
+    createProbe(candidate: Readonly<TCandidate>): SourceSupportProbe;
+    // (undocumented)
+    isResourceEligible(rendition: Readonly<CertifiedVideoRendition>, candidate: Readonly<TCandidate>, session: TSession): boolean;
+    // (undocumented)
+    open(candidate: Readonly<TCandidate>, signal: AbortSignal): Promise<TSession>;
+    // (undocumented)
+    readonly signal: AbortSignal;
+}
+
+// @public (undocumented)
+export interface VideoSourceSession {
+    // (undocumented)
+    readonly catalog: Readonly<{
+        readonly manifest: Readonly<CompiledManifest>;
+        readonly videoRenditions: readonly Readonly<CertifiedVideoRendition>[];
+    }>;
+    // (undocumented)
+    dispose(): void | PromiseLike<void>;
+}
 
 // @public (undocumented)
 export interface VirtualFramePosition {
@@ -6639,27 +5529,11 @@ export interface VisibilityPolicyTransition {
 export type VisibilityPolicyTransitionKind = "suspend" | "resume";
 
 // @public (undocumented)
-export interface WaitForFramesOptions {
-    // (undocumented)
-    readonly signal?: AbortSignal;
-    // (undocumented)
-    readonly timeoutMs?: number;
-}
-
-// @public (undocumented)
-export interface WaitForPathFramesOptions {
-    // (undocumented)
-    readonly signal?: AbortSignal;
-    // (undocumented)
-    readonly timeoutMs?: number;
-}
-
-// @public (undocumented)
 export interface WarmupAdapterInput {
     // (undocumented)
     readonly graph: Readonly<ValidatedMotionGraph>;
     // (undocumented)
-    readonly manifest: Readonly<CompiledManifestV01>;
+    readonly manifest: Readonly<CompiledManifest>;
 }
 
 // @public (undocumented)
@@ -6669,69 +5543,7 @@ export interface WarmupAdapterResult {
 }
 
 // @public
-export class WebGlFrameRenderer {
-    constructor(backend: FrameRendererBackend, layout: FrameTextureLayout, options?: WebGlFrameRendererOptions);
-    // (undocumented)
-    dispose(): void;
-    // (undocumented)
-    draw(handle: RenderFrameHandle): void;
-    // (undocumented)
-    get limits(): Readonly<FrameRendererBackendLimits>;
-    // (undocumented)
-    markContextLost(): void;
-    // (undocumented)
-    readPixels(): Uint8Array;
-    // (undocumented)
-    residentHandle(layer: number): ResidentFrameHandle;
-    // (undocumented)
-    get resourceGeneration(): number;
-    // (undocumented)
-    restore(backend: FrameRendererBackend): void;
-    // (undocumented)
-    settled(): Promise<void>;
-    // (undocumented)
-    snapshot(): WebGlFrameRendererSnapshot;
-    // (undocumented)
-    uploadResident(layer: number, source: BorrowedVideoFrame, resourceGeneration?: number): Promise<ResidentFrameHandle | null>;
-    // (undocumented)
-    uploadStreaming(slot: number, pathGeneration: number, source: BorrowedVideoFrame, resourceGeneration?: number): Promise<StreamingFrameHandle | null>;
-}
-
-// @public (undocumented)
-export interface WebGlFrameRendererOptions {
-    // (undocumented)
-    readonly streamingSlots?: number;
-}
-
-// @public (undocumented)
-export type WebGlFrameRendererSnapshot = FrameRendererSnapshot;
-
-// @public
 export function withRuntimeResourceRingCapacity(plan: Readonly<RuntimeResourcePlan>, ringCapacity: number): Readonly<RuntimeResourcePlan>;
-
-// @public (undocumented)
-export interface WorkerAvcInspector {
-    // (undocumented)
-    inspect(input: {
-        readonly unitId: string;
-        readonly unitInstance: number;
-        readonly unitFrame: number;
-        readonly unitFrameCount: number;
-        readonly key: boolean;
-        readonly bytes: Uint8Array;
-    }): WorkerAvcSampleInspection;
-    // (undocumented)
-    resetUnitSequence(): void;
-}
-
-// @public (undocumented)
-export type WorkerAvcInspectorFactory = (profile: DecoderWorkerAvcProfile, expectedOutput: DecoderWorkerOutputExpectation) => WorkerAvcInspector;
-
-// @public (undocumented)
-export interface WorkerAvcSampleInspection {
-    // (undocumented)
-    readonly chunkType: EncodedVideoChunkType;
-}
 
 // @public (undocumented)
 export type WorkerEncodedVideoChunkFactory = (init: EncodedVideoChunkInit) => EncodedVideoChunk;
@@ -6739,13 +5551,13 @@ export type WorkerEncodedVideoChunkFactory = (init: EncodedVideoChunkInit) => En
 // @public (undocumented)
 export interface WorkerSampleCatalog {
     // (undocumented)
-    copySample(rendition: string, unit: string, localFrame: number): ArrayBuffer;
+    readonly chunks: Pick<RuntimeCatalogChunkIndex, "require">;
     // (undocumented)
-    readonly records: Pick<RuntimeCatalogRecordIndex, "require">;
+    copyChunk(rendition: string, unit: string, decodeIndex: number): ArrayBuffer;
     // (undocumented)
-    readonly renditions: Pick<RuntimeCatalogIdIndex<RenditionV01>, "require">;
+    readonly renditions: Pick<RuntimeCatalogIdIndex<ProductionRendition>, "require">;
     // (undocumented)
-    readonly units: Pick<RuntimeCatalogIdIndex<UnitV01>, "require">;
+    readonly units: Pick<RuntimeCatalogIdIndex<Unit>, "require">;
 }
 
 // @public
@@ -6753,12 +5565,15 @@ export class WorkerSampleFactory {
     constructor(options: WorkerSampleFactoryOptions);
     // (undocumented)
     createBatch(input: CreateWorkerSampleBatchInput): Readonly<DecoderWorkerSampleBatch>;
+    nextGroupRequirement(request: Readonly<WorkerSampleFrameRequest>): Readonly<WorkerSampleGroupRequirement>;
 }
 
 // @public (undocumented)
 export interface WorkerSampleFactoryOptions {
     // (undocumented)
     readonly catalog: WorkerSampleCatalog;
+    // (undocumented)
+    readonly inspection: Readonly<VideoCodecAdapterInspection>;
     // (undocumented)
     readonly limits: DecoderWorkerLimits;
     // (undocumented)
@@ -6775,6 +5590,37 @@ export interface WorkerSampleFrameRequest {
     readonly unitFrame: number;
     // (undocumented)
     readonly unitId: string;
+}
+
+// @public (undocumented)
+export interface WorkerSampleGroupRequirement {
+    // (undocumented)
+    readonly chunkCount: number;
+    // (undocumented)
+    readonly firstUnitFrame: number;
+    // (undocumented)
+    readonly frameCount: number;
+    readonly reorderFrameCount: number;
+    // (undocumented)
+    readonly unitId: string;
+}
+
+// @public
+export interface WorkerSampleOutput {
+    // (undocumented)
+    readonly decodeIndex: number;
+    // (undocumented)
+    readonly duration: number;
+    // (undocumented)
+    readonly ordinal: number;
+    // (undocumented)
+    readonly timestamp: number;
+    // (undocumented)
+    readonly unitFrame: number;
+    // (undocumented)
+    readonly unitId: string;
+    // (undocumented)
+    readonly unitInstance: number;
 }
 
 // @public (undocumented)
@@ -6799,6 +5645,8 @@ export interface WorkerVideoDecoderAdapter {
     decode(chunk: EncodedVideoChunk): void;
     // (undocumented)
     readonly decodeQueueSize: number;
+    // (undocumented)
+    flush(): Promise<void>;
     // (undocumented)
     setDequeueCallback(callback: () => void): void;
 }

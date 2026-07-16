@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { RuntimeAssetCatalog, RuntimeCatalogChunk } from "./asset-catalog.js";
 import { inspectSelectedVideoRendition } from "./video-rendition-inspection.js";
-import { createVideoRenditionCandidates } from "./video-rendition-selection.js";
+import { certifyVideoRenditions } from "./video-rendition-certification.js";
 
 const ACCESS_UNITS = Object.freeze([
   fromHex(
@@ -20,7 +20,7 @@ const ACCESS_UNITS = Object.freeze([
 describe("selected catalog video rendition inspection", () => {
   it("certifies the exact selected rung without exposing or retaining chunk bytes", () => {
     const fixture = createCatalogFixture();
-    const selected = createVideoRenditionCandidates(fixture.manifest)[0]!;
+    const selected = fixture.catalog.videoRenditions[0]!;
 
     const result = inspectSelectedVideoRendition(fixture.catalog, selected);
 
@@ -57,7 +57,7 @@ describe("selected catalog video rendition inspection", () => {
         bitrate: { average: 90_000, peak: 140_000 }
       }]
     } satisfies CompiledManifest;
-    const foreign = createVideoRenditionCandidates(foreignManifest)[0]!;
+    const foreign = certifyVideoRenditions(foreignManifest)[0]!;
 
     expect(() => inspectSelectedVideoRendition(fixture.catalog, foreign))
       .toThrow(/does not belong to this asset catalog/iu);
@@ -169,10 +169,13 @@ function createCatalogFixture(): Readonly<{
   const copyChunk = vi.fn((_rendition: string, _unit: string, decodeIndex: number) =>
     ACCESS_UNITS[decodeIndex]!.slice().buffer
   );
+  const videoRenditions = certifyVideoRenditions(manifest);
   const catalog = {
     manifest,
-    renditions: { require: () => rendition },
-    units: { require: () => unit },
+    videoRenditions,
+    ownsVideoRendition: (value: unknown) => videoRenditions.includes(
+      value as (typeof videoRenditions)[number]
+    ),
     chunks: { require: (_r: string, _u: string, index: number) => entries[index]! },
     copyChunk
   } as unknown as RuntimeAssetCatalog;

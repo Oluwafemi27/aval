@@ -13,7 +13,7 @@ import { sha256Hex } from "../compile/hash.js";
 import { encodeCanonicalRgbaPng } from "../compile/png.js";
 import { CompilerError } from "../diagnostics.js";
 import { validateSourceProject } from "../source-project-schema.js";
-import { syncDirectory } from "../compile/output.js";
+import { syncDirectory } from "./publication-fs.js";
 import { publishStagedDirectoryNoReplace } from "./init-publication.js";
 
 export interface InitCommandResult {

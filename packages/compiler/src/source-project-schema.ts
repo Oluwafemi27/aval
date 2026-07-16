@@ -7,9 +7,7 @@ import {
 import { CompilerError } from "./diagnostics.js";
 import type {
   Canvas,
-  NormalizedSourceProject,
-  SourceProject,
-  VideoEncoding
+  NormalizedSourceProject
 } from "./model.js";
 import {
   exactKeys,
@@ -34,6 +32,7 @@ import {
   cloneSourceEdges
 } from "./source-graph-schema.js";
 import { preflightSourceGraph } from "./source-graph-preflight.js";
+import { cloneVideoEncodings } from "./compile/video-encoding-policy.js";
 import { normalizeSourceProject } from "./source-project-normalize.js";
 
 const PROJECT_KEYS = [
@@ -103,13 +102,13 @@ export function validateSourceProject(
     canvas,
     frameRate,
     sources,
-    encodings: input.encodings as unknown as readonly VideoEncoding[],
+    encodings: cloneVideoEncodings(input.encodings, canvas),
     units,
     initialState,
     states,
     edges,
     bindings
-  }) satisfies Readonly<SourceProject>);
+  }) satisfies Readonly<NormalizedSourceProject>);
   preflightSourceGraph(project);
   return project;
 }

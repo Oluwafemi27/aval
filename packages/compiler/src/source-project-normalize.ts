@@ -1,12 +1,10 @@
-import { cloneVideoEncodings } from "./compile/video-encoding-policy.js";
 import type {
-  NormalizedSourceProject,
-  SourceProject
+  NormalizedSourceProject
 } from "./model.js";
 
-/** Resolve author dimensions and freeze the canonical compiler project model. */
+/** Freeze the project after schema ingress has normalized its encoding set. */
 export function normalizeSourceProject(
-  project: Readonly<SourceProject>
+  project: Readonly<NormalizedSourceProject>
 ): Readonly<NormalizedSourceProject> {
   return Object.freeze({
     projectVersion: project.projectVersion,
@@ -14,7 +12,7 @@ export function normalizeSourceProject(
     canvas: project.canvas,
     frameRate: project.frameRate,
     sources: project.sources,
-    encodings: cloneVideoEncodings(project.encodings, project.canvas),
+    encodings: project.encodings,
     units: project.units,
     initialState: project.initialState,
     states: project.states,

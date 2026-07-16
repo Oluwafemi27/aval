@@ -23,6 +23,8 @@ uses `scripts/verify-packed.mjs` with the locally built 1.0.0 package archives,
 so it verifies the package users will install without substituting source-path
 aliases or private imports.
 
-Place an asset defining `idle`, `loading`, and `done` at `public/status.avl` to
-exercise the three controls. Without that asset, the example intentionally
-keeps the slotted fallback visible and reports the normalized failure.
+Place an AV1, VP9, H.265, and H.264 bundle defining `idle`, `loading`, and
+`done` at `public/status/` to exercise the three controls. Use the exact
+`<source>` markup recorded in its `build.json`. Without those assets, the
+example intentionally keeps the slotted fallback visible and reports the
+normalized failure.

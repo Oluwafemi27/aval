@@ -1,4 +1,7 @@
-import type { GraphEdgeDefinition } from "@pixel-point/aval-graph";
+import type {
+  GraphEdgeDefinition,
+  GraphPresentation
+} from "@pixel-point/aval-graph";
 import { describe, expect, it } from "vitest";
 
 import type { CutResidentHandoff } from "./cut-presentation-coordinator.js";
@@ -14,6 +17,16 @@ describe("browser visible-endpoint inverse handoff", () => {
     const checkpoint = endpointCheckpoint();
     let inversePrepared = false;
     const resident = {
+      visibleEndpoint: true,
+      canEnterReversible(
+        candidate: Readonly<GraphEdgeDefinition>,
+        presentation: BodyPresentation
+      ): boolean {
+        calls.push("check-eligibility");
+        expect(candidate).toBe(INVERSE_EDGE);
+        expect(presentation).toBe(ENGAGED_BODY_ZERO);
+        return true;
+      },
       reversibleEntryReady(
         candidate: Readonly<GraphEdgeDefinition>,
         generation: number,
@@ -40,16 +53,19 @@ describe("browser visible-endpoint inverse handoff", () => {
     const handoff = handoffBrowserVisibleEndpointToInverse({
       resident,
       edge: INVERSE_EDGE,
+      presentation: ENGAGED_BODY_ZERO,
       generation: 3,
       ordinal: 8n
     });
 
     expect(calls).toEqual([
+      "check-eligibility",
       "prepare-inverse",
       "take-checkpoint",
       "retire-endpoint"
     ]);
     expect(handoff).toEqual({ ready, checkpoint });
+    if (handoff === null) throw new Error("eligible inverse was not handed off");
     expect(handoff.ready).toMatchObject({
       routeReady: true,
       media: {
@@ -60,6 +76,62 @@ describe("browser visible-endpoint inverse handoff", () => {
       }
     });
   });
+
+  it("keeps endpoint ownership until the authored portal is eligible", () => {
+    const calls: string[] = [];
+    const resident = {
+      visibleEndpoint: true,
+      canEnterReversible(
+        candidate: Readonly<GraphEdgeDefinition>,
+        presentation: BodyPresentation
+      ): boolean {
+        calls.push("check-eligibility");
+        expect(candidate).toBe(INVERSE_EDGE);
+        expect(presentation).toBe(ENGAGED_BODY_FOUR);
+        return false;
+      },
+      reversibleEntryReady(): Readonly<BrowserNormalReady> {
+        calls.push("prepare-inverse");
+        return inverseReady();
+      },
+      takeResidentHandoff(): Readonly<CutResidentHandoff> {
+        calls.push("take-checkpoint");
+        return endpointCheckpoint();
+      },
+      retireCutAndSupersede(): boolean {
+        calls.push("retire-endpoint");
+        return true;
+      }
+    };
+
+    const handoff = handoffBrowserVisibleEndpointToInverse({
+      resident,
+      edge: INVERSE_EDGE,
+      presentation: ENGAGED_BODY_FOUR,
+      generation: 3,
+      ordinal: 8n
+    });
+
+    expect(handoff).toBeNull();
+    expect(calls).toEqual(["check-eligibility"]);
+  });
+});
+
+type BodyPresentation = Extract<
+  GraphPresentation,
+  { readonly kind: "body" }
+>;
+
+const ENGAGED_BODY_ZERO: BodyPresentation = Object.freeze({
+  kind: "body",
+  state: "engaged",
+  unitId: "engaged.body",
+  frameIndex: 0
+});
+
+const ENGAGED_BODY_FOUR: BodyPresentation = Object.freeze({
+  ...ENGAGED_BODY_ZERO,
+  frameIndex: 4
 });
 
 const INVERSE_EDGE: Readonly<GraphEdgeDefinition> = Object.freeze({

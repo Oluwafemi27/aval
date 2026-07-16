@@ -60,4 +60,23 @@ describe("runtime asset catalog", () => {
     });
     catalog.dispose();
   });
+
+  it("owns one immutable certified rendition identity per authored rung", () => {
+    const left = new RuntimeAssetCatalog(createRuntimeTestAsset());
+    const right = new RuntimeAssetCatalog(createRuntimeTestAsset());
+    const candidate = left.videoRenditions[0]!;
+
+    expect(candidate.rendition).toBe(left.manifest.renditions[0]);
+    expect(left.ownsVideoRendition(candidate)).toBe(true);
+    expect(right.ownsVideoRendition(candidate)).toBe(false);
+    expect(candidate.geometry).toMatchObject({
+      decodedStorageRect: [0, 0, 64, 64],
+      decodedRgbaBytes: 16_384
+    });
+    expect(Object.isFrozen(candidate)).toBe(true);
+    expect(Object.isFrozen(candidate.decoderConfig)).toBe(true);
+
+    left.dispose();
+    right.dispose();
+  });
 });

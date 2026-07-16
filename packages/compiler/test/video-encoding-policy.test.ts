@@ -6,6 +6,7 @@ import {
   H265_ENCODER_PRESETS
 } from "../src/model.js";
 import {
+  cloneNormalizedVideoEncodings,
   cloneVideoEncodings,
   videoCompressionArguments
 } from "../src/compile/video-encoding-policy.js";
@@ -23,6 +24,24 @@ function rendition(crf = 20): any {
 }
 
 describe("video encoding policy", () => {
+  it("snapshots normalized policies through the same codec validator", () => {
+    const normalized = cloneVideoEncodings([{
+      codec: "h264",
+      preset: "medium",
+      renditions: [rendition(30)]
+    }], canvas);
+    const snapshot = cloneNormalizedVideoEncodings(normalized);
+
+    expect(snapshot).toEqual(normalized);
+    expect(snapshot).not.toBe(normalized);
+    expect(snapshot[0]).not.toBe(normalized[0]);
+    expect(Object.isFrozen(snapshot[0]?.renditions)).toBe(true);
+    expect(() => cloneNormalizedVideoEncodings([{
+      ...normalized[0],
+      renditions: [rendition(30)]
+    }])).toThrow(CompilerError);
+  });
+
   it("accepts every supported codec policy and lowers owned FFmpeg controls", () => {
     const encodings = cloneVideoEncodings([
       {

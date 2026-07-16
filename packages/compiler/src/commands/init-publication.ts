@@ -1,13 +1,14 @@
-import { lstat, mkdir, open, rename, rmdir } from "node:fs/promises";
+import { mkdir, rename } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { CompilerError } from "../diagnostics.js";
-import { syncDirectory } from "../compile/output.js";
-
-interface DirectoryIdentity {
-  readonly device: string;
-  readonly inode: string;
-}
+import {
+  assertDirectoryObject,
+  removeOwnedEmptyDirectory,
+  requireDirectoryIdentity,
+  syncDirectory,
+  type DirectoryIdentity
+} from "./publication-fs.js";
 
 /**
  * Publish a completely staged directory without replacing an independently
@@ -46,16 +47,23 @@ export async function publishStagedDirectoryNoReplace(
     // produces EEXIST and is never renamed over. Same-user namespace mutation
     // remains outside the process-isolation boundary, as it does after commit.
     await mkdir(target, { mode: 0o700 });
-    reservation = await directoryIdentity(target);
+    reservation = await requireDirectoryIdentity(
+      target,
+      "init directory reservation"
+    );
     await syncParent(parent);
-    await assertDirectoryIdentity(target, reservation);
+    await assertDirectoryObject(target, reservation, "init directory reservation");
     await rename(staged, target);
     committed = true;
     await syncParent(parent);
   } catch (error) {
     if (committed) throw durabilityUncertain(target, error);
     if (reservation !== undefined) {
-      await removeOwnedEmptyReservation(target, reservation).catch(() => undefined);
+      await removeOwnedEmptyDirectory(
+        target,
+        reservation,
+        "init directory reservation"
+      ).catch(() => undefined);
       await syncParent(parent).catch(() => undefined);
     }
     if (error instanceof CompilerError) throw error;
@@ -77,49 +85,4 @@ function durabilityUncertain(path: string, cause: unknown): CompilerError {
       hint: "The complete project is present; inspect it before retrying at another path."
     }
   );
-}
-
-async function directoryIdentity(path: string): Promise<DirectoryIdentity> {
-  const handle = await open(path, "r");
-  try {
-    const metadata = await handle.stat({ bigint: true });
-    if (!metadata.isDirectory()) throw new Error("reservation is not a directory");
-    return Object.freeze({ device: String(metadata.dev), inode: String(metadata.ino) });
-  } finally {
-    await handle.close();
-  }
-}
-
-async function assertDirectoryIdentity(
-  path: string,
-  expected: DirectoryIdentity
-): Promise<void> {
-  const metadata = await lstat(path, { bigint: true });
-  if (
-    !metadata.isDirectory() ||
-    metadata.isSymbolicLink() ||
-    String(metadata.dev) !== expected.device ||
-    String(metadata.ino) !== expected.inode
-  ) {
-    throw new CompilerError("IO_FAILED", "Init directory reservation changed", {
-      path
-    });
-  }
-}
-
-async function removeOwnedEmptyReservation(
-  path: string,
-  expected: DirectoryIdentity
-): Promise<void> {
-  const metadata = await lstat(path, { bigint: true }).catch(
-    (error: NodeJS.ErrnoException) => error.code === "ENOENT" ? undefined : Promise.reject(error)
-  );
-  if (
-    metadata === undefined ||
-    !metadata.isDirectory() ||
-    metadata.isSymbolicLink() ||
-    String(metadata.dev) !== expected.device ||
-    String(metadata.ino) !== expected.inode
-  ) return;
-  await rmdir(path);
 }
