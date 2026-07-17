@@ -978,7 +978,9 @@ class PlayerImpl implements Player {
       this.#busy = true;
       const work = this.#advance();
       this.#advanceWork = work;
-      void work.catch((error) => this.#fail(error)).finally(() => {
+      void work.catch((error) => {
+        if (!isAbort(error)) this.#fail(error);
+      }).finally(() => {
         if (this.#advanceWork === work) this.#advanceWork = null;
         this.#busy = false;
         this.#nextDeadline();

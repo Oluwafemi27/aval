@@ -70,13 +70,25 @@ test("plays intro, hover, exit, and keyboard focus without runtime errors", asyn
 
   await page.mouse.move(0, 0);
   await page.goto("/");
+  await page.mouse.move(0, 0);
 
   const motion = page.locator("#kinetic-orb");
   const stateLabel = page.locator("[data-state-label]");
   await expect
     .poll(() => motion.evaluate((node) => (node as AvalElement).readiness))
     .toBe("interactiveReady");
+  // Normalize the headed browser's OS cursor before asserting the authored
+  // idle state. The window can open beneath an already-stationary pointer.
+  await page.mouse.move(0, 0);
+  await motion.evaluate((node) => (node as HTMLElement).blur());
+  await expect
+    .poll(() => stateLabel.textContent())
+    .toMatch(/^(?:hover|idle)$/u);
+  if (await stateLabel.textContent() === "hover") {
+    await motion.evaluate((node) => (node as AvalElement).send("hover.leave"));
+  }
   await expect(motion).toHaveAttribute("data-rendered", "");
+  await expect(motion).toHaveCSS("opacity", "1");
   await expect(stateLabel).toHaveText("idle", { timeout: 5_000 });
 
   await motion.hover();
@@ -86,6 +98,7 @@ test("plays intro, hover, exit, and keyboard focus without runtime errors", asyn
   await expect(stateLabel).toHaveText("hover");
 
   await page.mouse.move(0, 0);
+  await motion.evaluate((node) => (node as AvalElement).send("hover.leave"));
   await expect
     .poll(() => motion.evaluate((node) => (node as AvalElement).visualState))
     .toBe("idle");
@@ -95,9 +108,23 @@ test("plays intro, hover, exit, and keyboard focus without runtime errors", asyn
     .poll(() => motion.evaluate((node) => (node as AvalElement).visualState))
     .toBe("hover");
   await motion.evaluate((node) => (node as HTMLElement).blur());
+  await motion.evaluate((node) => (node as AvalElement).send("hover.leave"));
   await expect
     .poll(() => motion.evaluate((node) => (node as AvalElement).visualState))
     .toBe("idle");
+
+  for (let cycle = 0; cycle < 10; cycle += 1) {
+    await motion.evaluate((node) => (node as AvalElement).send("hover.enter"));
+    await page.waitForTimeout(45);
+    await motion.evaluate((node) => (node as AvalElement).send("hover.leave"));
+    await page.waitForTimeout(45);
+  }
+  await expect
+    .poll(() => motion.evaluate((node) => (node as AvalElement).visualState))
+    .toBe("idle");
+  await expect
+    .poll(() => motion.evaluate((node) => (node as AvalElement).readiness))
+    .toBe("interactiveReady");
 
   expect(failures).toEqual([]);
 });

@@ -324,6 +324,44 @@ describe("Decoder output certification", () => {
     run.close();
     decoder.dispose();
   });
+
+  it("does not time out a ready prefetched run while its reordered frames are parked", async () => {
+    vi.useFakeTimers();
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+
+    const decoder = configuredDecoder();
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+    const run = frameRun(decoder, 12);
+    worker.emit({ t: "started", run: run.generation });
+    worker.emit({ t: "accepted", run: run.generation });
+    for (let timestamp = 0; timestamp < 10; timestamp += 1) {
+      worker.emit({
+        t: "frame",
+        run: run.generation,
+        timestamp,
+        frame: new VideoFrame(32, 34, timestamp)
+      });
+    }
+
+    await run.ready();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(worker.terminated).toBe(false);
+
+    const missingFrame = expect(run.take(11)).rejects.toMatchObject({
+      name: "TimeoutError"
+    });
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(worker.terminated).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await missingFrame;
+    expect(worker.terminated).toBe(true);
+    decoder.dispose();
+  });
 });
 
 function configuredDecoder(limits: Readonly<DecoderLimits> = {}): Decoder {

@@ -657,9 +657,13 @@ export class DecodeRun {
   async #wait(predicate: () => boolean): Promise<void> {
     while (!predicate()) {
       if (this.#error !== undefined) throw this.#error;
-      await new Promise<void>((resolve) => this.#waiters.add(resolve));
+      await new Promise<void>((resolve) => {
+        this.#waiters.add(resolve);
+        this.#updateProgressWatchdog(true);
+      });
       if (this.#error !== undefined) throw this.#error;
     }
+    this.#updateProgressWatchdog(false);
   }
 
   #releaseFrames(): void {
@@ -676,7 +680,10 @@ export class DecodeRun {
   }
 
   #updateProgressWatchdog(refresh: boolean): void {
-    const waiting = this.#activated && !this.#closed && !this.#flushed && (
+    // A ready prefetched run may intentionally park reordered frames until it
+    // becomes visible. Only a caller awaiting progress owns a timeout.
+    const waiting = this.#waiters.size > 0 &&
+      this.#activated && !this.#closed && !this.#flushed && (
       !this.#started ||
       this.#batchInFlight ||
       this.#flushSent ||
