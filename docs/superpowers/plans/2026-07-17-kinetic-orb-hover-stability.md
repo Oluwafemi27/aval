@@ -56,7 +56,17 @@ regression self-building and required in CI.
 - Prove runtime trace and/or rendered pixels continue advancing after the final
   settled state.
 
-## Task 5: Integration verification
+## Task 5: Engagement-level convergence
+
+- Track a rejected `engagement.on` or `engagement.off` as the desired current
+  level without replaying pointer/focus edge bindings.
+- Retry the pending level after `transitionend` in an owned microtask guarded by
+  the current binding epoch.
+- Clear or replace it on acceptance, level change, rebind, and teardown.
+- Add a focused unit test for rejected leave during finite entry and retain the
+  strict final-pointer-out browser assertion.
+
+## Task 6: Integration verification
 
 - Rebuild `@pixel-point/aval-element` so the demo consumes the changed ignored
   `dist` output.

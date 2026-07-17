@@ -145,6 +145,21 @@ will not blanket-swallow every `AbortError`; an abort that occurs after a graph
 mutation must either reschedule from a consistent state or surface as a real
 failure.
 
+### Engagement convergence
+
+Pointer and focus events are edges, but `engagement.on` and `engagement.off`
+describe the current level `hovered || focused`. A level binding can be
+temporarily unroutable while the graph is in an incompatible finite state. If
+that rejected edge is forgotten, the graph can later settle in `hover` while
+the pointer remains outside.
+
+The element retains only a rejected engagement-level intent. After the current
+authored transition ends, it retries that intent in an element-owned microtask
+if the interaction binding epoch and desired level are still current. An
+accepted intent, a changed level, rebinding, or teardown clears/replaces the
+pending intent. Raw `pointer.*` and `focus.*` bindings are never replayed. This
+is level reconciliation, not input debouncing or synthetic pointer input.
+
 ## Verification
 
 Unit tests will cover:
@@ -158,6 +173,8 @@ Unit tests will cover:
 - the inverse `flush pending → close wins → one closed acknowledgement` order;
 - delayed close for generations older than the most recently retired run;
 - strict rejection of stale nonterminal and malformed protocol traffic;
+- rejected engagement-off during finite hover entry is retried after completion
+  and converges to idle without another pointer event;
 - supersession without graph/media divergence or leaked decoder ownership.
 
 Pure planner/scheduler tests cover pending, follow-on, and speculative plans,
@@ -175,14 +192,17 @@ leave, without compensating `send("hover.leave")` calls. It will run at least
 - no underflow, console error, or page error is recorded;
 - runtime trace and rendered pixels continue advancing after settlement.
 
-The test must fail if input events become unrouteable no-ops, so accepted event
-results and real automatic engagement routing are observed separately.
+The test must fail if rapid input stops producing meaningful routes after the
+first pair. Native pointer delivery and public state/transition events are
+observed separately: legitimate intermediate supersession remains allowed, but
+the burst must complete multiple ordered enter/leave route cycles.
 
 The browser regression is split into artifact, interaction, and rapid-hover
 tests with shared black-box helpers. The rapid test verifies every generated
-pointer edge reached the public send boundary, then proves settlement,
-post-stress reuse, and consecutive rendered-frame progress. It does not assert
-private runtime trace record kinds.
+pointer edge reached the element and that automatic engagement produced
+repeated public route cycles, then proves settlement, post-stress reuse, and
+consecutive rendered-frame progress. It does not replace the public `send()`
+method or assert private runtime trace record kinds.
 
 `npm run test:kinetic-orb` builds the graph and element distributions it serves,
 so a fresh checkout cannot accidentally test stale ignored output. Chromium is
