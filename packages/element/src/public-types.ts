@@ -185,13 +185,6 @@ export interface AvalUnderflowDetail {
   readonly cumulativeCount: number;
 }
 
-export interface AvalFallbackDetail {
-  readonly generation: number;
-  readonly reason: StaticReason;
-  readonly requestedState: string | null;
-  readonly visualState: string | null;
-}
-
 export interface AvalErrorDetail {
   readonly generation: number;
   readonly failure: Readonly<AvalPublicFailure>;
@@ -205,7 +198,6 @@ export interface AvalElementEventMap {
   readonly transitionstart: CustomEvent<Readonly<AvalTransitionDetail>>;
   readonly transitionend: CustomEvent<Readonly<AvalTransitionDetail>>;
   readonly underflow: CustomEvent<Readonly<AvalUnderflowDetail>>;
-  readonly fallback: CustomEvent<Readonly<AvalFallbackDetail>>;
   readonly error: CustomEvent<Readonly<AvalErrorDetail>>;
 }
 
@@ -224,7 +216,7 @@ export interface AvalRuntimeMediaCursor {
 
 export interface AvalRuntimeTraceRecord {
   readonly index: number;
-  readonly kind: "operation" | "content-tick" | "readiness" | "fallback" | "cleanup";
+  readonly kind: "operation" | "content-tick" | "readiness" | "cleanup";
   readonly presentationOrdinal: string | null;
   readonly rationalDeadlineUs: number | null;
   readonly callbackStartMicroseconds: number | null;
@@ -257,7 +249,6 @@ export interface AvalRuntimeTraceRecord {
   readonly settledRequestIds: readonly number[];
   readonly counters: Readonly<{
     readonly underflows: number;
-    readonly fallbacks: number;
     readonly settledRequests: number;
     readonly cleanedFrames: number;
   }>;
@@ -269,7 +260,6 @@ export interface AvalDiagnosticsCounters {
   readonly pause: number;
   readonly resume: number;
   readonly underflow: number;
-  readonly fallback: number;
   readonly contextRecovery: number;
   readonly cleanup: number;
 }

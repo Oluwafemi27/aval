@@ -1,17 +1,24 @@
 import type {
   AvalElement,
   AvalElementAttributes,
+  AvalElementEventMap,
   AvalErrorDetail,
   AvalFit,
+  AvalPublicFailure,
   AvalReadinessChangeDetail,
   AvalSourceCandidate,
   StaticReason
 } from "@pixel-point/aval-element";
-import { ELEMENT_DECODER_CAPACITY } from "@pixel-point/aval-element";
+import {
+  AvalPlaybackError,
+  ELEMENT_DECODER_CAPACITY
+} from "@pixel-point/aval-element";
 
 declare const element: AvalElement;
 declare const detail: Readonly<AvalErrorDetail>;
 declare const readinessDetail: Readonly<AvalReadinessChangeDetail>;
+declare const playbackError: AvalPlaybackError;
+declare const events: AvalElementEventMap;
 
 const decoderWorkers: 2 = ELEMENT_DECODER_CAPACITY.workerCount;
 void decoderWorkers;
@@ -51,6 +58,26 @@ element.integrity = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 void detail.failure.code;
 const readinessReason: StaticReason | undefined = readinessDetail.reason;
 void readinessReason;
+void playbackError.failure.code;
+void playbackError.failure.operation;
+void playbackError.generation;
+// @ts-expect-error fallback presentation is owned by the consumer
+void events.fallback;
+
+async function narrowPlaybackFailure(work: Promise<void>): Promise<AvalPublicFailure | null> {
+  try {
+    await work;
+    return null;
+  } catch (error: unknown) {
+    // @ts-expect-error rejected values must be narrowed before inspecting failure
+    void error.failure.code;
+    if (error instanceof AvalPlaybackError) {
+      return error.failure;
+    }
+    throw error;
+  }
+}
+void narrowPlaybackFailure(Promise.resolve());
 
 // @ts-expect-error motion is a closed union
 element.motion = "sometimes";
@@ -58,6 +85,14 @@ element.motion = "sometimes";
 element.visualState = "forged";
 // @ts-expect-error immutable failure detail
 detail.fatal = false;
+// @ts-expect-error playback failure is immutable
+playbackError.failure = detail.failure;
+// @ts-expect-error playback generation is immutable
+playbackError.generation = 9;
+// @ts-expect-error public failure code is immutable
+playbackError.failure.code = "renderer-failure";
+// @ts-expect-error public failure operation is immutable
+playbackError.failure.operation = null;
 // @ts-expect-error fit is closed
 const badFit: AvalFit = "scale-down";
 void badFit;

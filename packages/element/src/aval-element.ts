@@ -83,7 +83,6 @@ export function createAvalElementClass(
       pause: 0,
       resume: 0,
       underflow: 0,
-      fallback: 0,
       contextRecovery: 0,
       cleanup: 0
     };
@@ -742,7 +741,6 @@ export function createAvalElementClass(
       if (sources.length === 0) return this.#configurationFailure(generation);
       const view = document.defaultView;
       if (!runtimeHostSupported(this.#layers.stylesSupported, view)) {
-        this.#layers.showBestFallback();
         this.#publishFailure("unsupported-browser", "configure", false, generation);
         throw new AvalNotReadyError("AVAL runtime presentation is unsupported");
       }
@@ -812,7 +810,6 @@ export function createAvalElementClass(
             if (value === "staticReady") {
               this.#mode = "static";
               this.#staticReason = reason as StaticReason;
-              this.#layers.showBestFallback();
             } else if (value === "interactiveReady" || value === "visualReady") {
               this.#mode = "animated";
             }
@@ -897,12 +894,7 @@ export function createAvalElementClass(
           this.#releasePageResources();
           this.#mode = "static";
           this.#staticReason = "preparation-timeout";
-          this.#layers.showBestFallback();
           this.#setReadiness("staticReady", "preparation-timeout");
-          this.#runtimeEvent("fallback", Object.freeze({
-            reason: "preparation-timeout",
-            isTransitioning: false
-          }), generation);
           return staticResult("preparation-timeout");
         }
         try {
@@ -1039,8 +1031,6 @@ export function createAvalElementClass(
         this.#inputGeneration += 1;
       } else if (type === "visualstatechange") {
         this.#visualState = String(detail.to);
-      } else if (type === "fallback") {
-        this.#counters.fallback += 1;
       } else if (type === "underflow") {
         this.#counters.underflow += 1;
       }
@@ -1049,15 +1039,7 @@ export function createAvalElementClass(
         type,
         detail
       );
-      this.#dispatch(type, {
-        ...detail,
-        ...(type === "fallback"
-          ? {
-              requestedState: this.#requestedState,
-              visualState: this.#visualState
-            }
-          : {})
-      }, generation);
+      this.#dispatch(type, detail, generation);
       if (type === "transitionend") this.#queueEngagementRetry();
     }
 
@@ -1076,7 +1058,6 @@ export function createAvalElementClass(
       this.#lastFailure = failure;
       this.#dispatch("error", { failure, fatal }, generation);
       if (fatal) {
-        this.#layers.showFallbackAfterFatal(generation);
         this.#mode = null;
         this.#setReadiness("error");
       }
@@ -1355,7 +1336,6 @@ export function createAvalElementClass(
       const source = visible ? "visible" : "hidden";
       this.#sendBinding(source);
       if (!visible) {
-        this.#layers.showBestFallback();
         if (
           this.#suspendedPlayer !== player &&
           this.#suspendingPlayer !== player
@@ -1472,7 +1452,6 @@ export function createAvalElementClass(
       this.#suspendedPlayer = player;
       this.#mode = "static";
       this.#staticReason = "visibility-suspended";
-      this.#layers.showBestFallback();
       this.#setReadiness("staticReady", "visibility-suspended");
       this.#releasePageResources();
       if (!this.effectivelyVisible) return;

@@ -12,7 +12,6 @@ export {
   type AvalElementConstructor,
   type AvalElementEventMap,
   type AvalErrorDetail,
-  type AvalFallbackDetail,
   type AvalFit,
   type AvalMode,
   type AvalMotion,
@@ -33,6 +32,7 @@ export {
 } from "./public-types.js";
 export {
   AvalEnvironmentError,
-  AvalNotReadyError
+  AvalNotReadyError,
+  AvalPlaybackError
 } from "./errors.js";
 export { ELEMENT_DECODER_CAPACITY } from "./decoder-capacity.js";

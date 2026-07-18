@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AVAL_ELEMENT_API_MAJOR,
   AVAL_TAG_NAME,
+  AvalPlaybackError,
   ELEMENT_DECODER_CAPACITY
 } from "../src/index.js";
 import { createAvalElementClass } from "../src/aval-element.js";
@@ -30,5 +31,18 @@ describe("public element API", () => {
     expect(observed).not.toContain("integrity");
     expect(Object.getOwnPropertyDescriptor(Constructor.prototype, "src")).toBeUndefined();
     expect(Object.getOwnPropertyDescriptor(Constructor.prototype, "integrity")).toBeUndefined();
+  });
+
+  it("exports the stable playback error constructor", () => {
+    const error = new AvalPlaybackError(Object.freeze({
+      code: "readiness-failure",
+      message: "Playback could not continue.",
+      operation: "prepare"
+    }), 3);
+
+    expect(error).toMatchObject({
+      name: "AvalPlaybackError",
+      generation: 3
+    });
   });
 });

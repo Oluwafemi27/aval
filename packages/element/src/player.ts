@@ -1231,10 +1231,6 @@ class PlayerImpl implements Player {
       return;
     }
     if (effect.type === "fallback") {
-      this.#input.onEvent("fallback", Object.freeze({
-        reason: effect.reason,
-        isTransitioning: snapshot.isTransitioning
-      }));
       return;
     }
     if (effect.type === "requestedstatechange") {
@@ -1695,7 +1691,6 @@ class PlayerImpl implements Player {
         effect.type === "settle" ? effect.requestIds : [])),
       counters: Object.freeze({
         underflows: this.#underflows,
-        fallbacks: this.#staticReason === null ? 0 : 1,
         settledRequests: this.#settledRequests,
         cleanedFrames: this.#cleanedFrames
       })

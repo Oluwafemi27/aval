@@ -244,7 +244,7 @@ describe("player rendition selection", () => {
     await player.dispose();
   });
 
-  it("publishes recovery effects in graph order before resource retirement", async () => {
+  it("publishes policy readiness before resource retirement without a fallback event", async () => {
     const Worker = fakeWorker([[true, true]]);
     vi.stubGlobal("Worker", Worker);
     vi.stubGlobal("VideoDecoder", class {});
@@ -278,9 +278,7 @@ describe("player rendition selection", () => {
       },
       onDraw: () => undefined,
       onRestart: () => undefined,
-      onEvent: (type) => {
-        if (type === "fallback") observed.push(`fallback:${readiness}:${mode}`);
-      },
+      onEvent: () => undefined,
       onFailure: () => undefined
     });
     player.activate();
@@ -292,7 +290,6 @@ describe("player rendition selection", () => {
     });
     expect(observed).toEqual([
       "readiness:staticReady:static",
-      "fallback:staticReady:static",
       "retired:staticReady:static"
     ]);
     expect(Worker.instances()).toHaveLength(2);
