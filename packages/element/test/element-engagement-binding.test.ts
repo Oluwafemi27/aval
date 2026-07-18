@@ -9,7 +9,7 @@ describe("ElementEngagementBinding", () => {
     const binding = new ElementEngagementBinding((source) => {
       calls.push(source);
       return results.shift() ?? null;
-    });
+    }, () => true);
 
     binding.update(true);
     binding.update(false);
@@ -28,7 +28,7 @@ describe("ElementEngagementBinding", () => {
     const binding = new ElementEngagementBinding((source) => {
       calls.push(source);
       return false;
-    });
+    }, () => true);
 
     binding.update(false, true);
     binding.retry(true);
@@ -41,10 +41,25 @@ describe("ElementEngagementBinding", () => {
     const binding = new ElementEngagementBinding((source) => {
       calls.push(source);
       return false;
-    });
+    }, () => true);
 
     binding.update(false, true);
     binding.reset();
+    binding.retry(false);
+
+    expect(calls).toEqual(["engagement.off"]);
+  });
+
+  it("does not retain a rejected snapshot when no transition is active", () => {
+    const calls: string[] = [];
+    let busy = false;
+    const binding = new ElementEngagementBinding((source) => {
+      calls.push(source);
+      return false;
+    }, () => busy);
+
+    binding.update(false, true);
+    busy = true;
     binding.retry(false);
 
     expect(calls).toEqual(["engagement.off"]);

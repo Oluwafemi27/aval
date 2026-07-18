@@ -175,7 +175,8 @@ export function createAvalElementClass(
       this.#events = new ElementPublicEvents(this);
       this.#eventMutations = new ElementEventMutationGate(this.#events);
       this.#engagementBinding = new ElementEngagementBinding(
-        (source) => this.#sendBinding(source)
+        (source) => this.#sendBinding(source),
+        () => this.#transitioning
       );
       this.#sourceObserver = this.#createSourceObserver();
       this.#attributes.upgrade(AVAL_UPGRADE_PROPERTIES);

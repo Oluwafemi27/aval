@@ -827,13 +827,10 @@ test("keeps finite hover bodies on one forward decoder generation", async ({
         ? [record.scheduler.generation]
         : []
     ))];
-    const decodeOrdinals = frames.flatMap((record) => {
-      const media = record.media as Readonly<{
-        kind?: string;
-        decodeOrdinal?: number;
-      }> | null;
-      return media?.kind === "frame" && typeof media.decodeOrdinal === "number"
-        ? [media.decodeOrdinal]
+    const displayedFrames = frames.flatMap((record) => {
+      const frame = record.scheduler.displayedCursor?.localFrame;
+      return typeof frame === "number"
+        ? [frame]
         : [];
     });
     return {
@@ -844,7 +841,7 @@ test("keeps finite hover bodies on one forward decoder generation", async ({
       minimumRingSize: Math.min(...frames.map((record) =>
         record.scheduler.ringSize
       )),
-      decodeOrdinals,
+      displayedFrames,
       canvasHidden: canvas?.hidden ?? true
     };
   }, baseline.traceIndex);
@@ -857,7 +854,7 @@ test("keeps finite hover bodies on one forward decoder generation", async ({
     canvasHidden: false
   });
   expect(evidence.minimumRingSize).toBeGreaterThan(0);
-  expect(evidence.decodeOrdinals).toHaveLength(31);
-  expect(evidence.decodeOrdinals.at(-1)! - evidence.decodeOrdinals[0]!)
-    .toBe(evidence.decodeOrdinals.length - 1);
+  expect(evidence.displayedFrames).toEqual(
+    Array.from({ length: 31 }, (_, frame) => frame)
+  );
 });
