@@ -1,4 +1,12 @@
 import {
+  captureDecoderFrameMetadata,
+  createDecoderFailureDiagnostic,
+  type DecoderDiagnosticCode,
+  type DecoderDiagnosticPhase,
+  type DecoderFailureDiagnostic,
+  type DecoderFrameMetadata
+} from "./decoder-diagnostics.js";
+import {
   DECODER_RING_SIZE,
   isDecoderCommand,
   type DecoderChunk,
@@ -52,15 +60,35 @@ type WorkerState =
 const port = globalThis as unknown as WorkerPort;
 const CLOSE_MS = 2_000;
 let state: WorkerState = { phase: "unconfigured" };
+let nextDecodeOrdinal = 0;
+const decodeOrdinalsByTimestamp = new Map<number, number[]>();
+let retainedDecodeOrdinalCount = 0;
+let firstFrame: Readonly<DecoderFrameMetadata> | null = null;
 
 port.addEventListener("message", (event) => {
   if (state.phase === "terminal") return;
   if (!isDecoderCommand(event.data)) {
-    fail();
+    const context = diagnosticContextForState(state);
+    fail(
+      context.phase,
+      "transport",
+      null,
+      context.run,
+      null
+    );
     return;
   }
   try { handle(event.data); }
-  catch { fail(); }
+  catch (error) {
+    const context = diagnosticContextForCommand(event.data);
+    fail(
+      context.phase,
+      "decoder-operation",
+      error,
+      context.run,
+      null
+    );
+  }
 });
 
 function handle(command: DecoderCommand): void {
@@ -112,9 +140,11 @@ function configure(config: VideoDecoderConfig): void {
           }
         };
         emit({ t: "configured", supported: true });
-      } catch { fail(); }
+      } catch (error) {
+        fail("probe", "decoder-operation", error, null, null);
+      }
     },
-    () => fail()
+    (error) => fail("probe", "decoder-operation", error, null, null)
   );
 }
 
@@ -123,10 +153,11 @@ function start(run: number): void {
     throw new Error();
   }
   const session = state.session;
+  resetRunEvidence();
   let owned!: VideoDecoder;
   owned = new VideoDecoder({
     output: (frame) => output(run, owned, frame),
-    error: () => decoderError(run, owned)
+    error: (error) => decoderError(run, owned, error)
   });
   const ready: ReadyState = {
     phase: "ready",
@@ -166,7 +197,17 @@ function flush(run: number): void {
   state = flushing;
   void completion.then(
     () => finishFlush(flushing),
-    () => { if (state === flushing) fail(); }
+    (error) => {
+      if (state === flushing) {
+        fail(
+          "flush",
+          "decoder-operation",
+          error,
+          flushing.run,
+          null
+        );
+      }
+    }
   );
 }
 
@@ -188,14 +229,37 @@ function close(run: number): void {
 
 function output(run: number, owned: VideoDecoder, frame: VideoFrame): void {
   if (!ownsLiveDecoder(state, run, owned)) {
-    frame.close();
+    closeFrame(frame);
     return;
   }
+  let metadata: Readonly<DecoderFrameMetadata>;
   try {
-    emit({ t: "frame", run, timestamp: frame.timestamp, frame }, [frame]);
-  } catch {
-    frame.close();
-    fail();
+    metadata = captureDecoderFrameMetadata(frame);
+  } catch (error) {
+    const decodeOrdinal = takeFrameDecodeOrdinal(frame);
+    closeFrame(frame);
+    fail(
+      "output-validation",
+      "invalid-output",
+      error,
+      run,
+      decodeOrdinal
+    );
+    return;
+  }
+  const decodeOrdinal = takeDecodeOrdinal(metadata.timestamp);
+  firstFrame ??= metadata;
+  try {
+    emit({ t: "frame", run, timestamp: metadata.timestamp, frame }, [frame]);
+  } catch (error) {
+    closeFrame(frame);
+    fail(
+      "frame-transfer",
+      "transport",
+      error,
+      run,
+      decodeOrdinal
+    );
   }
 }
 
@@ -206,20 +270,35 @@ function pump(run: number, owned: VideoDecoder): void {
     accepting.run !== run ||
     accepting.decoder !== owned
   ) return;
-  try {
-    while (
-      accepting.pending.length > 0 &&
-      owned.decodeQueueSize < DECODER_RING_SIZE
-    ) {
-      const chunk = accepting.pending.shift()!;
+  while (
+    accepting.pending.length > 0 &&
+    owned.decodeQueueSize < DECODER_RING_SIZE
+  ) {
+    const chunk = accepting.pending.shift()!;
+    const decodeOrdinal = nextDecodeOrdinal;
+    nextDecodeOrdinal += 1;
+    try {
+      retainDecodeOrdinal(chunk.timestamp, decodeOrdinal);
       owned.decode(new EncodedVideoChunk({
         type: chunk.key ? "key" : "delta",
         timestamp: chunk.timestamp,
         duration: chunk.duration,
         data: chunk.data
       }));
+    } catch (error) {
+      releaseDecodeOrdinal(chunk.timestamp, decodeOrdinal);
+      fail(
+        "decode",
+        "decoder-operation",
+        error,
+        run,
+        decodeOrdinal
+      );
+      return;
     }
-    if (accepting.pending.length === 0) {
+  }
+  if (accepting.pending.length === 0) {
+    try {
       state = {
         phase: "ready",
         session: accepting.session,
@@ -227,8 +306,10 @@ function pump(run: number, owned: VideoDecoder): void {
         decoder: owned
       };
       emit({ t: "accepted", run });
+    } catch (error) {
+      fail("decode", "decoder-operation", error, run, null);
     }
-  } catch { fail(); }
+  }
 }
 
 function finishFlush(flushing: FlushingState): void {
@@ -237,7 +318,16 @@ function finishFlush(flushing: FlushingState): void {
     retire(flushing.decoder);
     state = idleAfter(flushing);
     emit({ t: "flushed", run: flushing.run });
-  } catch { fail(); }
+    resetRunEvidence();
+  } catch (error) {
+    fail(
+      "flush",
+      "decoder-operation",
+      error,
+      flushing.run,
+      null
+    );
+  }
 }
 
 function beginClose(
@@ -263,14 +353,48 @@ function beginClose(
       retire(closing.decoder);
       state = idleAfter(closing);
       emit({ t: "closed", run: closing.run });
-    } catch { fail(); }
+      resetRunEvidence();
+    } catch (error) {
+      fail(
+        "flush",
+        "decoder-operation",
+        error,
+        closing.run,
+        null
+      );
+    }
+  };
+  const reject = (error: unknown): void => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    if (state !== closing) return;
+    fail(
+      "flush",
+      "decoder-operation",
+      error,
+      closing.run,
+      null
+    );
   };
   timer = setTimeout(finish, CLOSE_MS);
-  void completion.then(finish, finish);
+  void completion.then(finish, reject);
 }
 
-function decoderError(run: number, owned: VideoDecoder): void {
-  if (ownsLiveDecoder(state, run, owned)) fail();
+function decoderError(
+  run: number,
+  owned: VideoDecoder,
+  error: DOMException
+): void {
+  if (ownsLiveDecoder(state, run, owned)) {
+    fail(
+      "decode",
+      "decoder-operation",
+      error,
+      run,
+      null
+    );
+  }
 }
 
 function requireReady(run: number): ReadyState {
@@ -317,6 +441,10 @@ function retire(decoder: VideoDecoder): void {
   try { decoder.close(); } catch { /* retired */ }
 }
 
+function closeFrame(frame: VideoFrame): void {
+  try { frame.close(); } catch { /* retired */ }
+}
+
 function emit(event: DecoderWorkerEvent, transfer?: Transferable[]): void {
   if (transfer === undefined) port.postMessage(event);
   else port.postMessage(event, transfer);
@@ -326,12 +454,27 @@ function currentDecoder(value: WorkerState): VideoDecoder | undefined {
   return ownsRun(value) ? value.decoder : undefined;
 }
 
-function fail(): void {
+function fail(
+  phase: DecoderDiagnosticPhase,
+  code: DecoderDiagnosticCode,
+  reason: unknown,
+  run: number | null,
+  decodeOrdinal: number | null
+): void {
   if (state.phase === "terminal") return;
   const decoder = currentDecoder(state);
   state = { phase: "terminal" };
   try { decoder?.close(); } catch { /* terminal */ }
-  try { emit({ t: "error" }); } catch { /* terminal transport */ }
+  const diagnostic = failureDiagnostic(
+    phase,
+    code,
+    reason,
+    run,
+    decodeOrdinal
+  );
+  resetRunEvidence();
+  try { emit({ t: "error", diagnostic }); }
+  catch { /* terminal transport */ }
 }
 
 function dispose(): void {
@@ -339,4 +482,104 @@ function dispose(): void {
   const decoder = currentDecoder(state);
   state = { phase: "terminal" };
   try { decoder?.close(); } catch { /* terminal */ }
+}
+
+function failureDiagnostic(
+  phase: DecoderDiagnosticPhase,
+  code: DecoderDiagnosticCode,
+  reason: unknown,
+  run: number | null,
+  decodeOrdinal: number | null
+): Readonly<DecoderFailureDiagnostic> {
+  try {
+    return createDecoderFailureDiagnostic({
+      phase,
+      code,
+      reason,
+      run,
+      decodeOrdinal,
+      firstFrame
+    });
+  } catch {
+    return createDecoderFailureDiagnostic({
+      phase: "output-validation",
+      code: "invalid-output",
+      reason: null,
+      run: null,
+      decodeOrdinal: null,
+      firstFrame: null
+    });
+  }
+}
+
+function diagnosticContextForCommand(
+  command: DecoderCommand
+): Readonly<{ phase: DecoderDiagnosticPhase; run: number | null }> {
+  if (command.t === "configure") return { phase: "probe", run: null };
+  if (command.t === "start") return { phase: "configure", run: command.run };
+  if (command.t === "decode") return { phase: "decode", run: command.run };
+  if (command.t === "flush" || command.t === "close") {
+    return { phase: "flush", run: command.run };
+  }
+  return { phase: "probe", run: null };
+}
+
+function diagnosticContextForState(
+  value: WorkerState
+): Readonly<{ phase: DecoderDiagnosticPhase; run: number | null }> {
+  if (value.phase === "configuring" || value.phase === "unconfigured") {
+    return { phase: "probe", run: null };
+  }
+  if (value.phase === "idle") return { phase: "configure", run: null };
+  if (value.phase === "flushing" || value.phase === "closing") {
+    return { phase: "flush", run: value.run };
+  }
+  if (value.phase === "ready" || value.phase === "accepting") {
+    return { phase: "decode", run: value.run };
+  }
+  return { phase: "probe", run: null };
+}
+
+function resetRunEvidence(): void {
+  nextDecodeOrdinal = 0;
+  decodeOrdinalsByTimestamp.clear();
+  retainedDecodeOrdinalCount = 0;
+  firstFrame = null;
+}
+
+function retainDecodeOrdinal(timestamp: number, ordinal: number): void {
+  if (retainedDecodeOrdinalCount >= DECODER_RING_SIZE) return;
+  const retained = decodeOrdinalsByTimestamp.get(timestamp);
+  if (retained === undefined) decodeOrdinalsByTimestamp.set(timestamp, [ordinal]);
+  else retained.push(ordinal);
+  retainedDecodeOrdinalCount += 1;
+}
+
+function takeDecodeOrdinal(timestamp: number): number | null {
+  const retained = decodeOrdinalsByTimestamp.get(timestamp);
+  const ordinal = retained?.shift();
+  if (retained !== undefined && retained.length === 0) {
+    decodeOrdinalsByTimestamp.delete(timestamp);
+  }
+  if (ordinal !== undefined) retainedDecodeOrdinalCount -= 1;
+  return ordinal ?? null;
+}
+
+function takeFrameDecodeOrdinal(frame: VideoFrame): number | null {
+  let timestamp: number;
+  try { timestamp = frame.timestamp; }
+  catch { return null; }
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0) return null;
+  return takeDecodeOrdinal(timestamp);
+}
+
+function releaseDecodeOrdinal(timestamp: number, ordinal: number): void {
+  const retained = decodeOrdinalsByTimestamp.get(timestamp);
+  if (retained === undefined) return;
+  const index = retained.lastIndexOf(ordinal);
+  if (index >= 0) {
+    retained.splice(index, 1);
+    retainedDecodeOrdinalCount -= 1;
+  }
+  if (retained.length === 0) decodeOrdinalsByTimestamp.delete(timestamp);
 }

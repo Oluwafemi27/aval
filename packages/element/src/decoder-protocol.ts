@@ -1,3 +1,9 @@
+import {
+  freezeDecoderFailureDiagnostic,
+  isDecoderFailureDiagnostic,
+  type DecoderFailureDiagnostic
+} from "./decoder-diagnostics.js";
+
 export const DECODER_RING_SIZE = 12 as const;
 
 export type DecoderChunk = Readonly<{
@@ -34,7 +40,7 @@ export type DecoderTerminalEvent = Extract<
 
 export type DecoderWorkerEvent =
   | Readonly<{ t: "configured"; supported: boolean }>
-  | Readonly<{ t: "error" }>
+  | Readonly<{ t: "error"; diagnostic: Readonly<DecoderFailureDiagnostic> }>
   | DecoderRunEvent;
 
 export function isDecoderCommand(value: unknown): value is DecoderCommand {
@@ -67,7 +73,19 @@ export function isDecoderWorkerEvent(
     return hasExactKeys(value, ["t", "supported"]) &&
       typeof value.supported === "boolean";
   }
-  if (value.t === "error") return hasExactKeys(value, ["t"]);
+  if (value.t === "error") {
+    if (
+      !hasExactKeys(value, ["t", "diagnostic"]) ||
+      !isDecoderFailureDiagnostic(value.diagnostic)
+    ) return false;
+    try {
+      freezeDecoderFailureDiagnostic(value.diagnostic);
+      Object.freeze(value);
+    } catch {
+      return false;
+    }
+    return true;
+  }
   if (!validRun(value.run)) return false;
   if (value.t === "frame") {
     return hasExactKeys(value, ["t", "run", "timestamp", "frame"]) &&
@@ -118,14 +136,23 @@ function validRun(value: unknown): value is number {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
 }
 
 function hasExactKeys(
   value: Readonly<Record<string, unknown>>,
   keys: readonly string[]
 ): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length &&
-    keys.every((key) => Object.hasOwn(value, key));
+  let actual: readonly PropertyKey[];
+  try { actual = Reflect.ownKeys(value); }
+  catch { return false; }
+  return actual.length === keys.length && keys.every((key) => actual.includes(key));
 }
