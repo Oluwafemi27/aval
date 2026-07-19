@@ -602,8 +602,16 @@ class PlayerImpl implements Player {
   #capturedPoolDiagnostics: readonly Readonly<DecoderPoolDiagnostic>[] =
     Object.freeze([]);
   readonly #decoderUnitByLane: [
-    Readonly<{ run: number; unit: string }> | null,
-    Readonly<{ run: number; unit: string }> | null
+    Readonly<{
+      logicalRunId: number;
+      unit: string;
+      role: "foreground" | "candidate";
+    }> | null,
+    Readonly<{
+      logicalRunId: number;
+      unit: string;
+      role: "foreground" | "candidate";
+    }> | null
   ] = [null, null];
   readonly #contextRestored: () => void;
 
@@ -1634,7 +1642,14 @@ class PlayerImpl implements Player {
       active.lastIndex = presentation.frameIndex;
       if (replacing) {
         if (replacement === null) throw new Error("Invalid AVAL stream replacement");
-        if (replacement.kind === "candidate") replacement.candidate.commit();
+        if (replacement.kind === "candidate") {
+          replacement.candidate.commit();
+          this.#rememberDecoderUnit(
+            replacement.candidate.run,
+            replacement.candidate.unitId,
+            "foreground"
+          );
+        }
         this.#active = active;
         if (replacement.kind === "foreground") this.#closeActive(previous);
       }
@@ -1863,7 +1878,7 @@ class PlayerImpl implements Player {
     }
     if (role === "foreground") {
       const run = decoders.createForegroundRun(samples);
-      this.#rememberDecoderUnit(run, unit.id);
+      this.#rememberDecoderUnit(run, unit.id, role);
       this.#reportResourceBytes();
       if (run.frameCount !== unit.frameCount) {
         run.close();
@@ -1872,7 +1887,7 @@ class PlayerImpl implements Player {
       return run;
     }
     const candidate = decoders.createCandidate(unit.id, samples);
-    this.#rememberDecoderUnit(candidate.run, unit.id);
+    this.#rememberDecoderUnit(candidate.run, unit.id, role);
     this.#reportResourceBytes();
     if (candidate.run.frameCount !== unit.frameCount) {
       candidate.cancel();
@@ -1887,13 +1902,18 @@ class PlayerImpl implements Player {
     return span;
   }
 
-  #rememberDecoderUnit(run: DecodeRun, unit: string): void {
+  #rememberDecoderUnit(
+    run: DecodeRun,
+    unit: string,
+    role: "foreground" | "candidate"
+  ): void {
     const decoders = this.#decoders;
     if (decoders === null) return;
-    const { lane } = decoders.identity(run);
+    const { lane, logicalId } = decoders.identity(run);
     this.#decoderUnitByLane[lane] = Object.freeze({
-      run: run.generation,
-      unit
+      logicalRunId: logicalId,
+      unit,
+      role
     });
   }
 
@@ -1912,12 +1932,27 @@ class PlayerImpl implements Player {
         this.#rendition,
         (diagnostic) => {
           const current = this.#decoderUnitByLane[diagnostic.lane];
-          return current !== null && current.run === diagnostic.run
+          return current !== null &&
+            current.logicalRunId === diagnostic.logicalRunId
             ? current.unit
             : null;
-        }
+        },
+        this.#decoderGraphDiagnostic()
       )
     );
+  }
+
+  #decoderGraphDiagnostic(): Readonly<PlayerDecoderDiagnostic["graph"]> {
+    const snapshot = this.#graph?.snapshot();
+    const pending = this.#decoderUnitByLane.find((entry) =>
+      entry?.role === "candidate"
+    );
+    return Object.freeze({
+      requestedState: snapshot?.requestedState ?? null,
+      visualState: snapshot?.visualState ?? null,
+      activeUnit: this.#active?.unit.id ?? this.#initialMedia?.unit.id ?? null,
+      pendingUnit: pending?.unit ?? null
+    });
   }
 
   #ensureResident(unit: Unit): Promise<void> {
@@ -2128,6 +2163,11 @@ class PlayerImpl implements Player {
       "webglcontextrestored",
       this.#contextRestored
     );
+    if (this.#decoders !== null) {
+      this.#captureDecoderDiagnostics(
+        this.#decoders.snapshot().decoderDiagnostics
+      );
+    }
     const graph = this.#graph;
     if (graph !== null && graph.snapshot().readiness !== "disposed") {
       try { graph.dispose(); }
@@ -2649,7 +2689,9 @@ function publishDecoderDiagnostics(
   sourceIndex: number,
   rendition: Readonly<Rendition>,
   unitFor: (diagnostic: Readonly<DecoderPoolDiagnostic>) => string | null =
-    () => null
+    () => null,
+  graph: Readonly<PlayerDecoderDiagnostic["graph"]> =
+    EMPTY_DECODER_GRAPH_DIAGNOSTIC
 ): readonly Readonly<PlayerDecoderDiagnostic>[] {
   const enriched = Object.freeze(diagnostics.map((diagnostic) =>
     Object.freeze({
@@ -2657,7 +2699,8 @@ function publishDecoderDiagnostics(
       sourceIndex,
       rendition: rendition.id,
       codec: rendition.codec,
-      unit: unitFor(diagnostic)
+      unit: unitFor(diagnostic),
+      graph
     }) satisfies Readonly<PlayerDecoderDiagnostic>
   ));
   if (enriched.length > 0) {
@@ -2672,17 +2715,15 @@ function mergePlayerDecoderDiagnostics(
   incoming: readonly Readonly<PlayerDecoderDiagnostic>[]
 ): readonly Readonly<PlayerDecoderDiagnostic>[] {
   if (incoming.length === 0) return current;
-  const bySourceLane = new Map(
+  const bySourceLane = new Map<string, Readonly<PlayerDecoderDiagnostic>>(
     current.map((diagnostic) => [
       `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`,
       diagnostic
     ] as const)
   );
   for (const diagnostic of incoming) {
-    bySourceLane.set(
-      `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`,
-      diagnostic
-    );
+    const key = `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`;
+    if (!bySourceLane.has(key)) bySourceLane.set(key, diagnostic);
   }
   return Object.freeze(
     [...bySourceLane.values()]
@@ -2692,6 +2733,13 @@ function mergePlayerDecoderDiagnostics(
       .slice(-MAX_RETAINED_DECODER_DIAGNOSTICS)
   );
 }
+
+const EMPTY_DECODER_GRAPH_DIAGNOSTIC = Object.freeze({
+  requestedState: null,
+  visualState: null,
+  activeUnit: null,
+  pendingUnit: null
+}) satisfies Readonly<PlayerDecoderDiagnostic["graph"]>;
 
 class PublicationGate {
   public readonly input: Readonly<PlayerInput>;

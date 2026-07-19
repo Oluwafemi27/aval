@@ -599,6 +599,23 @@ describe("player multi-route prefetch", () => {
     expect(playbackFailures).toEqual(["worker-decode-failure:playback"]);
     await expect(player.prepare()).rejects.toBe(terminal);
     expect(player.snapshot(false)).toMatchObject({ workerCount: 0, openFrames: 0 });
+    const [diagnostic] = player.snapshot(false).decoderDiagnostics;
+    expect(diagnostic).toMatchObject({
+      sourceIndex: 0,
+      rendition: "main",
+      codec: "avc1.640020",
+      unit: "idle-hover",
+      lane: candidate.lane,
+      logicalRunId: 3,
+      role: "candidate",
+      graph: {
+        requestedState: "hover",
+        visualState: "idle",
+        activeUnit: "idle-body",
+        pendingUnit: "idle-hover"
+      }
+    });
+    expect(Object.isFrozen(diagnostic?.graph)).toBe(true);
     await player.dispose();
   });
 

@@ -1,10 +1,12 @@
 import {
-  captureDecoderFrameMetadata,
+  createDecoderOutputFailure,
   createDecoderFailureDiagnostic,
+  inspectDecoderFrameMetadata,
   type DecoderDiagnosticCode,
   type DecoderDiagnosticPhase,
   type DecoderFailureDiagnostic,
-  type DecoderFrameMetadata
+  type DecoderFrameMetadata,
+  type DecoderOutputFailure
 } from "./decoder-diagnostics.js";
 import {
   DECODER_RING_SIZE,
@@ -13,6 +15,7 @@ import {
   type DecoderCommand,
   type DecoderWorkerEvent
 } from "./decoder-protocol.js";
+import { isPlainRecord } from "./plain-record.js";
 
 interface WorkerPort {
   addEventListener(
@@ -25,6 +28,11 @@ interface WorkerPort {
 type Session = Readonly<{
   config: VideoDecoderConfig;
   generationFloor: number;
+}>;
+
+type BrowserVideoDecoderConfig = VideoDecoderConfig & Readonly<{
+  rotation?: unknown;
+  flip?: unknown;
 }>;
 
 type OwnedRunState = Readonly<{
@@ -59,11 +67,24 @@ type WorkerState =
 
 const port = globalThis as unknown as WorkerPort;
 const CLOSE_MS = 2_000;
+const VIDEO_CONFIG_KEYS = new Set<string>([
+  "codec",
+  "codedWidth",
+  "codedHeight",
+  "displayAspectWidth",
+  "displayAspectHeight",
+  "colorSpace",
+  "hardwareAcceleration",
+  "optimizeForLatency",
+  "rotation",
+  "flip"
+]);
 let state: WorkerState = { phase: "unconfigured" };
 let nextDecodeOrdinal = 0;
 const decodeOrdinalsByTimestamp = new Map<number, number[]>();
 let retainedDecodeOrdinalCount = 0;
 let firstFrame: Readonly<DecoderFrameMetadata> | null = null;
+let lastGoodFrame: Readonly<DecoderFrameMetadata> | null = null;
 
 port.addEventListener("message", (event) => {
   if (state.phase === "terminal") return;
@@ -132,10 +153,18 @@ function configure(config: VideoDecoderConfig): void {
           state = { phase: "terminal" };
           return;
         }
+        const validatedConfig = validateSupportConfigEcho(
+          config,
+          result.config
+        );
+        if (validatedConfig === null) {
+          fail("probe", "unsupported-config", null, null, null);
+          return;
+        }
         state = {
           phase: "idle",
           session: {
-            config: result.config ?? config,
+            config: validatedConfig,
             generationFloor: 0
           }
         };
@@ -232,25 +261,26 @@ function output(run: number, owned: VideoDecoder, frame: VideoFrame): void {
     closeFrame(frame);
     return;
   }
-  let metadata: Readonly<DecoderFrameMetadata>;
-  try {
-    metadata = captureDecoderFrameMetadata(frame);
-  } catch (error) {
+  const inspection = inspectDecoderFrameMetadata(frame);
+  if (inspection.metadata === null) {
     const decodeOrdinal = takeFrameDecodeOrdinal(frame);
     closeFrame(frame);
     fail(
       "output-validation",
       "invalid-output",
-      error,
+      new TypeError("invalid decoder output metadata"),
       run,
-      decodeOrdinal
+      decodeOrdinal,
+      inspection.outputFailure
     );
     return;
   }
+  const metadata = inspection.metadata;
   const decodeOrdinal = takeDecodeOrdinal(metadata.timestamp);
   firstFrame ??= metadata;
   try {
     emit({ t: "frame", run, timestamp: metadata.timestamp, frame }, [frame]);
+    lastGoodFrame = metadata;
   } catch (error) {
     closeFrame(frame);
     fail(
@@ -459,7 +489,8 @@ function fail(
   code: DecoderDiagnosticCode,
   reason: unknown,
   run: number | null,
-  decodeOrdinal: number | null
+  decodeOrdinal: number | null,
+  outputFailure: Readonly<DecoderOutputFailure> | null = null
 ): void {
   if (state.phase === "terminal") return;
   const decoder = currentDecoder(state);
@@ -470,7 +501,8 @@ function fail(
     code,
     reason,
     run,
-    decodeOrdinal
+    decodeOrdinal,
+    outputFailure
   );
   resetRunEvidence();
   try { emit({ t: "error", diagnostic }); }
@@ -489,7 +521,8 @@ function failureDiagnostic(
   code: DecoderDiagnosticCode,
   reason: unknown,
   run: number | null,
-  decodeOrdinal: number | null
+  decodeOrdinal: number | null,
+  outputFailure: Readonly<DecoderOutputFailure> | null
 ): Readonly<DecoderFailureDiagnostic> {
   try {
     return createDecoderFailureDiagnostic({
@@ -498,7 +531,9 @@ function failureDiagnostic(
       reason,
       run,
       decodeOrdinal,
-      firstFrame
+      firstFrame,
+      lastGoodFrame,
+      outputFailure
     });
   } catch {
     return createDecoderFailureDiagnostic({
@@ -507,7 +542,15 @@ function failureDiagnostic(
       reason: null,
       run: null,
       decodeOrdinal: null,
-      firstFrame: null
+      firstFrame: null,
+      lastGoodFrame: null,
+      outputFailure: createDecoderOutputFailure({
+        kind: "metadata-shape",
+        validationLayer: "worker-shape",
+        field: null,
+        expected: null,
+        actual: null
+      })
     });
   }
 }
@@ -545,6 +588,67 @@ function resetRunEvidence(): void {
   decodeOrdinalsByTimestamp.clear();
   retainedDecodeOrdinalCount = 0;
   firstFrame = null;
+  lastGoodFrame = null;
+}
+
+function validateSupportConfigEcho(
+  requested: Readonly<VideoDecoderConfig>,
+  echoed: Readonly<VideoDecoderConfig> | undefined
+): VideoDecoderConfig | null {
+  try {
+    if (!isPlainRecord(requested) || !isPlainRecord(echoed)) return null;
+    const requestedConfig = requested as BrowserVideoDecoderConfig;
+    const echoedConfig = echoed as BrowserVideoDecoderConfig;
+    if (
+      Object.keys(requestedConfig).some((key) => !VIDEO_CONFIG_KEYS.has(key)) ||
+      Object.keys(echoedConfig).some((key) => !VIDEO_CONFIG_KEYS.has(key))
+    ) return null;
+    for (const key of Object.keys(requestedConfig)) {
+      if (!sameConfigMember(
+        echoedConfig[key as keyof BrowserVideoDecoderConfig],
+        requestedConfig[key as keyof BrowserVideoDecoderConfig]
+      )) return null;
+    }
+    if (
+      !("hardwareAcceleration" in requestedConfig) &&
+      echoedConfig.hardwareAcceleration !== undefined &&
+      echoedConfig.hardwareAcceleration !== "no-preference"
+    ) return null;
+    if (
+      !("optimizeForLatency" in requestedConfig) &&
+      echoedConfig.optimizeForLatency !== undefined &&
+      echoedConfig.optimizeForLatency !== false
+    ) return null;
+    if (
+      !("rotation" in requestedConfig) &&
+      echoedConfig.rotation !== undefined &&
+      echoedConfig.rotation !== 0
+    ) return null;
+    if (
+      !("flip" in requestedConfig) &&
+      echoedConfig.flip !== undefined &&
+      echoedConfig.flip !== false
+    ) return null;
+    const clone: BrowserVideoDecoderConfig = {
+      ...requestedConfig,
+      ...(requestedConfig.colorSpace === undefined
+        ? {}
+        : { colorSpace: Object.freeze({ ...requestedConfig.colorSpace }) })
+    };
+    return Object.freeze(clone);
+  } catch {
+    return null;
+  }
+}
+
+function sameConfigMember(left: unknown, right: unknown): boolean {
+  if (isPlainRecord(left) && isPlainRecord(right)) {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    return leftKeys.length === rightKeys.length &&
+      leftKeys.every((key) => key in right && left[key] === right[key]);
+  }
+  return left === right;
 }
 
 function retainDecodeOrdinal(timestamp: number, ordinal: number): void {

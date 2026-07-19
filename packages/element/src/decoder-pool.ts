@@ -28,6 +28,8 @@ export interface DecoderPoolRunIdentity {
 
 export interface DecoderPoolDiagnostic extends DecoderFailureDiagnostic {
   readonly lane: DecoderPoolLaneId;
+  readonly logicalRunId: number | null;
+  readonly role: "foreground" | "candidate" | null;
 }
 
 export interface DecoderPoolSnapshot {
@@ -282,8 +284,11 @@ export class DecoderPool {
       if (diagnostic === null || this.#diagnosticByLane[lane] !== null) continue;
       const id = ELEMENT_DECODER_LANE_IDS[lane];
       if (id === undefined) continue;
+      const context = this.#diagnosticContext(id, diagnostic.run);
       this.#diagnosticByLane[id] = Object.freeze({
         lane: id,
+        logicalRunId: context?.logicalRunId ?? null,
+        role: context?.role ?? null,
         ...diagnostic
       });
       changed = true;
@@ -295,6 +300,29 @@ export class DecoderPool {
           diagnostic !== null
       )
     );
+  }
+
+  #diagnosticContext(
+    lane: DecoderPoolLaneId,
+    physicalRun: number | null
+  ): Readonly<{
+    logicalRunId: number;
+    role: "foreground" | "candidate";
+  }> | null {
+    if (physicalRun === null) return null;
+    for (const [role, run] of [
+      ["foreground", this.#foregroundRun],
+      ["candidate", this.#candidateRun]
+    ] as const) {
+      if (run === null || run.generation !== physicalRun) continue;
+      const ownership = this.#ownership.get(run);
+      if (ownership?.identity.lane !== lane) continue;
+      return Object.freeze({
+        logicalRunId: ownership.identity.logicalId,
+        role
+      });
+    }
+    return null;
   }
 
   #createRun(

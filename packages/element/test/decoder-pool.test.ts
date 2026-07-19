@@ -275,13 +275,45 @@ describe("DecoderPool", () => {
     expect(harness.workers[1]!.terminated).toBe(true);
     expect(pool.snapshot().decoderDiagnostics).toEqual([{
       lane: 1,
+      logicalRunId: null,
+      role: null,
       ...diagnostic
     }]);
     pool.dispose();
     expect(pool.snapshot().decoderDiagnostics).toEqual([{
       lane: 1,
+      logicalRunId: null,
+      role: null,
       ...diagnostic
     }]);
+  });
+
+  it("reports the logical identity and role of a failing active candidate", async () => {
+    const harness = fakeWorker();
+    const pool = configuredPool(harness);
+    await configure(pool, harness.workers);
+    pool.createForegroundRun(samples(1));
+    const candidate = pool.createCandidate("candidate", samples(1));
+    const failure = pool.failure();
+
+    start(harness.workers[1]!, candidate.run.generation);
+    const diagnostic = workerDiagnostic({
+      phase: "decode",
+      code: "decoder-operation",
+      run: candidate.run.generation,
+      decodeOrdinal: 0,
+      reason: new Error("active candidate failed")
+    });
+    harness.workers[1]!.emit({ t: "error", diagnostic });
+
+    await expect(failure).rejects.toThrow("AVAL decoder failed");
+    expect(pool.snapshot().decoderDiagnostics).toEqual([{
+      lane: 1,
+      logicalRunId: 2,
+      role: "candidate",
+      ...diagnostic
+    }]);
+    pool.dispose();
   });
 
   it("surfaces a fatal worker failure while the promoted lane retires", async () => {
@@ -323,6 +355,8 @@ describe("DecoderPool", () => {
     expect(harness.workers[0]!.terminated).toBe(true);
     expect(pool.snapshot().decoderDiagnostics).toEqual([{
       lane: 0,
+      logicalRunId: 1,
+      role: "candidate",
       ...diagnostic
     }]);
     pool.dispose();
@@ -369,8 +403,18 @@ describe("DecoderPool", () => {
         pool.snapshot().decoderDiagnostics;
       expect(retained).toHaveLength(2);
       expect(retained.map(({ lane }) => lane)).toEqual([0, 1]);
-      expect(retained[0]).toEqual({ lane: 0, ...diagnostics[0] });
-      expect(retained[1]).toEqual({ lane: 1, ...diagnostics[1] });
+      expect(retained[0]).toEqual({
+        lane: 0,
+        logicalRunId: null,
+        role: null,
+        ...diagnostics[0]
+      });
+      expect(retained[1]).toEqual({
+        lane: 1,
+        logicalRunId: null,
+        role: null,
+        ...diagnostics[1]
+      });
       expect(Object.isFrozen(retained)).toBe(true);
       expect(Object.isFrozen(retained[0])).toBe(true);
 

@@ -35,6 +35,14 @@ export interface PlayerDecoderDiagnostic extends DecoderFailureDiagnostic {
   readonly codec: string;
   readonly unit: string | null;
   readonly lane: DecoderPoolLaneId;
+  readonly logicalRunId: number | null;
+  readonly role: "foreground" | "candidate" | null;
+  readonly graph: Readonly<{
+    readonly requestedState: string | null;
+    readonly visualState: string | null;
+    readonly activeUnit: string | null;
+    readonly pendingUnit: string | null;
+  }>;
 }
 
 export interface PlayerSnapshot {

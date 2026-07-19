@@ -255,6 +255,83 @@ export interface AvalDiagnosticsCounters {
   readonly cleanup: number;
 }
 
+export type AvalDecoderColorSpaceDiagnostic = readonly [
+  primaries: string | null,
+  transfer: string | null,
+  matrix: string | null,
+  fullRange: boolean | null
+];
+
+export interface AvalDecoderVisibleRectDiagnostic {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface AvalDecoderFrameDiagnostic {
+  readonly timestamp: number;
+  readonly duration: number | null;
+  readonly codedWidth: number;
+  readonly codedHeight: number;
+  readonly displayWidth: number;
+  readonly displayHeight: number;
+  readonly visibleRect: Readonly<AvalDecoderVisibleRectDiagnostic> | null;
+  readonly colorSpace: AvalDecoderColorSpaceDiagnostic | null;
+}
+
+export interface AvalDecoderExpectedOutputDiagnostic {
+  readonly timestamp: number | null;
+  readonly duration: number | null;
+  readonly codedWidth: number;
+  readonly codedHeight: number;
+  readonly displayAspectWidth: number;
+  readonly displayAspectHeight: number;
+  readonly visibleRect: Readonly<AvalDecoderVisibleRectDiagnostic>;
+  readonly colorSpace: AvalDecoderColorSpaceDiagnostic | null;
+  readonly frameCount: number | null;
+}
+
+export interface AvalDecoderObservedOutputDiagnostic {
+  readonly timestamp: number | null;
+  readonly duration: number | null;
+  readonly codedWidth: number | null;
+  readonly codedHeight: number | null;
+  readonly displayWidth: number | null;
+  readonly displayHeight: number | null;
+  readonly visibleRect: Readonly<AvalDecoderVisibleRectDiagnostic> | null;
+  readonly colorSpace: AvalDecoderColorSpaceDiagnostic | null;
+  readonly receivedFrameCount: number | null;
+}
+
+export interface AvalDecoderOutputFailureDiagnostic {
+  readonly kind:
+    | "metadata-shape"
+    | "unknown-output"
+    | "timing"
+    | "display-aspect"
+    | "visible-rect"
+    | "color-space"
+    | "coded-allocation"
+    | "duplicate-output"
+    | "incomplete-output";
+  readonly validationLayer: "worker-shape" | "host-expectation";
+  readonly field:
+    | "timestamp"
+    | "duration"
+    | "coded-width"
+    | "coded-height"
+    | "display-aspect"
+    | "visible-rect"
+    | "color-space"
+    | "allocation"
+    | "ordinal"
+    | "frame-count"
+    | null;
+  readonly expected: Readonly<AvalDecoderExpectedOutputDiagnostic> | null;
+  readonly actual: Readonly<AvalDecoderObservedOutputDiagnostic> | null;
+}
+
 /** Bounded, byte-free latest terminal evidence for one source and decoder lane. */
 export interface AvalDecoderDiagnostic {
   readonly sourceGeneration: number;
@@ -263,6 +340,14 @@ export interface AvalDecoderDiagnostic {
   readonly codec: string;
   readonly unit: string | null;
   readonly lane: 0 | 1;
+  readonly logicalRunId: number | null;
+  readonly role: "foreground" | "candidate" | null;
+  readonly graph: Readonly<{
+    readonly requestedState: string | null;
+    readonly visualState: string | null;
+    readonly activeUnit: string | null;
+    readonly pendingUnit: string | null;
+  }>;
   readonly phase:
     | "probe"
     | "configure"
@@ -282,26 +367,9 @@ export interface AvalDecoderDiagnostic {
     readonly name: string;
     readonly message: string;
   }> | null;
-  readonly firstFrame: Readonly<{
-    readonly timestamp: number;
-    readonly duration: number | null;
-    readonly codedWidth: number;
-    readonly codedHeight: number;
-    readonly displayWidth: number;
-    readonly displayHeight: number;
-    readonly visibleRect: Readonly<{
-      readonly x: number;
-      readonly y: number;
-      readonly width: number;
-      readonly height: number;
-    }> | null;
-    readonly colorSpace: readonly [
-      primaries: string | null,
-      transfer: string | null,
-      matrix: string | null,
-      fullRange: boolean | null
-    ] | null;
-  }> | null;
+  readonly firstFrame: Readonly<AvalDecoderFrameDiagnostic> | null;
+  readonly lastGoodFrame: Readonly<AvalDecoderFrameDiagnostic> | null;
+  readonly outputFailure: Readonly<AvalDecoderOutputFailureDiagnostic> | null;
 }
 
 /**

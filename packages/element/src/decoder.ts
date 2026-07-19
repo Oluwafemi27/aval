@@ -6,13 +6,21 @@ import {
   type DecoderRunEvent
 } from "./decoder-protocol.js";
 import { ELEMENT_DECODER_CAPACITY } from "./decoder-capacity.js";
+import { sameAspectRatio } from "./media-geometry.js";
 import {
   captureDecoderFrameMetadata,
+  createDecoderOutputFailure,
   createDecoderFailureDiagnostic,
+  inspectDecoderFrameMetadata,
   type DecoderDiagnosticCode,
   type DecoderDiagnosticPhase,
+  type DecoderExpectedOutputMetadata,
   type DecoderFailureDiagnostic,
-  type DecoderFrameMetadata
+  type DecoderFrameMetadata,
+  type DecoderObservedFrameMetadata,
+  type DecoderOutputFailure,
+  type DecoderOutputFailureKind,
+  type DecoderOutputField
 } from "./decoder-diagnostics.js";
 
 export interface DecodeSample {
@@ -599,6 +607,7 @@ export class DecodeRun {
   #error: Error | undefined;
   #progressTimer: number | undefined;
   #firstFrame: Readonly<DecoderFrameMetadata> | null = null;
+  #lastGoodFrame: Readonly<DecoderFrameMetadata> | null = null;
 
   public readonly frameCount: number;
   public readonly encodedBytes: number;
@@ -675,6 +684,9 @@ export class DecodeRun {
   public get diagnosticFirstFrame(): Readonly<DecoderFrameMetadata> | null {
     return this.#firstFrame;
   }
+  public get diagnosticLastGoodFrame(): Readonly<DecoderFrameMetadata> | null {
+    return this.#lastGoodFrame;
+  }
 
   public ordinal(timestamp: number): number | null {
     return this.#outputs.get(timestamp)?.index ?? null;
@@ -724,10 +736,19 @@ export class DecodeRun {
         this.#nextSample !== this.#samples.length ||
         this.#received !== this.frameCount
       ) {
+        const outputFailure = this.#outputFailure(
+          "incomplete-output",
+          "frame-count",
+          null,
+          this.#received,
+          this.frameCount
+        );
         this.#failOperation(
           new Error("AVAL decoder output is incomplete"),
           "output-validation",
-          "invalid-output"
+          "invalid-output",
+          this.#nextOutputOrdinal(),
+          outputFailure
         );
       }
       this.#flushed = true;
@@ -739,20 +760,63 @@ export class DecodeRun {
       this.#clearProgressWatchdog();
       return;
     }
-    const frameMetadata = captureFrameMetadata(event.frame);
-    this.#firstFrame ??= frameMetadata;
+    const inspection = inspectDecoderFrameMetadata(event.frame);
+    if (inspection.metadata === null) {
+      this.#failOperation(
+        new Error("AVAL decoder returned malformed output metadata"),
+        "output-validation",
+        "invalid-output",
+        this.ordinal(event.timestamp),
+        inspection.outputFailure
+      );
+    }
+    const frameMetadata = inspection.metadata;
     const expected = this.#outputs.get(event.timestamp);
-    if (
-      expected === undefined ||
-      expected.sample >= this.#nextSample ||
-      this.#outstanding < 1 ||
-      this.#seen.has(event.timestamp)
-    ) {
+    if (expected === undefined) {
       this.#failOperation(
         new Error("AVAL decoder returned an unknown frame"),
         "output-validation",
         "invalid-output",
-        expected?.index ?? null
+        null,
+        this.#outputFailure(
+          "unknown-output",
+          "timestamp",
+          frameMetadata,
+          null,
+          null
+        )
+      );
+    }
+    if (this.#seen.has(event.timestamp) || this.#frames.has(expected.index)) {
+      this.#failOperation(
+        new Error("duplicate decoded frame"),
+        "output-validation",
+        "invalid-output",
+        expected.index,
+        this.#outputFailure(
+          "duplicate-output",
+          "ordinal",
+          frameMetadata,
+          null,
+          null,
+          expected.duration
+        )
+      );
+    }
+    if (expected.sample >= this.#nextSample || this.#outstanding < 1) {
+      this.#failOperation(
+        new Error("AVAL decoder returned an unknown frame"),
+        "output-validation",
+        "invalid-output",
+        expected.index,
+        this.#outputFailure(
+          "unknown-output",
+          "ordinal",
+          frameMetadata,
+          null,
+          null,
+          expected.duration
+        )
       );
     }
     let frameBytes: number;
@@ -761,22 +825,30 @@ export class DecodeRun {
         event.frame,
         event.timestamp,
         expected.duration,
-        this.#expectation
+        this.#expectation,
+        frameMetadata
       );
     } catch (reason) {
+      const validation = reason instanceof DecoderFrameValidationError
+        ? reason
+        : new DecoderFrameValidationError(
+            "coded-allocation",
+            "allocation",
+            asError(reason, "AVAL decoder returned an invalid frame")
+          );
       this.#failOperation(
-        asError(reason, "AVAL decoder returned an invalid frame"),
+        validation.reason,
         "output-validation",
         "invalid-output",
-        expected.index
-      );
-    }
-    if (this.#frames.has(expected.index)) {
-      this.#failOperation(
-        new Error("duplicate decoded frame"),
-        "output-validation",
-        "invalid-output",
-        expected.index
+        expected.index,
+        this.#outputFailure(
+          validation.kind,
+          validation.field,
+          frameMetadata,
+          null,
+          null,
+          expected.duration
+        )
       );
     }
     try {
@@ -795,6 +867,8 @@ export class DecodeRun {
       this.#frameBytes.set(event.frame, frameBytes);
       this.#openBytes += frameBytes;
       this.#received += 1;
+      this.#firstFrame ??= frameMetadata;
+      this.#lastGoodFrame = frameMetadata;
     } catch (error) {
       this.#seen.delete(event.timestamp);
       this.#frames.delete(expected.index);
@@ -1012,11 +1086,37 @@ export class DecodeRun {
     return null;
   }
 
+  #outputFailure(
+    kind: DecoderOutputFailureKind,
+    field: DecoderOutputField,
+    actualFrame: Readonly<DecoderFrameMetadata> | null,
+    receivedFrameCount: number | null,
+    expectedFrameCount: number | null,
+    expectedDuration?: number
+  ): Readonly<DecoderOutputFailure> {
+    const expected = expectedDuration === undefined && expectedFrameCount === null
+      ? null
+      : expectedOutputMetadata(
+          this.#expectation,
+          actualFrame?.timestamp ?? null,
+          expectedDuration ?? null,
+          expectedFrameCount
+        );
+    return createDecoderOutputFailure({
+      kind,
+      validationLayer: "host-expectation",
+      field,
+      expected,
+      actual: observedOutputMetadata(actualFrame, receivedFrameCount)
+    });
+  }
+
   #diagnostic(
     phase: DecoderDiagnosticPhase,
     code: DecoderDiagnosticCode,
     reason: unknown,
-    decodeOrdinal: number | null
+    decodeOrdinal: number | null,
+    outputFailure: Readonly<DecoderOutputFailure> | null = null
   ): Readonly<DecoderFailureDiagnostic> {
     return createDecoderFailureDiagnostic({
       phase,
@@ -1024,7 +1124,9 @@ export class DecodeRun {
       reason,
       run: this.#id,
       decodeOrdinal,
-      firstFrame: this.#firstFrame
+      firstFrame: this.#firstFrame,
+      lastGoodFrame: this.#lastGoodFrame,
+      outputFailure
     });
   }
 
@@ -1032,13 +1134,15 @@ export class DecodeRun {
     error: Error,
     phase: DecoderDiagnosticPhase,
     code: DecoderDiagnosticCode,
-    decodeOrdinal: number | null = null
+    decodeOrdinal: number | null = null,
+    outputFailure: Readonly<DecoderOutputFailure> | null = null
   ): never {
     this.#fatal(error, this.#diagnostic(
       phase,
       code,
       error,
-      decodeOrdinal
+      decodeOrdinal,
+      outputFailure
     ));
     throw error;
   }
@@ -1062,34 +1166,110 @@ function validateSample(sample: Readonly<DecodeSample>, buffers: Set<ArrayBuffer
   buffers.add(sample.data);
 }
 
+class DecoderFrameValidationError extends Error {
+  public constructor(
+    public readonly kind: DecoderOutputFailureKind,
+    public readonly field: DecoderOutputField,
+    public readonly reason = new Error("AVAL decoder returned an invalid frame")
+  ) {
+    super(reason.message);
+    this.name = "DecoderFrameValidationError";
+  }
+}
+
 function validateFrame(
   frame: VideoFrame,
   timestamp: number,
   duration: number,
-  expected: Readonly<DecoderOutputExpectation>
+  expected: Readonly<DecoderOutputExpectation>,
+  metadata: Readonly<DecoderFrameMetadata>
 ): number {
   const rect = frame.visibleRect;
-  if (
-    frame.timestamp !== timestamp ||
-    frame.duration !== duration ||
-    rect === null ||
-    !Number.isSafeInteger(frame.codedWidth) ||
-    frame.codedWidth < 1 ||
-    !Number.isSafeInteger(frame.codedHeight) ||
-    frame.codedHeight < 1 ||
-    frame.displayWidth !== expected.displayWidth ||
-    frame.displayHeight !== expected.displayHeight ||
-    !Number.isSafeInteger(rect.x) ||
-    rect.x < 0 ||
-    !Number.isSafeInteger(rect.y) ||
-    rect.y < 0 ||
+  if (metadata.timestamp !== timestamp) {
+    throw new DecoderFrameValidationError("timing", "timestamp");
+  }
+  if (metadata.duration !== duration) {
+    throw new DecoderFrameValidationError("timing", "duration");
+  }
+  if (!sameAspectRatio(
+    metadata.displayWidth,
+    metadata.displayHeight,
+    expected.displayWidth,
+    expected.displayHeight
+  )) {
+    throw new DecoderFrameValidationError("display-aspect", "display-aspect");
+  }
+  if (rect === null ||
     rect.width !== expected.visibleRect.width ||
     rect.height !== expected.visibleRect.height ||
-    rect.x > frame.codedWidth - rect.width ||
-    rect.y > frame.codedHeight - rect.height ||
-    !matchesColor(frame.colorSpace, expected.colorSpace)
-  ) throw new Error("AVAL decoder returned an invalid frame");
-  return decodedFrameBytes(frame.codedWidth, frame.codedHeight);
+    rect.x > metadata.codedWidth - rect.width ||
+    rect.y > metadata.codedHeight - rect.height) {
+    throw new DecoderFrameValidationError("visible-rect", "visible-rect");
+  }
+  if (!matchesColor(frame.colorSpace, expected.colorSpace)) {
+    throw new DecoderFrameValidationError("color-space", "color-space");
+  }
+  try {
+    return decodedFrameBytes(metadata.codedWidth, metadata.codedHeight);
+  } catch (reason) {
+    throw new DecoderFrameValidationError(
+      "coded-allocation",
+      "allocation",
+      asError(reason, "AVAL decoder returned an unsafe coded allocation")
+    );
+  }
+}
+
+function expectedOutputMetadata(
+  expectation: Readonly<DecoderOutputExpectation>,
+  timestamp: number | null,
+  duration: number | null,
+  frameCount: number | null
+): Readonly<DecoderExpectedOutputMetadata> {
+  return Object.freeze({
+    timestamp,
+    duration,
+    codedWidth: expectation.codedWidth,
+    codedHeight: expectation.codedHeight,
+    displayAspectWidth: expectation.displayWidth,
+    displayAspectHeight: expectation.displayHeight,
+    visibleRect: Object.freeze({ ...expectation.visibleRect }),
+    colorSpace: expectationColorSpaceMetadata(expectation.colorSpace),
+    frameCount
+  });
+}
+
+function observedOutputMetadata(
+  metadata: Readonly<DecoderFrameMetadata> | null,
+  receivedFrameCount: number | null
+): Readonly<DecoderObservedFrameMetadata> {
+  return Object.freeze({
+    timestamp: metadata?.timestamp ?? null,
+    duration: metadata?.duration ?? null,
+    codedWidth: metadata?.codedWidth ?? null,
+    codedHeight: metadata?.codedHeight ?? null,
+    displayWidth: metadata?.displayWidth ?? null,
+    displayHeight: metadata?.displayHeight ?? null,
+    visibleRect: metadata?.visibleRect === null || metadata === null
+      ? null
+      : Object.freeze({ ...metadata.visibleRect }),
+    colorSpace: metadata?.colorSpace === null || metadata === null
+      ? null
+      : Object.freeze([...metadata.colorSpace]) as DecoderObservedFrameMetadata["colorSpace"],
+    receivedFrameCount
+  });
+}
+
+function expectationColorSpaceMetadata(
+  colorSpace: DecoderOutputExpectation["colorSpace"]
+): DecoderExpectedOutputMetadata["colorSpace"] {
+  if (colorSpace === null) return null;
+  return Object.freeze([
+    colorSpace.primaries,
+    colorSpace.transfer,
+    colorSpace.matrix,
+    colorSpace.fullRange
+  ]);
 }
 
 function decodedFrameBytes(width: number, height: number): number {

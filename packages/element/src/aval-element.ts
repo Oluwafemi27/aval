@@ -34,6 +34,10 @@ import type {
   AvalBindings,
   AvalCrossOrigin,
   AvalDecoderDiagnostic,
+  AvalDecoderExpectedOutputDiagnostic,
+  AvalDecoderFrameDiagnostic,
+  AvalDecoderObservedOutputDiagnostic,
+  AvalDecoderOutputFailureDiagnostic,
   AvalDiagnostics,
   AvalElement,
   AvalElementConstructor,
@@ -1868,17 +1872,20 @@ export function createAvalElementClass(
         diagnostics.length === 0 ||
         this.#decoderDiagnosticLimit === 0
       ) return;
-      const bySourceLane = new Map(
+      const bySourceLane = new Map<string, Readonly<AvalDecoderDiagnostic>>(
         this.#decoderDiagnostics.map((diagnostic) => [
           `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`,
           diagnostic
         ] as const)
       );
       for (const diagnostic of diagnostics) {
-        bySourceLane.set(
-          `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`,
-          freezeAvalDecoderDiagnostic(diagnostic, generation)
-        );
+        const key = `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`;
+        if (!bySourceLane.has(key)) {
+          bySourceLane.set(
+            key,
+            freezeAvalDecoderDiagnostic(diagnostic, generation)
+          );
+        }
       }
       const retained = [...bySourceLane.values()].sort((left, right) =>
         left.sourceIndex - right.sourceIndex || left.lane - right.lane
@@ -2593,30 +2600,91 @@ function freezeAvalDecoderDiagnostic(
   diagnostic: Readonly<PlayerDecoderDiagnostic>,
   sourceGeneration: number
 ): Readonly<AvalDecoderDiagnostic> {
-  const firstFrame = diagnostic.firstFrame === null
-    ? null
-    : Object.freeze({
-        ...diagnostic.firstFrame,
-        visibleRect: diagnostic.firstFrame.visibleRect === null
-          ? null
-          : Object.freeze({ ...diagnostic.firstFrame.visibleRect }),
-        colorSpace: diagnostic.firstFrame.colorSpace === null
-          ? null
-          : Object.freeze([...diagnostic.firstFrame.colorSpace]) as readonly [
-              string | null,
-              string | null,
-              string | null,
-              boolean | null
-            ]
-      });
+  const firstFrame = freezeAvalDecoderFrame(diagnostic.firstFrame);
+  const lastGoodFrame = freezeAvalDecoderFrame(diagnostic.lastGoodFrame);
+  const outputFailure = freezeAvalDecoderOutputFailure(diagnostic.outputFailure);
   return Object.freeze({
     ...diagnostic,
     sourceGeneration,
     exception: diagnostic.exception === null
       ? null
       : Object.freeze({ ...diagnostic.exception }),
-    firstFrame
+    firstFrame,
+    lastGoodFrame,
+    outputFailure,
+    graph: Object.freeze({ ...diagnostic.graph })
   }) satisfies Readonly<AvalDecoderDiagnostic>;
+}
+
+function freezeAvalDecoderFrame(
+  frame: Readonly<AvalDecoderFrameDiagnostic> | null
+): Readonly<AvalDecoderFrameDiagnostic> | null {
+  if (frame === null) return null;
+  return Object.freeze({
+    ...frame,
+    visibleRect: frame.visibleRect === null
+      ? null
+      : Object.freeze({ ...frame.visibleRect }),
+    colorSpace: freezeAvalDecoderColorSpace(frame.colorSpace)
+  });
+}
+
+function freezeAvalDecoderOutputFailure(
+  failure: Readonly<AvalDecoderOutputFailureDiagnostic> | null
+): Readonly<AvalDecoderOutputFailureDiagnostic> | null {
+  if (failure === null) return null;
+  return Object.freeze({
+    ...failure,
+    expected: freezeAvalDecoderExpectedOutput(failure.expected),
+    actual: freezeAvalDecoderObservedOutput(failure.actual)
+  });
+}
+
+function freezeAvalDecoderExpectedOutput(
+  metadata: Readonly<AvalDecoderExpectedOutputDiagnostic> | null
+): Readonly<AvalDecoderExpectedOutputDiagnostic> | null {
+  if (metadata === null) return null;
+  return Object.freeze({
+    ...metadata,
+    visibleRect: Object.freeze({ ...metadata.visibleRect }),
+    colorSpace: freezeAvalDecoderColorSpace(metadata.colorSpace)
+  });
+}
+
+function freezeAvalDecoderObservedOutput(
+  metadata: Readonly<AvalDecoderObservedOutputDiagnostic> | null
+): Readonly<AvalDecoderObservedOutputDiagnostic> | null {
+  if (metadata === null) return null;
+  return Object.freeze({
+    ...metadata,
+    visibleRect: metadata.visibleRect === null
+      ? null
+      : Object.freeze({ ...metadata.visibleRect }),
+    colorSpace: freezeAvalDecoderColorSpace(metadata.colorSpace)
+  });
+}
+
+function freezeAvalDecoderColorSpace(
+  colorSpace: readonly [
+    string | null,
+    string | null,
+    string | null,
+    boolean | null
+  ] | null
+): readonly [
+  string | null,
+  string | null,
+  string | null,
+  boolean | null
+] | null {
+  return colorSpace === null
+    ? null
+    : Object.freeze([...colorSpace]) as readonly [
+        string | null,
+        string | null,
+        string | null,
+        boolean | null
+      ];
 }
 
 function emptyRuntime(): PlayerSnapshot {

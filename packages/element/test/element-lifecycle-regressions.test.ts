@@ -247,21 +247,89 @@ vi.mock("../src/player.js", () => ({
         return disposal;
       },
       failActive: () => {
+        const firstFrame = Object.freeze({
+          timestamp: 0,
+          duration: 33_333,
+          codedWidth: 16,
+          codedHeight: 16,
+          displayWidth: 16,
+          displayHeight: 16,
+          visibleRect: Object.freeze({ x: 0, y: 0, width: 16, height: 16 }),
+          colorSpace: Object.freeze([
+            "bt709",
+            "bt709",
+            "bt709",
+            false
+          ] as const)
+        });
+        const lastGoodFrame = Object.freeze({
+          ...firstFrame,
+          timestamp: 33_333,
+          visibleRect: Object.freeze({ ...firstFrame.visibleRect }),
+          colorSpace: Object.freeze([...firstFrame.colorSpace] as const)
+        });
+        const outputFailure = Object.freeze({
+          kind: "display-aspect" as const,
+          validationLayer: "host-expectation" as const,
+          field: "display-aspect" as const,
+          expected: Object.freeze({
+            timestamp: 66_666,
+            duration: 33_333,
+            codedWidth: 16,
+            codedHeight: 16,
+            displayAspectWidth: 16,
+            displayAspectHeight: 16,
+            visibleRect: Object.freeze({ x: 0, y: 0, width: 16, height: 16 }),
+            colorSpace: Object.freeze([
+              "bt709",
+              "bt709",
+              "bt709",
+              false
+            ] as const),
+            frameCount: null
+          }),
+          actual: Object.freeze({
+            timestamp: 66_666,
+            duration: 33_333,
+            codedWidth: 16,
+            codedHeight: 16,
+            displayWidth: 32,
+            displayHeight: 16,
+            visibleRect: Object.freeze({ x: 0, y: 0, width: 16, height: 16 }),
+            colorSpace: Object.freeze([
+              "bt709",
+              "bt709",
+              "bt709",
+              false
+            ] as const),
+            receivedFrameCount: null
+          })
+        });
         const diagnostic: Readonly<PlayerDecoderDiagnostic> = Object.freeze({
           sourceIndex: 0,
           rendition: "main",
           codec: "avc1.64001E",
           unit: "idle-body",
           lane: 0,
-          phase: "decode",
-          code: "decoder-operation",
-          run: 1,
-          decodeOrdinal: 0,
-          exception: Object.freeze({
-            name: "Error",
-            message: "synthetic decoder failure"
+          logicalRunId: 1,
+          role: "foreground",
+          graph: Object.freeze({
+            requestedState: "idle",
+            visualState: "idle",
+            activeUnit: "idle-body",
+            pendingUnit: null
           }),
-          firstFrame: null
+          phase: "output-validation",
+          code: "invalid-output",
+          run: 1,
+          decodeOrdinal: 2,
+          exception: Object.freeze({
+            name: "DataError",
+            message: "decoded frame display aspect does not match AVAL rendition"
+          }),
+          firstFrame,
+          lastGoodFrame,
+          outputFailure
         });
         decoderDiagnostics = Object.freeze([diagnostic]);
         input.onDecoderDiagnostics?.(decoderDiagnostics);
@@ -422,6 +490,14 @@ describe("element lifecycle regressions", () => {
       codec: "av01.0.08M.10",
       unit: null,
       lane: 1,
+      logicalRunId: null,
+      role: null,
+      graph: Object.freeze({
+        requestedState: null,
+        visualState: null,
+        activeUnit: null,
+        pendingUnit: null
+      }),
       phase: "probe",
       code: "unsupported-config",
       run: null,
@@ -430,7 +506,9 @@ describe("element lifecycle regressions", () => {
         name: "NotSupportedError",
         message: "decoder configuration is unsupported"
       }),
-      firstFrame: null
+      firstFrame: null,
+      lastGoodFrame: null,
+      outputFailure: null
     });
     const laterRejectedProbe: Readonly<PlayerDecoderDiagnostic> = Object.freeze({
       ...rejectedProbe,
@@ -486,15 +564,29 @@ describe("element lifecycle regressions", () => {
             codec: "avc1.64001E",
             unit: "idle-body",
             lane: 0,
-            phase: "decode",
-            code: "decoder-operation",
-            run: 1,
-            decodeOrdinal: 0,
-            exception: {
-              name: "Error",
-              message: "synthetic decoder failure"
+            logicalRunId: 1,
+            role: "foreground",
+            graph: {
+              requestedState: "idle",
+              visualState: "idle",
+              activeUnit: "idle-body",
+              pendingUnit: null
             },
-            firstFrame: null
+            phase: "output-validation",
+            code: "invalid-output",
+            run: 1,
+            decodeOrdinal: 2,
+            exception: {
+              name: "DataError",
+              message: "decoded frame display aspect does not match AVAL rendition"
+            },
+            firstFrame: { timestamp: 0 },
+            lastGoodFrame: { timestamp: 33_333 },
+            outputFailure: {
+              kind: "display-aspect",
+              validationLayer: "host-expectation",
+              field: "display-aspect"
+            }
           },
           {
             sourceGeneration: 1,
@@ -536,10 +628,82 @@ describe("element lifecycle regressions", () => {
     const capturedAtEvent = diagnosticsAtEvent as unknown as ReturnType<
       AvalElement["getDiagnostics"]
     >;
+    const decoderDiagnosticsAtEvent = capturedAtEvent.runtime.decoderDiagnostics;
     const [diagnosticAtEvent, probeAtEvent, laterProbeAtEvent] =
-      capturedAtEvent.runtime.decoderDiagnostics;
-    expect(Object.isFrozen(diagnosticAtEvent)).toBe(true);
-    expect(Object.isFrozen(diagnosticAtEvent?.exception)).toBe(true);
+      decoderDiagnosticsAtEvent;
+    expect(diagnosticAtEvent).toEqual({
+      sourceGeneration: 1,
+      sourceIndex: 0,
+      rendition: "main",
+      codec: "avc1.64001E",
+      unit: "idle-body",
+      lane: 0,
+      logicalRunId: 1,
+      role: "foreground",
+      graph: {
+        requestedState: "idle",
+        visualState: "idle",
+        activeUnit: "idle-body",
+        pendingUnit: null
+      },
+      phase: "output-validation",
+      code: "invalid-output",
+      run: 1,
+      decodeOrdinal: 2,
+      exception: {
+        name: "DataError",
+        message: "decoded frame display aspect does not match AVAL rendition"
+      },
+      firstFrame: {
+        timestamp: 0,
+        duration: 33_333,
+        codedWidth: 16,
+        codedHeight: 16,
+        displayWidth: 16,
+        displayHeight: 16,
+        visibleRect: { x: 0, y: 0, width: 16, height: 16 },
+        colorSpace: ["bt709", "bt709", "bt709", false]
+      },
+      lastGoodFrame: {
+        timestamp: 33_333,
+        duration: 33_333,
+        codedWidth: 16,
+        codedHeight: 16,
+        displayWidth: 16,
+        displayHeight: 16,
+        visibleRect: { x: 0, y: 0, width: 16, height: 16 },
+        colorSpace: ["bt709", "bt709", "bt709", false]
+      },
+      outputFailure: {
+        kind: "display-aspect",
+        validationLayer: "host-expectation",
+        field: "display-aspect",
+        expected: {
+          timestamp: 66_666,
+          duration: 33_333,
+          codedWidth: 16,
+          codedHeight: 16,
+          displayAspectWidth: 16,
+          displayAspectHeight: 16,
+          visibleRect: { x: 0, y: 0, width: 16, height: 16 },
+          colorSpace: ["bt709", "bt709", "bt709", false],
+          frameCount: null
+        },
+        actual: {
+          timestamp: 66_666,
+          duration: 33_333,
+          codedWidth: 16,
+          codedHeight: 16,
+          displayWidth: 32,
+          displayHeight: 16,
+          visibleRect: { x: 0, y: 0, width: 16, height: 16 },
+          colorSpace: ["bt709", "bt709", "bt709", false],
+          receivedFrameCount: null
+        }
+      }
+    });
+    expect(Object.isFrozen(decoderDiagnosticsAtEvent)).toBe(true);
+    expectDeeplyFrozen(diagnosticAtEvent);
     expect(Object.isFrozen(probeAtEvent)).toBe(true);
     expect(Object.isFrozen(laterProbeAtEvent)).toBe(true);
     await expect(element.prepare()).rejects.toBe(error);
@@ -547,17 +711,27 @@ describe("element lifecycle regressions", () => {
 
     await eventually(() => player.disposed());
     expect(element.getDiagnostics().outstanding.player).toBe(0);
-    expect(element.getDiagnostics().runtime.decoderDiagnostics).toEqual([
+    const diagnosticsAfterCleanup =
+      element.getDiagnostics().runtime.decoderDiagnostics;
+    expect(diagnosticsAfterCleanup).toEqual([
       diagnosticAtEvent,
       probeAtEvent,
       laterProbeAtEvent
     ]);
+    expect(diagnosticsAfterCleanup[0]).toBe(diagnosticAtEvent);
+    expect(diagnosticsAfterCleanup[1]).toBe(probeAtEvent);
+    expect(diagnosticsAfterCleanup[2]).toBe(laterProbeAtEvent);
 
     source.setAttribute("src", "replacement.avl");
     FakeMutationObserver.instances[0]!.enqueue(attributeMutation(source));
     await expect(element.prepare()).resolves.toMatchObject({ mode: "animated" });
-    expect(element.getDiagnostics().lastFailure).toBeNull();
-    expect(element.getDiagnostics().runtime.decoderDiagnostics).toEqual([]);
+    const replacementDiagnostics = element.getDiagnostics();
+    expect(replacementDiagnostics.sourceGeneration).toBe(2);
+    expect(replacementDiagnostics.lastFailure).toBeNull();
+    expect(replacementDiagnostics.runtime.decoderDiagnostics).toEqual([]);
+    expect(replacementDiagnostics.runtime.decoderDiagnostics).not.toBe(
+      diagnosticsAfterCleanup
+    );
   });
 
   it("does not let deferred terminal retirement cancel an error-listener replacement", async () => {
@@ -971,6 +1145,13 @@ function attributeMutation(target: FakeElement): MutationRecord {
     addedNodes: [],
     removedNodes: []
   } as unknown as MutationRecord;
+}
+
+function expectDeeplyFrozen(value: unknown, seen = new Set<object>()): void {
+  if (value === null || typeof value !== "object" || seen.has(value)) return;
+  seen.add(value);
+  expect(Object.isFrozen(value)).toBe(true);
+  for (const nested of Object.values(value)) expectDeeplyFrozen(nested, seen);
 }
 
 async function settleMicrotasks(): Promise<void> {

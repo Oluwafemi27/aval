@@ -1,3 +1,5 @@
+import { sameAspectRatio } from "./media-geometry.js";
+
 export interface RenderLayout {
   readonly codedWidth: number;
   readonly codedHeight: number;
@@ -779,8 +781,14 @@ function validateFrame(
     visible === null ||
     !Number.isSafeInteger(frame.codedWidth) || frame.codedWidth < 1 ||
     !Number.isSafeInteger(frame.codedHeight) || frame.codedHeight < 1 ||
-    frame.displayWidth !== layout.storageWidth ||
-    frame.displayHeight !== layout.storageHeight ||
+    !Number.isSafeInteger(frame.displayWidth) || frame.displayWidth < 1 ||
+    !Number.isSafeInteger(frame.displayHeight) || frame.displayHeight < 1 ||
+    !sameAspectRatio(
+      frame.displayWidth,
+      frame.displayHeight,
+      layout.storageWidth,
+      layout.storageHeight
+    ) ||
     !Number.isSafeInteger(visible.x) || visible.x < 0 ||
     !Number.isSafeInteger(visible.y) || visible.y < 0 ||
     visible.width !== layout.storageWidth ||

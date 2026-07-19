@@ -79,7 +79,7 @@ describe("Decoder output certification", () => {
   });
 
   it.each([
-    ["color", (frame: VideoFrame) => {
+    ["color", "color-space", "color-space", (frame: VideoFrame) => {
       Object.defineProperty(frame, "colorSpace", {
         value: Object.freeze({
           fullRange: false,
@@ -89,15 +89,20 @@ describe("Decoder output certification", () => {
         })
       });
     }],
-    ["geometry", (frame: VideoFrame) => {
+    ["geometry", "visible-rect", "visible-rect", (frame: VideoFrame) => {
       Object.defineProperty(frame, "visibleRect", {
         value: Object.freeze({ x: 31, y: 0, width: 2, height: 2 })
       });
     }],
-    ["timing", (frame: VideoFrame) => {
+    ["timing", "timing", "duration", (frame: VideoFrame) => {
       Object.defineProperty(frame, "duration", { value: 2 });
     }]
-  ] as const)("retains local %s output-validation evidence", async (_kind, mutate) => {
+  ] as const)("retains local %s output-validation evidence", async (
+    _label,
+    kind,
+    field,
+    mutate
+  ) => {
     const Worker = fakeWorker();
     const VideoFrame = fakeVideoFrame();
     vi.stubGlobal("Worker", Worker);
@@ -130,16 +135,292 @@ describe("Decoder output certification", () => {
         name: "Error",
         message: "AVAL decoder returned an invalid frame"
       },
-      firstFrame: {
-        timestamp: 0,
-        codedWidth: 32,
-        codedHeight: 34,
-        displayWidth: 2,
-        displayHeight: 2
+      firstFrame: null,
+      lastGoodFrame: null,
+      outputFailure: {
+        kind,
+        validationLayer: "host-expectation",
+        field,
+        expected: { timestamp: 0, duration: 1 },
+        actual: { timestamp: 0, codedWidth: 32, codedHeight: 34 }
       }
     });
     expect(Object.isFrozen(decoder.snapshot().diagnostic)).toBe(true);
-    expect(Object.isFrozen(decoder.snapshot().diagnostic?.firstFrame)).toBe(true);
+    expect(Object.isFrozen(decoder.snapshot().diagnostic?.outputFailure)).toBe(true);
+    decoder.dispose();
+  });
+
+  it("retains the last good frame and the exact later rejected output", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+    const decoder = configuredDecoder();
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+    const run = twoFrameRun(decoder);
+    worker.emit({ t: "started", run: run.generation });
+    worker.emit({ t: "accepted", run: run.generation });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 0,
+      frame: new VideoFrame(32, 34, 0)
+    });
+    const rejected = new VideoFrame(32, 34, 1);
+    Object.defineProperties(rejected, {
+      displayWidth: { value: 3 },
+      displayHeight: { value: 2 }
+    });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 1,
+      frame: rejected
+    });
+
+    await expect(run.take(1)).rejects.toThrow(
+      "AVAL decoder returned an invalid frame"
+    );
+    expect(decoder.snapshot().diagnostic).toMatchObject({
+      phase: "output-validation",
+      code: "invalid-output",
+      run: run.generation,
+      decodeOrdinal: 1,
+      firstFrame: { timestamp: 0, displayWidth: 2, displayHeight: 2 },
+      lastGoodFrame: { timestamp: 0, displayWidth: 2, displayHeight: 2 },
+      outputFailure: {
+        kind: "display-aspect",
+        validationLayer: "host-expectation",
+        field: "display-aspect",
+        expected: {
+          timestamp: 1,
+          duration: 1,
+          displayAspectWidth: 2,
+          displayAspectHeight: 2
+        },
+        actual: {
+          timestamp: 1,
+          duration: 1,
+          codedWidth: 32,
+          codedHeight: 34,
+          displayWidth: 3,
+          displayHeight: 2
+        }
+      }
+    });
+    expect(Object.isFrozen(decoder.snapshot().diagnostic?.outputFailure)).toBe(true);
+    expect(Object.isFrozen(decoder.snapshot().diagnostic?.lastGoodFrame)).toBe(true);
+    decoder.dispose();
+  });
+
+  it.each([
+    [640, 360, 1_280, 720, 640, 360],
+    [48, 104, 96, 208, 48, 112]
+  ] as const)(
+    "accepts aspect-equivalent %i×%i storage as %i×%i display",
+    async (
+      storageWidth,
+      storageHeight,
+      displayWidth,
+      displayHeight,
+      codedWidth,
+      codedHeight
+    ) => {
+      const Worker = fakeWorker();
+      const VideoFrame = fakeVideoFrame();
+      vi.stubGlobal("Worker", Worker);
+      vi.stubGlobal("VideoFrame", VideoFrame);
+      const decoder = new Decoder({
+        codec: "avc1.640020",
+        codedWidth,
+        codedHeight,
+        displayAspectWidth: storageWidth,
+        displayAspectHeight: storageHeight
+      }, undefined, {
+        Worker,
+        VideoFrame: VideoFrame as unknown as typeof globalThis.VideoFrame
+      });
+      const worker = Worker.latest();
+      worker.emit({ t: "configured", supported: true });
+      await decoder.supported();
+      const run = oneFrameRun(decoder);
+      worker.emit({ t: "started", run: run.generation });
+      worker.emit({ t: "accepted", run: run.generation });
+      const decoded = new VideoFrame(codedWidth, codedHeight);
+      Object.defineProperties(decoded, {
+        displayWidth: { value: displayWidth },
+        displayHeight: { value: displayHeight },
+        visibleRect: {
+          value: Object.freeze({
+            x: 0,
+            y: 0,
+            width: storageWidth,
+            height: storageHeight
+          })
+        }
+      });
+      worker.emit({
+        t: "frame",
+        run: run.generation,
+        timestamp: 0,
+        frame: decoded
+      });
+
+      const accepted = await run.take(0);
+      run.release(accepted);
+      expect(decoder.snapshot().diagnostic).toBeNull();
+      decoder.dispose();
+    }
+  );
+
+  it("classifies an unauthored timestamp as unknown output", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+    const decoder = configuredDecoder();
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+    const run = oneFrameRun(decoder);
+    worker.emit({ t: "started", run: run.generation });
+    worker.emit({ t: "accepted", run: run.generation });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 99,
+      frame: new VideoFrame(32, 34, 99)
+    });
+
+    await expect(run.complete()).rejects.toThrow(
+      "AVAL decoder returned an unknown frame"
+    );
+    expect(decoder.snapshot().diagnostic).toMatchObject({
+      phase: "output-validation",
+      code: "invalid-output",
+      run: run.generation,
+      decodeOrdinal: null,
+      firstFrame: null,
+      lastGoodFrame: null,
+      outputFailure: {
+        kind: "unknown-output",
+        validationLayer: "host-expectation",
+        field: "timestamp",
+        expected: null,
+        actual: {
+          timestamp: 99,
+          duration: 1,
+          codedWidth: 32,
+          codedHeight: 34,
+          displayWidth: 2,
+          displayHeight: 2,
+          receivedFrameCount: null
+        }
+      }
+    });
+    decoder.dispose();
+  });
+
+  it("classifies a repeated accepted timestamp as duplicate output", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+    const decoder = configuredDecoder();
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+    const run = oneFrameRun(decoder);
+    worker.emit({ t: "started", run: run.generation });
+    worker.emit({ t: "accepted", run: run.generation });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 0,
+      frame: new VideoFrame(32, 34, 0)
+    });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 0,
+      frame: new VideoFrame(32, 34, 0)
+    });
+
+    await expect(run.complete()).rejects.toThrow("duplicate decoded frame");
+    expect(decoder.snapshot().diagnostic).toMatchObject({
+      phase: "output-validation",
+      code: "invalid-output",
+      run: run.generation,
+      decodeOrdinal: 0,
+      firstFrame: { timestamp: 0 },
+      lastGoodFrame: { timestamp: 0 },
+      outputFailure: {
+        kind: "duplicate-output",
+        validationLayer: "host-expectation",
+        field: "ordinal",
+        expected: {
+          timestamp: 0,
+          duration: 1,
+          frameCount: null
+        },
+        actual: {
+          timestamp: 0,
+          duration: 1,
+          receivedFrameCount: null
+        }
+      }
+    });
+    decoder.dispose();
+  });
+
+  it("classifies an early flush as incomplete output", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+    const decoder = configuredDecoder();
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+    const run = twoFrameRun(decoder);
+    worker.emit({ t: "started", run: run.generation });
+    worker.emit({ t: "accepted", run: run.generation });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 0,
+      frame: new VideoFrame(32, 34, 0)
+    });
+    worker.emit({ t: "flushed", run: run.generation });
+
+    await expect(run.complete()).rejects.toThrow(
+      "AVAL decoder output is incomplete"
+    );
+    expect(decoder.snapshot().diagnostic).toMatchObject({
+      phase: "output-validation",
+      code: "invalid-output",
+      run: run.generation,
+      decodeOrdinal: 1,
+      firstFrame: { timestamp: 0 },
+      lastGoodFrame: { timestamp: 0 },
+      outputFailure: {
+        kind: "incomplete-output",
+        validationLayer: "host-expectation",
+        field: "frame-count",
+        expected: {
+          timestamp: null,
+          duration: null,
+          frameCount: 2
+        },
+        actual: {
+          timestamp: null,
+          duration: null,
+          receivedFrameCount: 1
+        }
+      }
+    });
     decoder.dispose();
   });
 
@@ -205,7 +486,9 @@ describe("Decoder output certification", () => {
         name: "Error",
         message: "AVAL decoder message transport failed"
       },
-      firstFrame: null
+      firstFrame: null,
+      lastGoodFrame: null,
+      outputFailure: null
     });
     const retained = decoder.snapshot().diagnostic;
     decoder.dispose();
@@ -388,11 +671,11 @@ describe("Decoder output certification", () => {
       t: "frame",
       run: run.generation,
       timestamp: 0,
-      frame: new VideoFrame(Number.MAX_VALUE, 16)
+      frame: new VideoFrame(Number.MAX_SAFE_INTEGER, 2)
     });
 
     await expect(run.take(0)).rejects.toThrow(
-      "AVAL decoder returned an invalid frame"
+      "AVAL decoder returned an unsafe coded allocation"
     );
     expect(decoder.snapshot()).toEqual({
       workerCount: 0,
@@ -400,7 +683,11 @@ describe("Decoder output certification", () => {
       openFrameBytes: 0,
       diagnostic: expect.objectContaining({
         phase: "output-validation",
-        code: "invalid-output"
+        code: "invalid-output",
+        outputFailure: expect.objectContaining({
+          kind: "coded-allocation",
+          field: "allocation"
+        })
       })
     });
     expect(worker.terminated).toBe(true);

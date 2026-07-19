@@ -24,6 +24,36 @@ describe("renderer geometry admission", () => {
 });
 
 describe("renderer runtime ownership", () => {
+  it.each([
+    [layout(), 96, 208],
+    [opaqueLayout(), 1_280, 720]
+  ] as const)(
+    "accepts a frame whose display dimensions preserve the authored aspect",
+    async (renderLayout, displayWidth, displayHeight) => {
+      const fixture = webglCanvas(renderLayout.storageWidth, renderLayout.storageHeight);
+      const renderer = new Renderer(fixture.canvas, renderLayout);
+
+      await expect(renderer.draw(frameWithGeometry(
+        renderLayout,
+        displayWidth,
+        displayHeight
+      ))).resolves.toBeUndefined();
+      renderer.dispose();
+    }
+  );
+
+  it("rejects a near-miss display aspect without weakening visible storage", async () => {
+    const renderLayout = opaqueLayout();
+    const fixture = webglCanvas(renderLayout.storageWidth, renderLayout.storageHeight);
+    const renderer = new Renderer(fixture.canvas, renderLayout);
+
+    await expect(renderer.draw(frameWithGeometry(
+      renderLayout,
+      1_279,
+      720
+    ))).rejects.toThrow("decoded frame geometry is invalid");
+  });
+
   it("applies exact initial presentation backing before resource admission", () => {
     const fixture = webglCanvas();
     const renderer = new Renderer(fixture.canvas, layout(), {
@@ -160,6 +190,19 @@ function layout(): RenderLayout {
   };
 }
 
+function opaqueLayout(): RenderLayout {
+  return {
+    codedWidth: 640,
+    codedHeight: 360,
+    storageWidth: 640,
+    storageHeight: 360,
+    logicalWidth: 640,
+    logicalHeight: 360,
+    pixelAspect: [1, 1],
+    colorRect: [0, 0, 640, 360]
+  };
+}
+
 function canvas(): HTMLCanvasElement {
   return {
     width: 1,
@@ -185,15 +228,44 @@ function frame(
   } as unknown as VideoFrame;
 }
 
+function frameWithGeometry(
+  renderLayout: Readonly<RenderLayout>,
+  displayWidth: number,
+  displayHeight: number
+): VideoFrame {
+  const stride = renderLayout.storageWidth * 4;
+  return {
+    codedWidth: renderLayout.codedWidth,
+    codedHeight: renderLayout.codedHeight,
+    displayWidth,
+    displayHeight,
+    visibleRect: {
+      x: 0,
+      y: 0,
+      width: renderLayout.storageWidth,
+      height: renderLayout.storageHeight
+    },
+    copyTo: async () => [{ offset: 0, stride }]
+  } as unknown as VideoFrame;
+}
+
 function webglCanvas(): Readonly<{
+  canvas: HTMLCanvasElement;
+  gl: TestGl;
+}>;
+function webglCanvas(width: number, height: number): Readonly<{
+  canvas: HTMLCanvasElement;
+  gl: TestGl;
+}>;
+function webglCanvas(width = 48, height = 104): Readonly<{
   canvas: HTMLCanvasElement;
   gl: TestGl;
 }> {
   const gl = new TestGl();
   const listeners = new Map<string, EventListener>();
   const canvas = {
-    width: 48,
-    height: 104,
+    width,
+    height,
     addEventListener(type: string, listener: EventListener) {
       listeners.set(type, listener);
     },
