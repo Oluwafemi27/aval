@@ -13,6 +13,7 @@ const runtime = vi.hoisted(() => ({
   sources: [] as string[],
   creationHold: null as Promise<void> | null,
   creationReached: null as (() => void) | null,
+  failCreationAfterCandidate: false,
   disposeAttempts: 0
 }));
 
@@ -20,11 +21,6 @@ vi.mock("../src/player.js", () => ({
   createPlayer: async (input: PlayerInput): Promise<Player> => {
     runtime.sources.push(input.sources[0]?.src ?? "");
     if (!input.decoderReady()) throw new Error("decoder lease was not granted");
-    if (runtime.creationHold !== null) {
-      input.onResourceBytes(runtime.physicalBytes);
-      runtime.creationReached?.();
-      await runtime.creationHold;
-    }
     let disposed = false;
     const metadata = Object.freeze({
       initialState: "idle",
@@ -38,13 +34,17 @@ vi.mock("../src/player.js", () => ({
         fit: "contain" as const
       })
     });
-    return {
+    const publish = () => {
+      input.onMetadata(metadata);
+      input.onResourceBytes(runtime.physicalBytes);
+      input.onReadiness("interactiveReady");
+    };
+    const player: Player = {
       metadata,
-      activate: () => {
-        input.onMetadata(metadata);
-        input.onResourceBytes(runtime.physicalBytes);
-        input.onReadiness("interactiveReady");
+      activate: (options = {}) => {
+        if (options.publish !== false) publish();
       },
+      publish,
       prepare: async () => animatedResult(),
       setState: async () => undefined,
       canSend: () => false,
@@ -64,6 +64,18 @@ vi.mock("../src/player.js", () => ({
         disposed = true;
       }
     };
+    await input.onCandidate?.(player);
+    if (runtime.failCreationAfterCandidate) {
+      input.onResourceBytes(runtime.physicalBytes);
+      try { await player.dispose(); } catch { /* createPlayer reports canonically */ }
+      throw input.onPlaybackFailure("readiness-failure", "prepare");
+    }
+    if (runtime.creationHold !== null) {
+      input.onResourceBytes(runtime.physicalBytes);
+      runtime.creationReached?.();
+      await runtime.creationHold;
+    }
+    return player;
   }
 }));
 
@@ -76,6 +88,7 @@ afterEach(async () => {
   runtime.physicalBytes = 0;
   runtime.creationHold = null;
   runtime.creationReached = null;
+  runtime.failCreationAfterCandidate = false;
   for (const element of elements.splice(0)) {
     element.controls.throwCanvasWidthReset = false;
     element.controls.throwMutationDisconnect = false;
@@ -89,6 +102,47 @@ afterEach(async () => {
 });
 
 describe("element cleanup regressions", () => {
+  it("retains candidate resource authority when startup disposal fails", async () => {
+    runtime.failDispose = true;
+    runtime.failCreationAfterCandidate = true;
+    runtime.physicalBytes = 4_096;
+    const { element } = createElement(true);
+    connect(element);
+
+    await expect(element.prepare()).rejects.toMatchObject({
+      name: "AvalPlaybackError"
+    });
+
+    expect.soft(runtime.disposeAttempts).toBe(2);
+    expect(element.getDiagnostics()).toMatchObject({
+      cleanup: {
+        completed: false,
+        playerDisposed: false,
+        participantDisposed: false,
+        participantLogicalBytes: 4_096,
+        participantActiveLeaseCount: 1
+      },
+      outstanding: { player: 1, decoder: 2, bytes: 4_096 },
+      runtime: {
+        activeLeaseCount: 1,
+        playerTrackedBytes: 4_096,
+        pagePhysicalBytes: 4_096,
+        pageActiveDecoderSlotCount: 2,
+        pageParticipantCount: 1
+      }
+    });
+
+    runtime.failDispose = false;
+    runtime.failCreationAfterCandidate = false;
+    await element.dispose();
+
+    expect.soft(runtime.disposeAttempts).toBe(3);
+    expect(element.getDiagnostics()).toMatchObject({
+      finalDisposed: true,
+      outstanding: { player: 0, decoder: 0, bytes: 0 }
+    });
+  });
+
   it("retains decoder lease and byte authority until failed retirement proves cleanup", async () => {
     runtime.failDispose = true;
     runtime.physicalBytes = 4_096;
@@ -582,7 +636,10 @@ class FakeWindow extends EventTarget {
   public readonly Worker = class {};
   public readonly VideoDecoder = class {};
   public readonly VideoFrame = class {};
-  public readonly crypto = {} as Crypto;
+  public readonly isSecureContext = true;
+  public readonly crypto = {
+    subtle: { digest: () => Promise.resolve(new ArrayBuffer(32)) }
+  } as unknown as Crypto;
   public readonly performance = globalThis.performance;
   public readonly devicePixelRatio = 1;
   public readonly fetch = async (): Promise<Response> => ({} as Response);

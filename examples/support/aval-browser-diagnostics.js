@@ -270,6 +270,13 @@ function captureEnvironment(serialize) {
     reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
     visibilityState: document.visibilityState,
     capabilities: Object.freeze({
+      webCryptoSubtleDigest: (() => {
+        try {
+          return typeof window.crypto?.subtle?.digest === "function";
+        } catch {
+          return false;
+        }
+      })(),
       videoDecoder: typeof window.VideoDecoder === "function",
       videoDecoderIsConfigSupported:
         typeof window.VideoDecoder?.isConfigSupported === "function",
@@ -421,7 +428,12 @@ function installOverlay(diagnostics) {
     const controls = document.createElement("div");
     controls.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;padding-top:8px";
     const status = document.createElement("output");
-    status.style.cssText = "display:block;flex-basis:100%;color:#b9b9c5";
+    status.style.cssText = [
+      "display:block",
+      "flex-basis:100%",
+      "color:#b9b9c5",
+      "white-space:pre-wrap"
+    ].join(";");
 
     const capture = overlayButton("Capture");
     capture.addEventListener("click", () => diagnostics.checkpoint("manual:capture"));
@@ -437,7 +449,23 @@ function installOverlay(diagnostics) {
     document.body.append(details);
     diagnostics._setOverlayStatus(() => {
       const report = diagnostics.report();
-      status.textContent = `${String(report.checkpoints.length)}/${String(CHECKPOINT_LIMIT)} checkpoints`;
+      const element = report.latest?.element;
+      const runtime = element?.diagnostics?.runtime;
+      const failure = element?.diagnostics?.lastFailure;
+      const outcome = runtime?.selectedCodec ?? failure?.code ?? "pending";
+      const decoderDiagnostic = Array.isArray(runtime?.decoderDiagnostics)
+        ? runtime.decoderDiagnostics[0]
+        : null;
+      const evidence = decoderDiagnostic === null || decoderDiagnostic === undefined
+        ? null
+        : `[${String(decoderDiagnostic.sourceIndex)}] ` +
+          `${String(decoderDiagnostic.code)}@${String(decoderDiagnostic.phase)}`;
+      const summary = [
+        `${String(report.checkpoints.length)}/${String(CHECKPOINT_LIMIT)} checkpoints`,
+        element?.readiness ?? "pending",
+        outcome
+      ].join(" · ");
+      status.textContent = evidence === null ? summary : `${summary}\n${evidence}`;
     });
   };
 

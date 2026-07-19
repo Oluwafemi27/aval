@@ -1187,7 +1187,7 @@ describe("player multi-route prefetch", () => {
     ]);
   });
 
-  it("buffers initial publications until activated with an authoritative graph", async () => {
+  it("accounts resources immediately but buffers public state until activation", async () => {
     vi.stubGlobal("Worker", class {});
     vi.stubGlobal("VideoDecoder", class {});
     const observed: string[] = [];
@@ -1224,7 +1224,8 @@ describe("player multi-route prefetch", () => {
       onPlaybackFailure: defaultPlaybackFailure
     });
 
-    expect(observed).toEqual([]);
+    expect(observed.length).toBeGreaterThan(0);
+    expect(new Set(observed)).toEqual(new Set(["resource"]));
     player.activate();
     player.activate();
     expect(observed).toContain("canSend:true");

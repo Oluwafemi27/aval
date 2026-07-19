@@ -44,6 +44,7 @@ export interface BrowserDiagnosticEnvironment {
   readonly reducedMotion: boolean;
   readonly visibilityState: string;
   readonly capabilities: Readonly<{
+    readonly webCryptoSubtleDigest: boolean;
     readonly videoDecoder: boolean;
     readonly videoDecoderIsConfigSupported: boolean;
     readonly videoFrame: boolean;
@@ -216,6 +217,7 @@ export function assertBrowserDiagnosticReport(
     reducedMotion: expect.any(Boolean),
     visibilityState: expect.any(String),
     capabilities: expect.objectContaining({
+      webCryptoSubtleDigest: expect.any(Boolean),
       videoDecoder: expect.any(Boolean),
       videoDecoderIsConfigSupported: expect.any(Boolean),
       videoFrame: expect.any(Boolean),

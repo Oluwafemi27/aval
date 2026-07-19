@@ -79,7 +79,8 @@ export interface PlayerSnapshot {
 
 export interface Player {
   readonly metadata: Readonly<Metadata>;
-  activate(): void;
+  activate(options?: Readonly<{ publish?: boolean }>): void;
+  publish(): void;
   prepare(options?: Readonly<{
     signal?: AbortSignal;
     timeoutMs?: number;
@@ -131,6 +132,8 @@ export interface PlayerInput {
   readonly initialBody: boolean;
   readonly visible: boolean;
   readonly decoderReady: () => boolean;
+  /** Configures a provisional player before startup qualification and publication. */
+  readonly onCandidate?: (player: Player) => Promise<void>;
   readonly onResourceBytes: (bytes: number) => void;
   readonly onMetadata: (metadata: Readonly<Metadata>) => void;
   readonly onReadiness: (value: string, reason?: string) => void;

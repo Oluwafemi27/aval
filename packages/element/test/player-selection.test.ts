@@ -63,7 +63,20 @@ vi.mock("../src/asset.js", () => {
       chunkStart: index,
       chunkCount: 1
     }));
-    public readonly records = [];
+    public readonly records = renditions.map((_rendition, index) => ({
+      offset: 1_000 + index,
+      length: 1,
+      presentationTimestamp: 0,
+      duration: 1,
+      randomAccess: true,
+      displayedFrameCount: 1
+    }));
+    public async unitBytes(): Promise<Uint8Array<ArrayBuffer>> {
+      return new Uint8Array([1]);
+    }
+    public chunkBytes(): ArrayBuffer {
+      return new Uint8Array([1]).buffer;
+    }
     public async dispose(): Promise<void> {}
     public snapshot() {
       return {
@@ -88,6 +101,94 @@ vi.mock("../src/asset.js", () => {
     }
   };
 });
+
+vi.mock("../src/codec-validator.js", () => ({
+  createCodecValidator: () => ({
+    validate: () => undefined,
+    complete: () => undefined
+  })
+}));
+
+vi.mock("../src/decoder.js", () => ({
+  Decoder: class {
+    public encodedBytes = 0;
+    readonly #worker: { readonly supported: WorkerSupport };
+    #diagnostic: Readonly<Record<string, unknown>> | null = null;
+    #run = 0;
+
+    public constructor() {
+      const WorkerConstructor = globalThis.Worker as unknown as new () => {
+        readonly supported: WorkerSupport;
+      };
+      this.#worker = new WorkerConstructor();
+    }
+
+    public get available(): boolean { return true; }
+
+    public async supported(): Promise<boolean> {
+      if (this.#worker.supported === "error") {
+        this.#diagnostic = Object.freeze({
+          phase: "frame-transfer",
+          code: "transport",
+          run: null,
+          decodeOrdinal: null,
+          exception: Object.freeze({ name: "Error", message: "worker failed" }),
+          firstFrame: null
+        });
+        throw new Error("worker failed");
+      }
+      if (!this.#worker.supported) {
+        this.#diagnostic = Object.freeze({
+          phase: "probe",
+          code: "unsupported-config",
+          run: null,
+          decodeOrdinal: null,
+          exception: Object.freeze({
+            name: "Error",
+            message: "AVAL decoder configuration is unsupported"
+          }),
+          firstFrame: null
+        });
+      }
+      return this.#worker.supported;
+    }
+
+    public failure(): Promise<never> {
+      return new Promise<never>(() => undefined);
+    }
+
+    public createRun(samples: readonly { displayedFrames: number }[]) {
+      const generation = ++this.#run;
+      const frameCount = samples.reduce(
+        (total, sample) => total + sample.displayedFrames,
+        0
+      );
+      return {
+        generation,
+        frameCount,
+        openFrames: 0,
+        outstanding: 0,
+        closed: false,
+        ready: async () => undefined,
+        take: async (index: number) => ({ index }),
+        release: () => undefined,
+        complete: async () => undefined,
+        close: () => undefined
+      };
+    }
+
+    public snapshot() {
+      return {
+        workerCount: 1,
+        openFrames: 0,
+        openFrameBytes: 0,
+        diagnostic: this.#diagnostic
+      };
+    }
+
+    public dispose(): void {}
+  }
+}));
 
 vi.mock("../src/renderer.js", () => ({
   Renderer: class {
@@ -147,6 +248,9 @@ vi.mock("../src/renderer.js", () => ({
       return { textureBytes: 1, runtimeBytes: 3 };
     }
     public resize(): void {}
+    public async draw(): Promise<void> {}
+    public async store(): Promise<void> {}
+    public async drawStored(): Promise<void> {}
     public settled(): Promise<void> { return Promise.resolve(); }
     public dispose(): void { this.#canvas.width = 0; this.#canvas.height = 0; }
   }
@@ -597,9 +701,12 @@ type DecoderPairSupport = readonly [WorkerSupport, WorkerSupport];
 function fakeWorker(support: readonly DecoderPairSupport[]) {
   const all: FakeWorker[] = [];
   class FakeWorker extends EventTarget {
+    public readonly supported: WorkerSupport;
     public constructor() {
       super();
       all.push(this);
+      const index = all.length - 1;
+      this.supported = support[Math.floor(index / 2)]?.[index % 2] ?? false;
     }
     public postMessage(message: unknown): void {
       if ((message as { t?: string }).t !== "configure") return;

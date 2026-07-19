@@ -208,11 +208,35 @@ describe("element inputs", () => {
     expect(Object.isFrozen(presentation)).toBe(true);
   });
 
-  it("blocks runtime creation when authoritative styles or the current view are unavailable", () => {
-    const view = {} as Window;
-    expect(runtimeHostSupported(true, view)).toBe(true);
-    expect(runtimeHostSupported(false, view)).toBe(false);
+  it("blocks runtime creation unless secure-context WebCrypto digest is callable", () => {
+    const supported = {
+      isSecureContext: true,
+      crypto: { subtle: { digest: () => Promise.resolve(new ArrayBuffer(32)) } }
+    } as unknown as Window;
+    const insecure = {
+      isSecureContext: false,
+      crypto: { subtle: { digest: () => Promise.resolve(new ArrayBuffer(32)) } }
+    } as unknown as Window;
+    const missingSubtle = {
+      isSecureContext: true,
+      crypto: {}
+    } as unknown as Window;
+    const nonCallableDigest = {
+      isSecureContext: true,
+      crypto: { subtle: { digest: null } }
+    } as unknown as Window;
+    const inaccessible = { isSecureContext: true } as unknown as Window;
+    Object.defineProperty(inaccessible, "crypto", {
+      get: () => { throw new Error("inaccessible crypto capability"); }
+    });
+
+    expect(runtimeHostSupported(true, supported)).toBe(true);
+    expect(runtimeHostSupported(false, supported)).toBe(false);
     expect(runtimeHostSupported(true, null)).toBe(false);
+    expect(runtimeHostSupported(true, insecure)).toBe(false);
+    expect(runtimeHostSupported(true, missingSubtle)).toBe(false);
+    expect(runtimeHostSupported(true, nonCallableDigest)).toBe(false);
+    expect(runtimeHostSupported(true, inaccessible)).toBe(false);
   });
 
   it("captures and binds platform capabilities from the current owner window", async () => {

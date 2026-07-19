@@ -50,6 +50,7 @@ import type {
 
 let runtimeModule: Promise<typeof import("./player.js")> | null = null;
 const PREPARATION_MS = 5_000;
+const MAX_RETAINED_DECODER_SOURCES = 128;
 type IntersectionGate = {
   readonly promise: Promise<void>;
   readonly resolve: () => void;
@@ -164,6 +165,7 @@ export function createAvalElementClass(
     #lastFailure: Readonly<AvalPublicFailure> | null = null;
     #terminalError: AvalPlaybackError | null = null;
     #cleanupFailureCount = 0;
+    #decoderDiagnosticLimit = 0;
     #decoderDiagnostics: readonly Readonly<AvalDecoderDiagnostic>[] =
       Object.freeze([]);
     #cleanup: Readonly<Record<string, unknown>> | null = null;
@@ -749,6 +751,7 @@ export function createAvalElementClass(
       this.#lastFailure = null;
       this.#terminalError = null;
       this.#cleanupFailureCount = 0;
+      this.#decoderDiagnosticLimit = 0;
       this.#decoderDiagnostics = Object.freeze([]);
       this.#mode = null;
       this.#staticReason = null;
@@ -766,6 +769,10 @@ export function createAvalElementClass(
       }
       const sources = sourceRead.sources;
       if (sources.length === 0) return this.#configurationFailure(generation);
+      this.#decoderDiagnosticLimit = Math.min(
+        sources.length,
+        MAX_RETAINED_DECODER_SOURCES
+      ) * ELEMENT_DECODER_CAPACITY.workerCount;
       const view = document.defaultView;
       if (!runtimeHostSupported(this.#layers.stylesSupported, view)) {
         throw this.#publishTerminalFailure(
@@ -824,12 +831,43 @@ export function createAvalElementClass(
           initialBody,
           visible: this.effectivelyVisible,
           decoderReady: () => this.#claimDecoder(generation, token),
+          onCandidate: async (candidate) => {
+            if (!this.#current(generation, token)) throw abortError();
+            this.#player = candidate;
+            this.#preparingPlayer = candidate;
+            if (this.#visibilityPlayer !== candidate) this.#visibilityPlayer = null;
+            if (this.#suspendedPlayer !== candidate) this.#suspendedPlayer = null;
+            if (this.#suspendingPlayer !== candidate) {
+              this.#suspendingPlayer = null;
+              this.#suspension = null;
+            }
+            if (this.#restartPlayer !== candidate) this.#restartPlayer = null;
+            candidate.activate({ publish: false });
+            this.#metadata = candidate.metadata;
+            this.#applyIntrinsic();
+            await this.#reconcileSelectionMotion(
+              candidate,
+              selectedMotion,
+              selectedReduced,
+              generation,
+              token
+            );
+            if (!this.#current(generation, token)) throw abortError();
+            this.#bindInputs();
+            this.#resize();
+            this.#updatePlayback();
+            if (this.#suspendingPlayer === candidate && this.#suspension !== null) {
+              await this.#suspension;
+            }
+            if (!this.#current(generation, token)) throw abortError();
+          },
           onResourceBytes: (bytes) => {
             if (!this.#publicationCurrent(generation, token)) return;
             this.#setResourceBytes(bytes);
           },
           onMetadata: (metadata) => {
             if (!this.#publicationCurrent(generation, token)) return;
+            if (this.#metadata === metadata) return;
             this.#metadata = metadata;
             this.#applyIntrinsic();
             this.#bindInputs();
@@ -848,7 +886,10 @@ export function createAvalElementClass(
           onAnimationResourcesRetired: () => {
             if (!this.#publicationCurrent(generation, token)) return;
             this.#releaseDecoderLease();
-            if (this.#staticReason !== "decoder-queued") this.#cancelDecoderTicket();
+            if (this.#staticReason !== "decoder-queued") {
+              this.#cancelDecoderTicket();
+              if (this.#resourceBytes === 0) this.#releasePageResources();
+            }
           },
           onDraw: () => {
             if (!this.#publicationCurrent(generation, token)) return;
@@ -875,7 +916,6 @@ export function createAvalElementClass(
             const activePlayer = this.#player;
             const preparing = activePlayer !== null &&
               this.#preparingPlayer === activePlayer;
-            this.#releasePageResources(true);
             const error = this.#publishTerminalFailure(
               code,
               operation,
@@ -904,20 +944,9 @@ export function createAvalElementClass(
           await this.#retireGeneration(false);
           throw abortError();
         }
-        this.#player = player;
-        this.#preparingPlayer = player;
-        player.activate();
-        await this.#reconcileSelectionMotion(
-          player,
-          selectedMotion,
-          selectedReduced,
-          generation,
-          token
-        );
-        if (!this.#current(generation, token)) throw abortError();
-        this.#bindInputs();
-        this.#resize();
-        this.#updatePlayback();
+        if (this.#player !== player) {
+          throw new Error("AVAL startup candidate handoff was not completed");
+        }
         let result: RuntimeReadinessResult;
         try {
           result = this.#suspendingPlayer === player && this.#suspension !== null
@@ -935,6 +964,8 @@ export function createAvalElementClass(
             result = await this.#suspendForVisibility(player);
           }
         }
+        if (!this.#current(generation, token)) throw abortError();
+        player.publish();
         if (!this.#current(generation, token)) throw abortError();
         if (restartState === null) {
           const declarative = this.state;
@@ -1574,10 +1605,6 @@ export function createAvalElementClass(
       }
       if (player !== this.#player) return;
       this.#suspendedPlayer = player;
-      this.#mode = "static";
-      this.#staticReason = "visibility-suspended";
-      this.#setReadiness("staticReady", "visibility-suspended");
-      this.#releasePageResources();
       if (!this.effectivelyVisible) return;
       const state = this.#restartState ?? player.snapshot(false).requestedState ??
         this.#requestedState ?? this.#metadata?.initialState;
@@ -1836,23 +1863,28 @@ export function createAvalElementClass(
       diagnostics: readonly Readonly<PlayerDecoderDiagnostic>[],
       generation: number
     ): void {
-      if (generation !== this.#sourceGeneration || diagnostics.length === 0) return;
-      const byLane = new Map(
+      if (
+        generation !== this.#sourceGeneration ||
+        diagnostics.length === 0 ||
+        this.#decoderDiagnosticLimit === 0
+      ) return;
+      const bySourceLane = new Map(
         this.#decoderDiagnostics.map((diagnostic) => [
-          diagnostic.lane,
+          `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`,
           diagnostic
         ] as const)
       );
-      for (const diagnostic of diagnostics.slice(0, 2)) {
-        byLane.set(
-          diagnostic.lane,
+      for (const diagnostic of diagnostics) {
+        bySourceLane.set(
+          `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`,
           freezeAvalDecoderDiagnostic(diagnostic, generation)
         );
       }
+      const retained = [...bySourceLane.values()].sort((left, right) =>
+        left.sourceIndex - right.sourceIndex || left.lane - right.lane
+      );
       this.#decoderDiagnostics = Object.freeze(
-        [...byLane.values()]
-          .sort((left, right) => left.lane - right.lane)
-          .slice(0, 2)
+        retained.slice(-this.#decoderDiagnosticLimit)
       );
     }
 
@@ -2069,7 +2101,13 @@ export function runtimeHostSupported(
   stylesSupported: boolean,
   view: Window | null
 ): view is Window {
-  return stylesSupported && view !== null;
+  if (!stylesSupported || view === null) return false;
+  try {
+    return view.isSecureContext === true &&
+      typeof view.crypto?.subtle?.digest === "function";
+  } catch {
+    return false;
+  }
 }
 
 export function createRealmPlatform(

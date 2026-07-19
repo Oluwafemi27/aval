@@ -51,9 +51,10 @@ import {
   Renderer,
   type RenderLayout
 } from "./renderer.js";
-import type { AvalPlaybackError } from "./errors.js";
+import { AvalPlaybackError } from "./errors.js";
 import type {
   AvalRuntimeTraceRecord,
+  RuntimeFailureCode,
   RuntimeReadinessResult,
   StaticReason
 } from "./public-types.js";
@@ -89,12 +90,35 @@ type StreamReservation =
 type PrepareResult = RuntimeReadinessResult;
 type CandidateReport = RuntimeReadinessResult["report"]["candidates"][number];
 
+interface SelectionCursor {
+  readonly sourceInputIndex: number;
+  readonly renditionIndex: number;
+}
+
+interface SelectionState {
+  cursor: SelectionCursor;
+  reports: Readonly<CandidateReport>[];
+  decoderDiagnostics: readonly Readonly<PlayerDecoderDiagnostic>[];
+  lastRejectionCode: RuntimeFailureCode;
+}
+
+interface ProvisionalPlayer {
+  readonly player: PlayerImpl;
+  readonly publications: PublicationGate;
+  readonly sourceIndex: number;
+  readonly rendition: Readonly<Rendition>;
+  readonly rank: number;
+  readonly requiresQualification: boolean;
+}
+
 interface StateRequest {
   readonly resolve: () => void;
   readonly reject: (reason: unknown) => void;
 }
 
 const PREPARE_MS = 5_000;
+const CANDIDATE_PREPARE_MS = 2_500;
+const MAX_RETAINED_DECODER_DIAGNOSTICS = 16;
 type AdvanceOutcome = "progressed" | "waiting-route";
 
 const COLOR = Object.freeze({
@@ -107,20 +131,89 @@ const COLOR = Object.freeze({
 export async function createPlayer(
   input: Readonly<PlayerInput>
 ): Promise<Player> {
-  const publications = new PublicationGate(input);
   const deadline = new PreparationDeadline(
     input.signal,
     input.preparationTimeoutMs,
     input.platform
   );
+  const state: SelectionState = {
+    cursor: Object.freeze({ sourceInputIndex: 0, renditionIndex: 0 }),
+    reports: [],
+    decoderDiagnostics: Object.freeze([]),
+    lastRejectionCode: "unsupported-profile"
+  };
   try {
-    return await selectPlayer(publications.input, deadline, publications);
+    for (;;) {
+      const publications = new PublicationGate(
+        input,
+        provisionalPlaybackFailure
+      );
+      let candidate: ProvisionalPlayer;
+      try {
+        candidate = await selectPlayer(
+          publications.input,
+          deadline,
+          publications,
+          state
+        );
+      } catch (error) {
+        publications.discard();
+        throw error;
+      }
+      try {
+        await input.onCandidate?.(candidate.player);
+        if (candidate.requiresQualification) {
+          await candidate.player.prepare();
+          deadline.complete();
+          candidate.player.adoptPreparationParent(deadline);
+        }
+        publications.commit();
+        return candidate.player;
+      } catch (error) {
+        publications.discard();
+        let snapshot: Readonly<PlayerSnapshot> | null = null;
+        let snapshotFailure = false;
+        let snapshotError: unknown;
+        try {
+          snapshot = candidate.player.snapshot(false);
+          state.decoderDiagnostics = mergePlayerDecoderDiagnostics(
+            state.decoderDiagnostics,
+            snapshot.decoderDiagnostics
+          );
+        } catch (caught) {
+          snapshotFailure = true;
+          snapshotError = caught;
+        }
+        let disposalFailure = false;
+        let disposalError: unknown;
+        try { await candidate.player.dispose(); }
+        catch (caught) {
+          disposalFailure = true;
+          disposalError = caught;
+        }
+        if (disposalFailure) throw disposalError;
+        if (snapshotFailure || snapshot === null) throw snapshotError;
+        if (
+          deadline.timedOut || input.signal.aborted ||
+          !retryableStartupFailure(error, snapshot, candidate)
+        ) throw error;
+        const code = playbackErrorFailureCode(error) ?? "worker-decode-failure";
+        state.lastRejectionCode = code;
+        state.reports.push(candidateReport(
+          candidate.rendition.id,
+          candidate.rank,
+          code
+        ));
+      }
+    }
   } catch (error) {
     const timedOut = deadline.timedOut && !input.signal.aborted;
     deadline.dispose();
     if (input.signal.aborted || isAbort(error) && !timedOut) throw error;
     throw input.onPlaybackFailure(
-      timedOut ? "watchdog-timeout" : selectionFailureCode(error),
+      timedOut
+        ? "watchdog-timeout"
+        : playbackErrorFailureCode(error) ?? selectionFailureCode(error),
       "prepare"
     );
   }
@@ -129,16 +222,22 @@ export async function createPlayer(
 async function selectPlayer(
   input: Readonly<PlayerInput>,
   deadline: PreparationDeadline,
-  publications: PublicationGate
-): Promise<Player> {
+  publications: PublicationGate,
+  state: SelectionState
+): Promise<ProvisionalPlayer> {
   if (input.sources.length === 0) throw new TypeError("AVAL requires a source");
   let retained: Asset | null = null;
   let unavailable: CandidateRejectionReason = "codec-unsupported";
-  const reports: Readonly<CandidateReport>[] = [];
-  let selectionDecoderDiagnostics: readonly Readonly<PlayerDecoderDiagnostic>[] =
-    Object.freeze([]);
-  for (const [inputIndex, source] of input.sources.entries()) {
+  for (
+    let inputIndex = state.cursor.sourceInputIndex;
+    inputIndex < input.sources.length;
+    inputIndex += 1
+  ) {
+    const source = input.sources[inputIndex]!;
     const sourceIndex = source.sourceIndex ?? inputIndex;
+    const firstRenditionIndex = inputIndex === state.cursor.sourceInputIndex
+      ? state.cursor.renditionIndex
+      : 0;
     deadline.signal.throwIfAborted();
     if (retained !== null) {
       await retained.dispose();
@@ -158,27 +257,48 @@ async function selectPlayer(
       asset.manifest.renditions.length === 0) {
       retained = asset;
       unavailable = "no-video-rendition";
+      state.lastRejectionCode = "unsupported-profile";
+      state.cursor = Object.freeze({
+        sourceInputIndex: inputIndex + 1,
+        renditionIndex: 0
+      });
       continue;
     }
     const first = asset.manifest.renditions[0]!;
-    const firstRank = reports.length;
+    const firstRank = state.reports.length;
     if (deadline.timedOut) {
       await asset.dispose();
       reportResourceBytes(input, null);
       throw preparationTimeout();
     }
     if (!input.visible) {
-      return new PlayerImpl(
-        input, asset, first, sourceIndex, selectionDecoderDiagnostics, null, null,
+      const player = new PlayerImpl(
+        input, asset, first, sourceIndex, state.decoderDiagnostics, null, null,
         deadline, publications, "visibility-suspended",
-        reports, firstRank
+        state.reports, firstRank
       );
+      return Object.freeze({
+        player,
+        publications,
+        sourceIndex,
+        rendition: first,
+        rank: firstRank,
+        requiresQualification: false
+      });
     }
     if (reduced(input.motion, input.reduced)) {
-      return new PlayerImpl(
-        input, asset, first, sourceIndex, selectionDecoderDiagnostics, null, null,
-        deadline, publications, "reduced-motion", reports, firstRank
+      const player = new PlayerImpl(
+        input, asset, first, sourceIndex, state.decoderDiagnostics, null, null,
+        deadline, publications, "reduced-motion", state.reports, firstRank
       );
+      return Object.freeze({
+        player,
+        publications,
+        sourceIndex,
+        rendition: first,
+        rank: firstRank,
+        requiresQualification: false
+      });
     }
     if (input.platform.Worker === null || input.platform.VideoDecoder === null ||
       input.platform.VideoFrame === null) {
@@ -187,14 +307,27 @@ async function selectPlayer(
       throw unsupportedProfileError();
     }
     if (!input.decoderReady()) {
-      return new PlayerImpl(
-        input, asset, first, sourceIndex, selectionDecoderDiagnostics, null, null,
-        deadline, publications, "decoder-queued", reports, firstRank
+      const player = new PlayerImpl(
+        input, asset, first, sourceIndex, state.decoderDiagnostics, null, null,
+        deadline, publications, "decoder-queued", state.reports, firstRank
       );
+      return Object.freeze({
+        player,
+        publications,
+        sourceIndex,
+        rendition: first,
+        rank: firstRank,
+        requiresQualification: false
+      });
     }
-    for (const rendition of asset.manifest.renditions) {
+    for (
+      let renditionIndex = firstRenditionIndex;
+      renditionIndex < asset.manifest.renditions.length;
+      renditionIndex += 1
+    ) {
+      const rendition = asset.manifest.renditions[renditionIndex]!;
       deadline.signal.throwIfAborted();
-      const rank = reports.length;
+      const rank = state.reports.length;
       let plan: Readonly<ReadinessPlan>;
       try {
         plan = createReadinessPlan(
@@ -269,8 +402,8 @@ async function selectPlayer(
         clearTimeout: input.platform.clearTimeout
       });
       const disposeDecoders = (): void => {
-        selectionDecoderDiagnostics = mergePlayerDecoderDiagnostics(
-          selectionDecoderDiagnostics,
+        state.decoderDiagnostics = mergePlayerDecoderDiagnostics(
+          state.decoderDiagnostics,
           publishDecoderDiagnostics(
             input,
             decoders.snapshot().decoderDiagnostics,
@@ -296,7 +429,8 @@ async function selectPlayer(
       if (!supported) {
         disposeDecoders();
         unavailable = "codec-unsupported";
-        reports.push(candidateReport(rendition.id, rank, unavailable));
+        state.lastRejectionCode = "unsupported-profile";
+        state.reports.push(candidateReport(rendition.id, rank, unavailable));
         continue;
       }
       let renderer: Renderer;
@@ -342,24 +476,54 @@ async function selectPlayer(
           throw error;
         }
         unavailable = "resource-budget";
-        reports.push(candidateReport(rendition.id, rank, unavailable));
+        state.lastRejectionCode = "resource-rejection";
+        state.reports.push(candidateReport(rendition.id, rank, unavailable));
         continue;
       }
+      const nextRenditionIndex = renditionIndex + 1;
+      state.cursor = nextRenditionIndex < asset.manifest.renditions.length
+        ? Object.freeze({ sourceInputIndex: inputIndex, renditionIndex: nextRenditionIndex })
+        : Object.freeze({ sourceInputIndex: inputIndex + 1, renditionIndex: 0 });
+      let candidateDeadline: PreparationDeadline;
+      try {
+        candidateDeadline = deadline.fork(CANDIDATE_PREPARE_MS);
+      } catch (error) {
+        disposeDecoders();
+        renderer.dispose();
+        rendererRef = null;
+        await asset.dispose();
+        reportResourceBytes(input, null);
+        throw error;
+      }
       const player = new PlayerImpl(
-        input, asset, rendition, sourceIndex, selectionDecoderDiagnostics,
-        decoders, renderer, deadline, publications, null, reports, rank
+        input, asset, rendition, sourceIndex, state.decoderDiagnostics,
+        decoders, renderer, candidateDeadline, publications, null,
+        state.reports, rank
       );
       contextChange = (state) => player.contextChanged(state);
-      return player;
+      return Object.freeze({
+        player,
+        publications,
+        sourceIndex,
+        rendition,
+        rank,
+        requiresQualification: true
+      });
     }
+    state.cursor = Object.freeze({
+      sourceInputIndex: inputIndex + 1,
+      renditionIndex: 0
+    });
   }
-  if (retained === null) throw new Error("No AVAL source is available");
+  if (retained === null) throw new SelectionExhaustedError(state.lastRejectionCode);
   const rendition = retained.manifest.renditions[0];
   await retained.dispose();
   reportResourceBytes(input, null);
   if (rendition === undefined) throw new Error("Invalid AVAL asset");
-  if (unavailable === "resource-budget") throw resourceBudgetError();
-  throw unsupportedProfileError();
+  if (unavailable === "resource-budget") {
+    throw new SelectionExhaustedError("resource-rejection");
+  }
+  throw new SelectionExhaustedError(state.lastRejectionCode);
 }
 
 class PlayerImpl implements Player {
@@ -376,6 +540,7 @@ class PlayerImpl implements Player {
   readonly #reportCurrent: boolean;
   #decoders: DecoderPool | null;
   #renderer: Renderer | null;
+  #preparationParent: PreparationDeadline | null = null;
   #retiredRenderer: Renderer | null = null;
   readonly #validator: CodecValidator;
   #staticReason: StaticReason | null;
@@ -413,6 +578,7 @@ class PlayerImpl implements Player {
   #failed = false;
   #prepared = false;
   #activated = false;
+  #published = false;
   #busy = false;
   #raf: number | null = null;
   #deadline = 0;
@@ -533,23 +699,47 @@ class PlayerImpl implements Player {
     }
   }
 
-  public activate(): void {
-    if (this.#activated || this.#disposed) return;
-    this.#installGraph();
-    this.#activated = true;
+  public activate(options: Readonly<{ publish?: boolean }> = {}): void {
+    if (this.#disposed || this.#failed) return;
+    if (!this.#activated) {
+      this.#installGraph();
+      this.#activated = true;
+    }
+    if (options.publish !== false) this.publish();
+  }
+
+  public publish(): void {
+    if (!this.#activated || this.#published || this.#disposed || this.#failed) return;
     this.#publications.activate();
+    if (this.#disposed || this.#failed) return;
+    this.#published = true;
+    if (this.#prepared) this.#resetClock();
+    this.#schedule();
+  }
+
+  public adoptPreparationParent(parent: PreparationDeadline): void {
+    if (this.#preparationParent !== null || this.#disposed) {
+      throw new Error("AVAL preparation parent ownership is invalid");
+    }
+    this.#preparationParent = parent;
   }
 
   public prepare(options: Readonly<{
     signal?: AbortSignal;
     timeoutMs?: number;
   }> = {}): Promise<PrepareResult> {
+    if (this.#terminalWork !== null) {
+      return limit(
+        this.#terminalWork.then((error) => Promise.reject(error)),
+        options.signal,
+        options.timeoutMs,
+        this.#input.platform
+      );
+    }
     if (this.#preparation === null) {
       this.#preparation = this.#prepareBounded();
     }
-    const operation = this.#terminalWork === null
-      ? Promise.race([this.#preparation, this.#terminalSignal])
-      : this.#terminalWork.then((error) => Promise.reject(error));
+    const operation = Promise.race([this.#preparation, this.#terminalSignal]);
     return limit(operation, options.signal, options.timeoutMs, this.#input.platform);
   }
 
@@ -776,6 +966,8 @@ class PlayerImpl implements Player {
         this.#contextRestored
       );
       this.#preparationDeadline.dispose();
+      this.#preparationParent?.dispose();
+      this.#preparationParent = null;
       this.#cancelFrame();
       const graph = this.#graph;
       if (graph !== null && graph.snapshot().readiness !== "disposed") {
@@ -886,6 +1078,7 @@ class PlayerImpl implements Player {
 
   async #performRecovery(reason: StaticReason): Promise<PrepareResult> {
     if (this.#disposed) throw abortError();
+    if (!this.#published) this.#publications.discardAnimatedPresentation();
     this.#staticReason = reason;
     this.#cancelFrame();
     const graph = this.#installGraph();
@@ -1116,7 +1309,8 @@ class PlayerImpl implements Player {
     const graph = this.#graph;
     const snapshot = graph?.snapshot();
     if (
-      this.#disposed || this.#failed || this.#paused || !this.#visible ||
+      !this.#activated || !this.#published || this.#disposed || this.#failed ||
+      this.#paused || !this.#visible ||
       this.#staticReason !== null || this.#raf !== null || graph === null ||
       snapshot?.readiness !== "animated" || !this.#needsTick(snapshot)
     ) return;
@@ -1915,6 +2109,7 @@ class PlayerImpl implements Player {
     this.#terminalWork = work;
     void work.catch(() => undefined);
     this.#failed = true;
+    if (!this.#published) this.#publications.discard();
     this.#animationGeneration += 1;
     void this.#finishTerminal(code, operation).then(
       resolveTerminal,
@@ -2140,7 +2335,7 @@ function assertCandidateBudget(
 function candidateReport(
   rendition: string,
   rank: number,
-  reason: StaticReason | CandidateRejectionReason | null
+  reason: StaticReason | CandidateRejectionReason | RuntimeFailureCode | null
 ) {
   if (reason === null) {
     return Object.freeze({ rendition, rank, outcome: "selected" as const, failure: null });
@@ -2149,9 +2344,11 @@ function candidateReport(
     reason === "decoder-queued") {
     return Object.freeze({ rendition, rank, outcome: "eligible" as const, failure: null });
   }
-  const code = reason === "resource-budget"
-    ? "resource-rejection" as const
-    : "unsupported-profile" as const;
+  const code: RuntimeFailureCode = reason === "resource-budget"
+    ? "resource-rejection"
+    : reason === "codec-unsupported" || reason === "no-video-rendition"
+      ? "unsupported-profile"
+      : reason;
   return Object.freeze({
     rendition,
     rank,
@@ -2168,6 +2365,74 @@ type CandidateRejectionReason =
   | "codec-unsupported"
   | "no-video-rendition"
   | "resource-budget";
+
+class SelectionExhaustedError extends Error {
+  public readonly failureCode: RuntimeFailureCode;
+
+  public constructor(failureCode: RuntimeFailureCode) {
+    super("No AVAL source completed startup qualification");
+    this.name = "NotSupportedError";
+    this.failureCode = failureCode;
+  }
+}
+
+function provisionalPlaybackFailure(
+  code: RuntimeFailureCode,
+  operation: string
+): AvalPlaybackError {
+  return new AvalPlaybackError(Object.freeze({
+    code,
+    message: `AVAL provisional candidate failed (${code})`,
+    operation
+  }), 1);
+}
+
+function playbackErrorFailureCode(error: unknown): RuntimeFailureCode | null {
+  if (error instanceof SelectionExhaustedError) return error.failureCode;
+  if (!(error instanceof AvalPlaybackError)) return null;
+  return isRuntimeFailureCode(error.failure.code) ? error.failure.code : null;
+}
+
+function retryableStartupFailure(
+  error: unknown,
+  snapshot: Readonly<PlayerSnapshot>,
+  candidate: Readonly<Pick<
+    ProvisionalPlayer,
+    "sourceIndex" | "rendition"
+  >>
+): boolean {
+  if (
+    playbackErrorFailureCode(error) !== "worker-decode-failure" ||
+    (snapshot.cleanupFailureCount ?? 0) !== 0
+  ) return false;
+  return snapshot.decoderDiagnostics.some((diagnostic) => {
+    if (
+      diagnostic.sourceIndex !== candidate.sourceIndex ||
+      diagnostic.rendition !== candidate.rendition.id ||
+      diagnostic.codec !== candidate.rendition.codec
+    ) return false;
+    if (diagnostic.code === "invalid-output") return true;
+    if (
+      diagnostic.code === "unsupported-config" &&
+      (diagnostic.phase === "configure" || diagnostic.phase === "decode" ||
+        diagnostic.phase === "flush" || diagnostic.phase === "output-validation")
+    ) return true;
+    const exception = diagnostic.exception?.name;
+    return (exception === "EncodingError" || exception === "NotSupportedError") &&
+      (diagnostic.phase === "configure" || diagnostic.phase === "decode" ||
+        diagnostic.phase === "flush" || diagnostic.phase === "output-validation");
+  });
+}
+
+function isRuntimeFailureCode(value: unknown): value is RuntimeFailureCode {
+  return value === "invalid-asset" || value === "load-failure" ||
+    value === "range-response-invalid" || value === "entity-changed" ||
+    value === "integrity-mismatch" || value === "unsupported-profile" ||
+    value === "resource-rejection" || value === "readiness-failure" ||
+    value === "worker-decode-failure" || value === "renderer-failure" ||
+    value === "context-loss" || value === "watchdog-timeout" ||
+    value === "underflow" || value === "abort" || value === "disposed";
+}
 
 function abortError(): Error {
   return new DOMException("AVAL operation was superseded", "AbortError");
@@ -2221,21 +2486,29 @@ function limit<T>(
 class PreparationDeadline {
   readonly #controller = new AbortController();
   readonly #parent: AbortSignal;
-  readonly #platform: Pick<PlayerInput["platform"], "setTimeout" | "clearTimeout">;
+  readonly #platform: Pick<
+    PlayerInput["platform"],
+    "setTimeout" | "clearTimeout" | "now"
+  >;
   readonly #parentAbort: () => void;
+  readonly #expiresAt: number;
   #timer: number | undefined;
   public timedOut = false;
 
   public constructor(
     parent: AbortSignal,
     timeoutMs = PREPARE_MS,
-    platform: Pick<PlayerInput["platform"], "setTimeout" | "clearTimeout">
+    platform: Pick<
+      PlayerInput["platform"],
+      "setTimeout" | "clearTimeout" | "now"
+    >
   ) {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > PREPARE_MS) {
       throw new RangeError("AVAL preparation timeout is invalid");
     }
     this.#parent = parent;
     this.#platform = platform;
+    this.#expiresAt = platform.now() + timeoutMs;
     this.#parentAbort = () => this.#controller.abort(parent.reason);
     if (parent.aborted) this.#parentAbort();
     else parent.addEventListener("abort", this.#parentAbort, { once: true });
@@ -2248,6 +2521,18 @@ class PreparationDeadline {
   }
 
   public get signal(): AbortSignal { return this.#controller.signal; }
+
+  public remainingMs(): number {
+    return Math.max(0, Math.ceil(this.#expiresAt - this.#platform.now()));
+  }
+
+  public fork(maximumMs: number): PreparationDeadline {
+    const timeoutMs = Math.min(maximumMs, this.remainingMs());
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+      throw preparationTimeout();
+    }
+    return new PreparationDeadline(this.signal, timeoutMs, this.#platform);
+  }
 
   public complete(): void {
     if (this.#timer !== undefined) this.#platform.clearTimeout(this.#timer);
@@ -2387,40 +2672,69 @@ function mergePlayerDecoderDiagnostics(
   incoming: readonly Readonly<PlayerDecoderDiagnostic>[]
 ): readonly Readonly<PlayerDecoderDiagnostic>[] {
   if (incoming.length === 0) return current;
-  const byLane = new Map(
-    current.map((diagnostic) => [diagnostic.lane, diagnostic] as const)
+  const bySourceLane = new Map(
+    current.map((diagnostic) => [
+      `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`,
+      diagnostic
+    ] as const)
   );
-  for (const diagnostic of incoming.slice(0, 2)) {
-    byLane.set(diagnostic.lane, diagnostic);
+  for (const diagnostic of incoming) {
+    bySourceLane.set(
+      `${String(diagnostic.sourceIndex)}:${String(diagnostic.lane)}`,
+      diagnostic
+    );
   }
   return Object.freeze(
-    [...byLane.values()]
-      .sort((left, right) => left.lane - right.lane)
-      .slice(0, 2)
+    [...bySourceLane.values()]
+      .sort((left, right) =>
+        left.sourceIndex - right.sourceIndex || left.lane - right.lane
+      )
+      .slice(-MAX_RETAINED_DECODER_DIAGNOSTICS)
   );
 }
 
 class PublicationGate {
   public readonly input: Readonly<PlayerInput>;
-  readonly #pending: Array<() => void> = [];
+  readonly #targetPlaybackFailure: PlayerInput["onPlaybackFailure"];
+  readonly #pending: Array<Readonly<{
+    kind: "animated-readiness" | "draw" | "other";
+    operation: () => void;
+  }>> = [];
+  #playbackFailure: PlayerInput["onPlaybackFailure"];
   #active = false;
+  #discarded = false;
   #flushing = false;
 
-  public constructor(target: Readonly<PlayerInput>) {
-    const publish = (operation: () => void): void => {
+  public constructor(
+    target: Readonly<PlayerInput>,
+    playbackFailure: PlayerInput["onPlaybackFailure"] = target.onPlaybackFailure
+  ) {
+    this.#targetPlaybackFailure = target.onPlaybackFailure;
+    this.#playbackFailure = playbackFailure;
+    const publish = (
+      operation: () => void,
+      kind: "animated-readiness" | "draw" | "other" = "other"
+    ): void => {
+      if (this.#discarded) return;
       if (this.#active && !this.#flushing) operation();
-      else this.#pending.push(operation);
+      else this.#pending.push(Object.freeze({ kind, operation }));
     };
     this.input = Object.freeze({
       ...target,
-      onResourceBytes: (bytes: number) => publish(() => target.onResourceBytes(bytes)),
+      // Resource accounting is lifecycle authority, not a public candidate
+      // publication. It must remain current while provisional players qualify.
+      onResourceBytes: (bytes: number) => target.onResourceBytes(bytes),
       onMetadata: (metadata: Readonly<Metadata>) =>
         publish(() => target.onMetadata(metadata)),
-      onReadiness: (value: string, reason?: string) =>
-        publish(() => target.onReadiness(value, reason)),
+      onReadiness: (value: string, reason?: string) => publish(
+        () => target.onReadiness(value, reason),
+        value === "visualReady" || value === "interactiveReady"
+          ? "animated-readiness"
+          : "other"
+      ),
       onAnimationResourcesRetired: () =>
         publish(() => target.onAnimationResourcesRetired()),
-      onDraw: () => publish(() => target.onDraw()),
+      onDraw: () => publish(() => target.onDraw(), "draw"),
       onRestart: (state: string) => publish(() => target.onRestart(state)),
       onEvent: (type: string, detail: Readonly<Record<string, unknown>>) =>
         publish(() => target.onEvent(type, detail)),
@@ -2433,7 +2747,7 @@ class PublicationGate {
       onPlaybackFailure: (
         code: Parameters<PlayerInput["onPlaybackFailure"]>[0],
         operation: string
-      ) => target.onPlaybackFailure(code, operation),
+      ) => this.#playbackFailure(code, operation),
       onDecoderDiagnostics: (
         diagnostics: readonly Readonly<PlayerDecoderDiagnostic>[]
       ) =>
@@ -2442,14 +2756,36 @@ class PublicationGate {
   }
 
   public activate(): void {
-    if (this.#active) return;
+    if (this.#active || this.#discarded) return;
     this.#active = true;
     this.#flushing = true;
     try {
-      while (this.#pending.length > 0) this.#pending.shift()!();
+      while (this.#pending.length > 0) {
+        this.#pending.shift()!.operation();
+      }
     } finally {
       this.#flushing = false;
     }
+  }
+
+  public commit(): void {
+    if (this.#discarded) return;
+    this.#playbackFailure = this.#targetPlaybackFailure;
+  }
+
+  public discardAnimatedPresentation(): void {
+    if (this.#active || this.#discarded) return;
+    const retained = this.#pending.filter(({ kind }) =>
+      kind !== "animated-readiness" && kind !== "draw"
+    );
+    this.#pending.length = 0;
+    this.#pending.push(...retained);
+  }
+
+  public discard(): void {
+    if (this.#active || this.#discarded) return;
+    this.#discarded = true;
+    this.#pending.length = 0;
   }
 }
 

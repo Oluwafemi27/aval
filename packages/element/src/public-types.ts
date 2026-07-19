@@ -255,7 +255,7 @@ export interface AvalDiagnosticsCounters {
   readonly cleanup: number;
 }
 
-/** Bounded, byte-free evidence for the first terminal failure on one decoder lane. */
+/** Bounded, byte-free latest terminal evidence for one source and decoder lane. */
 export interface AvalDecoderDiagnostic {
   readonly sourceGeneration: number;
   readonly sourceIndex: number;

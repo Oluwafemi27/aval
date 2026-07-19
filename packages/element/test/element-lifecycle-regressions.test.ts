@@ -6,7 +6,7 @@ import type {
   PlayerInput,
   PlayerSnapshot
 } from "../src/player-contract.js";
-import type { AvalElement } from "../src/public-types.js";
+import type { AvalElement, Binding } from "../src/public-types.js";
 import { AvalPlaybackError } from "../src/errors.js";
 
 const harness = vi.hoisted(() => ({
@@ -20,7 +20,9 @@ const harness = vi.hoisted(() => ({
   deferredFailures: [] as DeferredFailure[],
   deferredDisposals: [] as Array<() => void>,
   participants: new Set<BrokerParticipant>(),
-  tickets: [] as BrokerTicket[]
+  tickets: [] as BrokerTicket[],
+  bindings: [] as Binding[],
+  operations: [] as string[]
 }));
 
 vi.mock("../src/page-resources.js", () => ({
@@ -88,7 +90,9 @@ vi.mock("../src/player.js", () => ({
       initialState: "idle",
       stateNames: Object.freeze(["idle", "hover"]),
       eventNames: Object.freeze([]),
-      bindings: Object.freeze([]),
+      bindings: Object.freeze(harness.bindings.map((binding) =>
+        Object.freeze({ ...binding })
+      )),
       canvas: Object.freeze({
         width: 16,
         height: 16,
@@ -134,33 +138,39 @@ vi.mock("../src/player.js", () => ({
       }),
       trace: Object.freeze([])
     });
+    const publish = () => {
+      harness.operations.push("publish");
+      input.onMetadata(metadata);
+      input.onReadiness("metadataReady");
+      input.onEvent("requestedstatechange", Object.freeze({
+        from: state,
+        to: state,
+        sequence: 0,
+        isTransitioning: false
+      }));
+      input.onEvent("visualstatechange", Object.freeze({
+        from: state,
+        to: state,
+        isTransitioning: false
+      }));
+      if (failPrepare) return;
+      if (granted) {
+        input.onReadiness("visualReady");
+        input.onReadiness("interactiveReady");
+        input.onDraw();
+      } else {
+        input.onReadiness("staticReady", "decoder-queued");
+        input.onAnimationResourcesRetired();
+      }
+    };
     const player: TestPlayer = {
       metadata,
-      activate: () => {
-        input.onMetadata(metadata);
-        input.onReadiness("metadataReady");
-        input.onEvent("requestedstatechange", Object.freeze({
-          from: state,
-          to: state,
-          sequence: 0,
-          isTransitioning: false
-        }));
-        input.onEvent("visualstatechange", Object.freeze({
-          from: state,
-          to: state,
-          isTransitioning: false
-        }));
-        if (failPrepare) return;
-        if (granted) {
-          input.onReadiness("visualReady");
-          input.onReadiness("interactiveReady");
-          input.onDraw();
-        } else {
-          input.onReadiness("staticReady", "decoder-queued");
-          input.onAnimationResourcesRetired();
-        }
+      activate: (options = {}) => {
+        if (options.publish !== false) publish();
       },
+      publish,
       prepare: () => {
+        harness.operations.push("prepare");
         if (deferPrepareFailure) {
           return new Promise((_, reject) => {
             harness.deferredFailures.push({
@@ -204,12 +214,20 @@ vi.mock("../src/player.js", () => ({
         }));
       },
       canSend: () => false,
-      send: () => false,
+      send: (event) => {
+        harness.operations.push(`send:${event}`);
+        return true;
+      },
       readyFor: () => true,
       pause: () => undefined,
       resume: async () => undefined,
       setMotion: async () => undefined,
-      suspend: async () => suspendedResult(),
+      suspend: async () => {
+        animationRetired = true;
+        input.onReadiness("staticReady", "visibility-suspended");
+        input.onAnimationResourcesRetired();
+        return suspendedResult();
+      },
       setVisibility: () => undefined,
       resize: () => undefined,
       snapshot,
@@ -255,6 +273,7 @@ vi.mock("../src/player.js", () => ({
     };
     harness.inputs.push(input);
     harness.players.push(player);
+    await input.onCandidate?.(player);
     return player;
   }
 }));
@@ -279,11 +298,40 @@ afterEach(async () => {
   harness.deferredFailures.length = 0;
   harness.deferredDisposals.length = 0;
   harness.tickets.length = 0;
+  harness.bindings.length = 0;
+  harness.operations.length = 0;
   FakeMutationObserver.instances.length = 0;
   await settleMicrotasks();
 });
 
 describe("element lifecycle regressions", () => {
+  it("reconciles initial input and visibility bindings before qualification", async () => {
+    harness.brokerMode = "immediate";
+    harness.bindings.push(
+      { source: "pointer.leave", event: "pointer-idle" },
+      { source: "focus.out", event: "focus-idle" },
+      { source: "engagement.off", event: "disengaged" },
+      { source: "visible", event: "became-visible" }
+    );
+    const { element } = createConnectedElement("motion.avl");
+
+    await element.prepare();
+
+    const prepare = harness.operations.indexOf("prepare");
+    const publish = harness.operations.indexOf("publish");
+    for (const event of [
+      "pointer-idle",
+      "focus-idle",
+      "disengaged",
+      "became-visible"
+    ]) {
+      const sent = harness.operations.indexOf(`send:${event}`);
+      expect.soft(sent, event).toBeGreaterThanOrEqual(0);
+      expect.soft(sent, event).toBeLessThan(prepare);
+    }
+    expect.soft(prepare).toBeLessThan(publish);
+  });
+
   it("retains one canonical playback error until a newer source generation", async () => {
     harness.brokerMode = "immediate";
     harness.failNextPrepare = true;
@@ -358,6 +406,14 @@ describe("element lifecycle regressions", () => {
   it("retires an active failed generation before publishing one retained error", async () => {
     harness.brokerMode = "immediate";
     const { element, source } = createConnectedElement("motion.avl");
+    const fallbackSource = new FakeElement("source", source.ownerDocument);
+    fallbackSource.parentElement = element as unknown as FakeHTMLElement;
+    fallbackSource.setAttribute("src", "motion-vp9.avl");
+    fallbackSource.setAttribute(
+      "type",
+      'application/vnd.aval; codecs="vp09.00.21.08.01.01.01.01.00"'
+    );
+    (element as AvalElement & FakeHTMLElement).childElements.push(fallbackSource);
     await element.prepare();
     const player = playerAt(0);
     const rejectedProbe: Readonly<PlayerDecoderDiagnostic> = Object.freeze({
@@ -376,13 +432,27 @@ describe("element lifecycle regressions", () => {
       }),
       firstFrame: null
     });
+    const laterRejectedProbe: Readonly<PlayerDecoderDiagnostic> = Object.freeze({
+      ...rejectedProbe,
+      sourceIndex: 1,
+      rendition: "vp9",
+      codec: "vp09.00.21.08.01.01.01.01.00"
+    });
     inputAt(0).onDecoderDiagnostics?.(Object.freeze([rejectedProbe]));
+    inputAt(0).onDecoderDiagnostics?.(Object.freeze([laterRejectedProbe]));
     inputAt(0).onDecoderDiagnostics?.(Object.freeze([]));
     expect(element.getDiagnostics().runtime.decoderDiagnostics).toMatchObject([
       {
         sourceGeneration: 1,
         lane: 1,
         rendition: "av1",
+        code: "unsupported-config"
+      },
+      {
+        sourceGeneration: 1,
+        sourceIndex: 1,
+        lane: 1,
+        rendition: "vp9",
         code: "unsupported-config"
       }
     ]);
@@ -442,6 +512,23 @@ describe("element lifecycle regressions", () => {
               message: "decoder configuration is unsupported"
             },
             firstFrame: null
+          },
+          {
+            sourceGeneration: 1,
+            sourceIndex: 1,
+            rendition: "vp9",
+            codec: "vp09.00.21.08.01.01.01.01.00",
+            unit: null,
+            lane: 1,
+            phase: "probe",
+            code: "unsupported-config",
+            run: null,
+            decodeOrdinal: null,
+            exception: {
+              name: "NotSupportedError",
+              message: "decoder configuration is unsupported"
+            },
+            firstFrame: null
           }
         ]
       }
@@ -449,11 +536,12 @@ describe("element lifecycle regressions", () => {
     const capturedAtEvent = diagnosticsAtEvent as unknown as ReturnType<
       AvalElement["getDiagnostics"]
     >;
-    const [diagnosticAtEvent, probeAtEvent] =
+    const [diagnosticAtEvent, probeAtEvent, laterProbeAtEvent] =
       capturedAtEvent.runtime.decoderDiagnostics;
     expect(Object.isFrozen(diagnosticAtEvent)).toBe(true);
     expect(Object.isFrozen(diagnosticAtEvent?.exception)).toBe(true);
     expect(Object.isFrozen(probeAtEvent)).toBe(true);
+    expect(Object.isFrozen(laterProbeAtEvent)).toBe(true);
     await expect(element.prepare()).rejects.toBe(error);
     expect(events).toHaveLength(1);
 
@@ -461,7 +549,8 @@ describe("element lifecycle regressions", () => {
     expect(element.getDiagnostics().outstanding.player).toBe(0);
     expect(element.getDiagnostics().runtime.decoderDiagnostics).toEqual([
       diagnosticAtEvent,
-      probeAtEvent
+      probeAtEvent,
+      laterProbeAtEvent
     ]);
 
     source.setAttribute("src", "replacement.avl");
@@ -846,7 +935,10 @@ class FakeWindow extends EventTarget {
   public readonly Worker = class {};
   public readonly VideoDecoder = class {};
   public readonly VideoFrame = class {};
-  public readonly crypto = {} as Crypto;
+  public readonly isSecureContext = true;
+  public readonly crypto = {
+    subtle: { digest: () => Promise.resolve(new ArrayBuffer(32)) }
+  } as unknown as Crypto;
   public readonly performance = globalThis.performance;
   public readonly devicePixelRatio = 1;
   public readonly fetch = async (): Promise<Response> => ({} as Response);
