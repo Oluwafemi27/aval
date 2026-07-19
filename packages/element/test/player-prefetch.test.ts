@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AvalPlaybackError } from "../src/errors.js";
+import {
+  createRendererFailureDiagnostic,
+  RendererFailureError,
+  type RendererFailureDiagnostic
+} from "../src/renderer-diagnostics.js";
+import type { RendererContextChange } from "../src/renderer.js";
+import type { PlayerRendererDiagnostic } from "../src/player-contract.js";
 
 const media = vi.hoisted(() => ({
   runs: [] as Array<{
@@ -21,6 +28,11 @@ const media = vi.hoisted(() => ({
   rendererDisposeCalls: 0,
   rendererSettlementHold: null as Promise<void> | null,
   rendererSettlementReached: null as (() => void) | null,
+  rendererContextChange: null as
+    ((change: Readonly<RendererContextChange>) => void) | null,
+  rendererFailureError: null as RendererFailureError | null,
+  rendererConstructionFailureError: null as RendererFailureError | null,
+  rendererDiagnostic: null as Readonly<RendererFailureDiagnostic> | null,
   decoderFailures: [] as Array<{
     promise: Promise<never>;
     reject: (reason: unknown) => void;
@@ -312,6 +324,21 @@ vi.mock("../src/decoder.js", () => ({
 
 vi.mock("../src/renderer.js", () => ({
   Renderer: class {
+    public constructor(
+      _canvas: HTMLCanvasElement,
+      _layout: unknown,
+      limits: Readonly<{
+        onContextChange?: (change: Readonly<RendererContextChange>) => void;
+      }> = {}
+    ) {
+      media.rendererContextChange = limits.onContextChange ?? null;
+      const failure = media.rendererConstructionFailureError;
+      if (failure !== null) {
+        media.rendererConstructionFailureError = null;
+        media.rendererDiagnostic = failure.diagnostic;
+        throw failure;
+      }
+    }
     public admit() { return { textureBytes: 3, runtimeBytes: 5 }; }
     public snapshot() {
       return {
@@ -330,10 +357,21 @@ vi.mock("../src/renderer.js", () => ({
         pendingOperations: 0,
         sourceCopiesInFlight: 0,
         resourceCount: 4,
-        contextListenerCount: 2
+        contextListenerCount: 2,
+        failure: media.rendererDiagnostic
       };
     }
     public async draw(frame: { index: number; runId: number }): Promise<void> {
+      const failure = media.rendererFailureError;
+      if (failure !== null) {
+        media.rendererFailureError = null;
+        media.rendererDiagnostic = failure.diagnostic;
+        queueMicrotask(() => media.rendererContextChange?.(Object.freeze({
+          state: "error",
+          error: failure
+        })));
+        throw failure;
+      }
       media.operations.push(
         `draw:${String(frame.runId)}:${String(frame.index)}`
       );
@@ -364,8 +402,13 @@ afterEach(() => {
   media.rendererDisposeCalls = 0;
   media.rendererSettlementHold = null;
   media.rendererSettlementReached = null;
+  media.rendererContextChange = null;
+  media.rendererFailureError = null;
+  media.rendererConstructionFailureError = null;
+  media.rendererDiagnostic = null;
   media.decoderFailures.length = 0;
   media.decoderDiagnostics.length = 0;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -592,7 +635,12 @@ describe("player multi-route prefetch", () => {
     const candidate = lastRun(300)!;
     media.decoderFailures[candidate.lane]!.reject(new Error("candidate decode failed"));
     await eventually(() => playbackFailures.length === 1);
-    (player as unknown as { contextChanged(state: "error"): void }).contextChanged("error");
+    (player as unknown as {
+      contextChanged(change: Readonly<RendererContextChange>): void;
+    }).contextChanged(Object.freeze({
+      state: "error",
+      error: rendererFailureError()
+    }));
 
     await expect(request).rejects.toBe(terminal);
     expect(retired).toBe(true);
@@ -619,11 +667,161 @@ describe("player multi-route prefetch", () => {
     await player.dispose();
   });
 
+  it("publishes a typed renderer constructor cause before cleanup", async () => {
+    vi.stubGlobal("Worker", class {});
+    vi.stubGlobal("VideoDecoder", class {});
+    const failure = rendererFailureError("context-create", "construct");
+    media.rendererConstructionFailureError = failure;
+    const terminal = new AvalPlaybackError(Object.freeze({
+      code: "renderer-failure",
+      message: "Playback could not continue.",
+      operation: "prepare"
+    }), 2);
+    const playbackFailures: string[] = [];
+    const rendererDiagnostics: Readonly<PlayerRendererDiagnostic>[] = [];
+
+    await expect(createPlayer({
+      canvas: new EventTarget() as HTMLCanvasElement,
+      platform: testPlatform(),
+      initialPresentation: { width: 16, height: 16, dpr: 1, fit: null },
+      baseUrl: "https://example.test/",
+      sources: [{ src: "motion.avl", codec: "avc1.640020", integrity: "" }],
+      credentials: "same-origin",
+      signal: new AbortController().signal,
+      preparationTimeoutMs: 5_000,
+      motion: "full",
+      reduced: false,
+      initialState: null,
+      initialBody: false,
+      visible: true,
+      decoderReady: () => true,
+      onResourceBytes: () => undefined,
+      onMetadata: () => undefined,
+      onReadiness: () => undefined,
+      onAnimationResourcesRetired: () => undefined,
+      onDraw: () => undefined,
+      onRestart: () => undefined,
+      onEvent: () => undefined,
+      onFailure: () => undefined,
+      onPlaybackFailure: (code, operation) => {
+        playbackFailures.push(`${code}:${operation}`);
+        return terminal;
+      },
+      onRendererDiagnostics: (diagnostics) => {
+        rendererDiagnostics.push(...diagnostics);
+      }
+    })).rejects.toBe(terminal);
+
+    expect(playbackFailures).toEqual(["renderer-failure:prepare"]);
+    expect(rendererDiagnostics).toHaveLength(1);
+    expect(rendererDiagnostics[0]).toMatchObject({
+      sourceIndex: 0,
+      rendition: "main",
+      codec: "avc1.640020",
+      phase: "context-create",
+      operation: "construct"
+    });
+    expect(Object.isFrozen(rendererDiagnostics[0])).toBe(true);
+    expect(Object.isFrozen(rendererDiagnostics[0]?.layout)).toBe(true);
+  });
+
+  it("retains one renderer cause when callback and draw rejection race", async () => {
+    const frames: FrameRequestCallback[] = [];
+    const { player, terminal, observations } = await createReadyTerminalPlayer(
+      "renderer-failure",
+      "render",
+      frames
+    );
+    const failure = rendererFailureError();
+    media.rendererFailureError = failure;
+
+    await driveFrames(frames, () => observations.playbackFailures.length === 1);
+
+    expect(observations.playbackFailures).toEqual(["renderer-failure:render"]);
+    expect(observations.rendererDiagnostics).toHaveLength(1);
+    const [published] = observations.rendererDiagnostics;
+    expect(published).toMatchObject({
+      sourceIndex: 0,
+      rendition: "main",
+      codec: "avc1.640020",
+      phase: "rgba-copy",
+      operation: "runtime",
+      operationOrdinal: 4,
+      exception: {
+        name: "EncodingError",
+        message: "synthetic renderer copy failed"
+      },
+      glError: null,
+      contextLost: false,
+      uploadPath: "rgba-copy"
+    });
+    expect(Object.isFrozen(published)).toBe(true);
+    expect(Object.isFrozen(published?.layout)).toBe(true);
+    expect(Object.isFrozen(published?.bytes)).toBe(true);
+    await expect(player.prepare()).rejects.toBe(terminal);
+    await player.settled();
+    expect(player.snapshot(false).rendererDiagnostics).toHaveLength(1);
+    expect(player.snapshot(false).rendererDiagnostics[0]).toBe(published);
+    expect(observations.retirements).toBe(1);
+    await player.dispose();
+  });
+
+  it("keeps renderer context loss recoverable until restoration", async () => {
+    const { player, observations } = await createReadyTerminalPlayer(
+      "renderer-failure",
+      "render"
+    );
+
+    (player as unknown as {
+      contextChanged(change: Readonly<RendererContextChange>): void;
+    }).contextChanged(Object.freeze({ state: "lost", error: null }));
+
+    expect(observations.playbackFailures).toEqual([]);
+    expect(observations.failures).toEqual(["context-loss:render:false"]);
+    expect(observations.rendererDiagnostics).toEqual([]);
+    expect(player.snapshot(false)).toMatchObject({
+      contextLossCount: 1,
+      contextRecoveryCount: 0
+    });
+
+    (player as unknown as {
+      contextChanged(change: Readonly<RendererContextChange>): void;
+    }).contextChanged(Object.freeze({ state: "restored", error: null }));
+
+    expect(observations.playbackFailures).toEqual([]);
+    expect(observations.restarts).toHaveLength(1);
+    expect(player.snapshot(false)).toMatchObject({
+      contextLossCount: 1,
+      contextRecoveryCount: 1
+    });
+    await player.dispose();
+  });
+
+  it("terminates a real context loss when bounded restoration expires", async () => {
+    vi.useFakeTimers();
+    const { player, observations } = await createReadyTerminalPlayer(
+      "context-loss",
+      "render"
+    );
+
+    (player as unknown as {
+      contextChanged(change: Readonly<RendererContextChange>): void;
+    }).contextChanged(Object.freeze({ state: "lost", error: null }));
+    await vi.advanceTimersByTimeAsync(5_000);
+    await eventually(() => observations.playbackFailures.length === 1);
+
+    expect(observations.failures).toEqual(["context-loss:render:false"]);
+    expect(observations.playbackFailures).toEqual(["context-loss:render"]);
+    expect(observations.rendererDiagnostics).toEqual([]);
+    await player.settled();
+    await player.dispose();
+  });
+
   it.each(["setState", "resume"] as const)(
     "rejects a %s continuation when terminal work starts after prepare resolves",
     async (operation) => {
       const { player, terminal, observations } = await createReadyTerminalPlayer(
-        "context-loss",
+        "renderer-failure",
         "render"
       );
       if (operation === "resume") player.pause();
@@ -633,14 +831,17 @@ describe("player multi-route prefetch", () => {
       void pending.catch(() => undefined);
 
       (player as unknown as {
-        contextChanged(state: "error"): void;
-      }).contextChanged("error");
+        contextChanged(change: Readonly<RendererContextChange>): void;
+      }).contextChanged(Object.freeze({
+        state: "error",
+        error: rendererFailureError()
+      }));
 
       await expect(pending).rejects.toBe(terminal);
       await expect(player.prepare()).rejects.toBe(terminal);
       await player.settled();
       expect(observations.playbackFailures).toEqual([
-        "context-loss:render"
+        "renderer-failure:render"
       ]);
       expect(observations.retirements).toBe(1);
       expect(media.assetDisposeCalls).toBe(1);
@@ -805,8 +1006,11 @@ describe("player multi-route prefetch", () => {
       releaseCleanup = resolve;
     });
     (player as unknown as {
-      contextChanged(state: "error"): void;
-    }).contextChanged("error");
+      contextChanged(change: Readonly<RendererContextChange>): void;
+    }).contextChanged(Object.freeze({
+      state: "error",
+      error: rendererFailureError()
+    }));
     await cleanupReached;
     const pending = player.prepare();
     controller.abort(new DOMException("source replaced", "AbortError"));
@@ -1307,6 +1511,61 @@ function testPlatform() {
   };
 }
 
+function rendererFailureError(
+  phase: Readonly<RendererFailureDiagnostic>["phase"] = "rgba-copy",
+  operation: Readonly<RendererFailureDiagnostic>["operation"] = "runtime"
+): RendererFailureError {
+  return new RendererFailureError(createRendererFailureDiagnostic({
+    phase,
+    operation,
+    operationOrdinal: 4,
+    reason: new DOMException("synthetic renderer copy failed", "EncodingError"),
+    glError: null,
+    contextLost: false,
+    uploadPath: phase === "rgba-copy" ? "rgba-copy" : null,
+    textureOrdinal: null,
+    layout: {
+      codedWidth: 16,
+      codedHeight: 16,
+      storageWidth: 16,
+      storageHeight: 16,
+      logicalWidth: 16,
+      logicalHeight: 16
+    },
+    backing: { width: 16, height: 16 },
+    bytes: {
+      stagingBytes: 1_024,
+      residentBytes: 0,
+      textureBytes: 3_840,
+      backingBytes: 1_280,
+      runtimeBytes: 6_144,
+      maxTextureBytes: 16_000_000,
+      maxBackingBytes: 16_000_000,
+      maxRuntimeBytes: 16_000_000
+    },
+    limits: {
+      maxTextureSize: 8_192,
+      maxViewportWidth: 8_192,
+      maxViewportHeight: 8_192,
+      maxResidentTextures: 4_096
+    },
+    contextAttributes: {
+      alpha: true,
+      antialias: false,
+      depth: false,
+      desynchronized: true,
+      failIfMajorPerformanceCaveat: false,
+      powerPreference: "default",
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: false,
+      stencil: false,
+      xrCompatible: false
+    },
+    vendor: "Synthetic Vendor",
+    renderer: "Synthetic Renderer"
+  }));
+}
+
 function defaultPlaybackFailure(
   code: ConstructorParameters<typeof AvalPlaybackError>[0]["code"],
   operation: string
@@ -1320,11 +1579,15 @@ function defaultPlaybackFailure(
 
 async function createReadyTerminalPlayer(
   code: ConstructorParameters<typeof AvalPlaybackError>[0]["code"],
-  operation: string
+  operation: string,
+  frames?: FrameRequestCallback[]
 ) {
   vi.stubGlobal("Worker", class {});
   vi.stubGlobal("VideoDecoder", class {});
-  vi.stubGlobal("requestAnimationFrame", () => 1);
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    if (frames !== undefined) frames.push(callback);
+    return frames?.length ?? 1;
+  });
   vi.stubGlobal("cancelAnimationFrame", () => undefined);
   const terminal = new AvalPlaybackError(Object.freeze({
     code,
@@ -1333,7 +1596,10 @@ async function createReadyTerminalPlayer(
   }), 1);
   const observations = {
     playbackFailures: [] as string[],
-    retirements: 0
+    failures: [] as string[],
+    retirements: 0,
+    restarts: [] as string[],
+    rendererDiagnostics: [] as Readonly<PlayerRendererDiagnostic>[]
   };
   const player = await createPlayer({
     canvas: new EventTarget() as HTMLCanvasElement,
@@ -1355,9 +1621,16 @@ async function createReadyTerminalPlayer(
     onReadiness: () => undefined,
     onAnimationResourcesRetired: () => { observations.retirements += 1; },
     onDraw: () => undefined,
-    onRestart: () => undefined,
+    onRestart: (state) => { observations.restarts.push(state); },
     onEvent: () => undefined,
-    onFailure: () => undefined,
+    onFailure: (actualCode, actualOperation, fatal) => {
+      observations.failures.push(
+        `${actualCode}:${actualOperation}:${String(fatal)}`
+      );
+    },
+    onRendererDiagnostics: (diagnostics) => {
+      observations.rendererDiagnostics.push(...diagnostics);
+    },
     onPlaybackFailure: (actualCode, actualOperation) => {
       observations.playbackFailures.push(`${actualCode}:${actualOperation}`);
       return terminal;

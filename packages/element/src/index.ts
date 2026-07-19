@@ -19,6 +19,7 @@ export {
   type AvalPrepareOptions,
   type AvalPublicFailure,
   type AvalReadinessChangeDetail,
+  type AvalRendererDiagnostic,
   type AvalRequestedStateChangeDetail,
   type AvalRuntimeMediaCursor,
   type AvalRuntimeTraceRecord,

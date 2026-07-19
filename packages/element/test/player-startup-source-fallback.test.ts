@@ -571,7 +571,7 @@ describe("player startup source fallback", () => {
     expect(startup.opens).toEqual(["av1"]);
     expect(removeListener.mock.calls.filter(([type]) =>
       type === "webglcontextrestored"
-    )).toHaveLength(2);
+    )).toHaveLength(0);
     expect(harness.publications.playbackFailures).toEqual([
       "renderer-failure:prepare"
     ]);

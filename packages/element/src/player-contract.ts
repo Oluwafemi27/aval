@@ -7,6 +7,7 @@ import type {
 import type { AvalPlaybackError } from "./errors.js";
 import type { DecoderFailureDiagnostic } from "./decoder-diagnostics.js";
 import type { DecoderPoolLaneId } from "./decoder-pool.js";
+import type { RendererFailureDiagnostic } from "./renderer-diagnostics.js";
 
 export interface Source {
   readonly src: string;
@@ -45,6 +46,12 @@ export interface PlayerDecoderDiagnostic extends DecoderFailureDiagnostic {
   }>;
 }
 
+export interface PlayerRendererDiagnostic extends RendererFailureDiagnostic {
+  readonly sourceIndex: number;
+  readonly rendition: string;
+  readonly codec: string;
+}
+
 export interface PlayerSnapshot {
   readonly requestedState: string | null;
   readonly visualState: string | null;
@@ -66,6 +73,7 @@ export interface PlayerSnapshot {
   readonly contextRecoveryCount: number;
   readonly cleanupFailureCount?: number;
   readonly decoderDiagnostics: readonly Readonly<PlayerDecoderDiagnostic>[];
+  readonly rendererDiagnostics: readonly Readonly<PlayerRendererDiagnostic>[];
   readonly presentation: Readonly<{
     cssWidth: number;
     cssHeight: number;
@@ -162,5 +170,8 @@ export interface PlayerInput {
   ) => AvalPlaybackError;
   readonly onDecoderDiagnostics?: (
     diagnostics: readonly Readonly<PlayerDecoderDiagnostic>[]
+  ) => void;
+  readonly onRendererDiagnostics?: (
+    diagnostics: readonly Readonly<PlayerRendererDiagnostic>[]
   ) => void;
 }

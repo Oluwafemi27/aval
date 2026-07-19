@@ -372,6 +372,92 @@ export interface AvalDecoderDiagnostic {
   readonly outputFailure: Readonly<AvalDecoderOutputFailureDiagnostic> | null;
 }
 
+export interface AvalRendererDiagnosticLayout {
+  readonly codedWidth: number;
+  readonly codedHeight: number;
+  readonly storageWidth: number;
+  readonly storageHeight: number;
+  readonly logicalWidth: number;
+  readonly logicalHeight: number;
+}
+
+export interface AvalRendererDiagnosticBacking {
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface AvalRendererDiagnosticBytes {
+  readonly stagingBytes: number;
+  readonly residentBytes: number;
+  readonly textureBytes: number;
+  readonly backingBytes: number;
+  readonly runtimeBytes: number;
+  readonly maxTextureBytes: number;
+  readonly maxBackingBytes: number;
+  readonly maxRuntimeBytes: number;
+}
+
+export interface AvalRendererDiagnosticLimits {
+  readonly maxTextureSize: number;
+  readonly maxViewportWidth: number;
+  readonly maxViewportHeight: number;
+  readonly maxResidentTextures: number;
+}
+
+export interface AvalRendererDiagnosticContextAttributes {
+  readonly alpha: boolean | null;
+  readonly antialias: boolean | null;
+  readonly depth: boolean | null;
+  readonly desynchronized: boolean | null;
+  readonly failIfMajorPerformanceCaveat: boolean | null;
+  readonly powerPreference: "default" | "high-performance" | "low-power" | null;
+  readonly premultipliedAlpha: boolean | null;
+  readonly preserveDrawingBuffer: boolean | null;
+  readonly stencil: boolean | null;
+  readonly xrCompatible: boolean | null;
+}
+
+/** Bounded, byte-free latest terminal renderer evidence for one source. */
+export interface AvalRendererDiagnostic {
+  readonly sourceGeneration: number;
+  readonly sourceIndex: number;
+  readonly rendition: string;
+  readonly codec: string;
+  readonly phase:
+    | "backing-admission"
+    | "context-create"
+    | "capability-query"
+    | "device-limits"
+    | "program-create"
+    | "stream-texture-create"
+    | "resident-texture-create"
+    | "native-upload"
+    | "semantic-upload"
+    | "rgba-copy"
+    | "rgba-upload"
+    | "draw"
+    | "resize"
+    | "context-event";
+  readonly operation: "construct" | "runtime" | "restore";
+  readonly operationOrdinal: number;
+  readonly exception: Readonly<{
+    readonly name: string;
+    readonly message: string;
+  }> | null;
+  readonly glError: number | null;
+  readonly contextLost: boolean;
+  readonly uploadPath: "native" | "rgba-copy" | null;
+  readonly textureOrdinal: number | null;
+  readonly layout: Readonly<AvalRendererDiagnosticLayout>;
+  readonly backing: Readonly<AvalRendererDiagnosticBacking>;
+  readonly bytes: Readonly<AvalRendererDiagnosticBytes>;
+  readonly limits: Readonly<AvalRendererDiagnosticLimits>;
+  readonly contextAttributes:
+    Readonly<AvalRendererDiagnosticContextAttributes> | null;
+  readonly vendor: string | null;
+  readonly renderer: string | null;
+}
+
 /**
  * Immutable terminal ownership proof for the most recently retired source.
  * Participant-scoped fields must reach zero even when other elements still
@@ -486,6 +572,7 @@ export interface AvalDiagnostics {
     contextRecoveryCount: number;
     cleanupFailureCount: number;
     decoderDiagnostics: readonly Readonly<AvalDecoderDiagnostic>[];
+    rendererDiagnostics: readonly Readonly<AvalRendererDiagnostic>[];
   }>;
   readonly motion: Readonly<{
     configured: AvalMotion;

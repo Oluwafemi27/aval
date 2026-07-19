@@ -289,6 +289,7 @@ function runtime(
     contextLossCount: 0,
     contextRecoveryCount: 0,
     decoderDiagnostics: Object.freeze([]),
+    rendererDiagnostics: Object.freeze([]),
     presentation: Object.freeze({
       cssWidth: 0,
       cssHeight: 0,

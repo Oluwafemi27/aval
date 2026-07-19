@@ -45,12 +45,19 @@ import type {
   Player,
   PlayerDecoderDiagnostic,
   PlayerInput,
+  PlayerRendererDiagnostic,
   PlayerSnapshot
 } from "./player-contract.js";
 import {
   Renderer,
-  type RenderLayout
+  type RenderLayout,
+  type RendererContextChange,
+  type RendererSnapshot
 } from "./renderer.js";
+import {
+  RendererFailureError,
+  type RendererFailureDiagnostic
+} from "./renderer-diagnostics.js";
 import { AvalPlaybackError } from "./errors.js";
 import type {
   AvalRuntimeTraceRecord,
@@ -118,7 +125,9 @@ interface StateRequest {
 
 const PREPARE_MS = 5_000;
 const CANDIDATE_PREPARE_MS = 2_500;
+const CONTEXT_RESTORE_MS = 5_000;
 const MAX_RETAINED_DECODER_DIAGNOSTICS = 16;
+const MAX_RETAINED_RENDERER_DIAGNOSTICS = 16;
 type AdvanceOutcome = "progressed" | "waiting-route";
 
 const COLOR = Object.freeze({
@@ -435,7 +444,7 @@ async function selectPlayer(
       }
       let renderer: Renderer;
       let contextChange:
-        ((state: "lost" | "restored" | "error") => void) | null = null;
+        ((change: Readonly<RendererContextChange>) => void) | null = null;
       try {
         const maxRuntimeBytes = asset.manifest.limits.maxRuntimeBytes;
         renderer = new Renderer(input.canvas, layout, {
@@ -444,7 +453,7 @@ async function selectPlayer(
           maxRuntimeBytes,
           setTimeout: input.platform.setTimeout,
           clearTimeout: input.platform.clearTimeout,
-          onContextChange: (state) => contextChange?.(state),
+          onContextChange: (change) => contextChange?.(change),
           initialPresentation: {
             width: input.initialPresentation.width,
             height: input.initialPresentation.height,
@@ -454,6 +463,14 @@ async function selectPlayer(
         });
         rendererRef = renderer;
       } catch (error) {
+        if (error instanceof RendererFailureError) {
+          publishRendererDiagnostics(
+            input,
+            Object.freeze([error.diagnostic]),
+            sourceIndex,
+            rendition
+          );
+        }
         disposeDecoders();
         rendererRef?.dispose();
         rendererRef = null;
@@ -500,7 +517,7 @@ async function selectPlayer(
         decoders, renderer, candidateDeadline, publications, null,
         state.reports, rank
       );
-      contextChange = (state) => player.contextChanged(state);
+      contextChange = (change) => player.contextChanged(change);
       return Object.freeze({
         player,
         publications,
@@ -592,6 +609,7 @@ class PlayerImpl implements Player {
   #incidents = 0;
   #inUnderflow = false;
   #awaitingContextRestore = false;
+  #contextRestoreTimer: number | null = null;
   #restartRequested = false;
   #contextLosses = 0;
   #contextRecoveries = 0;
@@ -601,6 +619,9 @@ class PlayerImpl implements Player {
   #decoderDiagnostics: readonly Readonly<PlayerDecoderDiagnostic>[];
   #capturedPoolDiagnostics: readonly Readonly<DecoderPoolDiagnostic>[] =
     Object.freeze([]);
+  #rendererDiagnostics: readonly Readonly<PlayerRendererDiagnostic>[] =
+    Object.freeze([]);
+  #capturedRendererDiagnostic: Readonly<RendererFailureDiagnostic> | null = null;
   readonly #decoderUnitByLane: [
     Readonly<{
       logicalRunId: number;
@@ -613,7 +634,6 @@ class PlayerImpl implements Player {
       role: "foreground" | "candidate";
     }> | null
   ] = [null, null];
-  readonly #contextRestored: () => void;
 
   public constructor(
     input: Readonly<PlayerInput>,
@@ -675,14 +695,6 @@ class PlayerImpl implements Player {
       onFailure: (error) => this.#fail(error)
     });
     this.#visible = input.visible;
-    this.#contextRestored = () => {
-      if (!this.#awaitingContextRestore || this.#disposed) return;
-      this.#awaitingContextRestore = false;
-      this.#contextRecoveries += 1;
-      const state = this.#graph?.snapshot().requestedState;
-      if (state !== null && state !== undefined) this.#input.onRestart(state);
-    };
-    input.canvas.addEventListener("webglcontextrestored", this.#contextRestored);
     const eventNames = [...new Set(this.#edges.flatMap((edge) =>
       edge.trigger?.type === "event" ? [edge.trigger.name] : []
     ))];
@@ -870,19 +882,39 @@ class PlayerImpl implements Player {
     else this.#cancelFrame();
   }
 
-  public contextChanged(state: "lost" | "restored" | "error"): void {
-    if (this.#disposed || this.#failed || this.#staticReason !== null) return;
-    if (state === "restored") {
-      this.#contextRestored();
+  public contextChanged(change: Readonly<RendererContextChange>): void {
+    if (change.state === "error") {
+      this.#clearContextRestoreTimer();
+      if (this.#disposed || this.#staticReason !== null) return;
+      this.#captureRendererDiagnostic(change.error.diagnostic);
+      if (!this.#failed) this.#fail(change.error);
       return;
     }
-    if (state === "lost") {
+    if (this.#disposed || this.#failed || this.#staticReason !== null) return;
+    if (change.state === "lost") {
+      if (this.#awaitingContextRestore) return;
       this.#awaitingContextRestore = true;
       this.#contextLosses += 1;
       this.#cancelFrame();
+      this.#input.onFailure("context-loss", "render", false);
+      this.#contextRestoreTimer = this.#input.platform.setTimeout(() => {
+        this.#contextRestoreTimer = null;
+        if (
+          !this.#awaitingContextRestore ||
+          this.#disposed ||
+          this.#failed ||
+          this.#staticReason !== null
+        ) return;
+        void this.#terminate("context-loss", "render");
+      }, CONTEXT_RESTORE_MS);
       return;
     }
-    void this.#terminate("context-loss", "render");
+    if (!this.#awaitingContextRestore) return;
+    this.#clearContextRestoreTimer();
+    this.#awaitingContextRestore = false;
+    this.#contextRecoveries += 1;
+    const state = this.#graph?.snapshot().requestedState;
+    if (state !== null && state !== undefined) this.#input.onRestart(state);
   }
 
   public resize(width: number, height: number, dpr: number, fit: string): void {
@@ -892,9 +924,12 @@ class PlayerImpl implements Player {
       renderer.resize(width, height, dpr, fit);
       this.#reportResourceBytes();
     } catch (error) {
+      if (error instanceof RendererFailureError) {
+        this.#captureRendererDiagnostic(error.diagnostic);
+      }
       void this.#terminate(
         admissionFailure(error) ? "resource-rejection" : playbackFailureCode(error),
-        "resize"
+        rendererFailureOperation(error, "resize")
       );
     }
   }
@@ -908,7 +943,8 @@ class PlayerImpl implements Player {
       decoderDiagnostics: Object.freeze([])
     };
     this.#captureDecoderDiagnostics(decoders.decoderDiagnostics);
-    const presentation = (this.#renderer ?? this.#retiredRenderer)?.snapshot() ?? {
+    const rendererSnapshot: Readonly<RendererSnapshot> =
+      (this.#renderer ?? this.#retiredRenderer)?.snapshot() ?? Object.freeze({
       cssWidth: 0,
       cssHeight: 0,
       backingWidth: 0,
@@ -924,8 +960,12 @@ class PlayerImpl implements Player {
       pendingOperations: 0,
       sourceCopiesInFlight: 0,
       resourceCount: 0,
-      contextListenerCount: 0
-    };
+      contextListenerCount: 0,
+      failure: null
+    });
+    this.#captureRendererDiagnostic(rendererSnapshot.failure);
+    const { failure: _rendererFailure, ...presentationValues } = rendererSnapshot;
+    const presentation = Object.freeze(presentationValues);
     const graph = this.#graph?.snapshot();
     return Object.freeze({
       requestedState: graph?.requestedState ?? null,
@@ -951,6 +991,7 @@ class PlayerImpl implements Player {
       ),
       cleanupFailureCount: this.#cleanupFailureCount,
       decoderDiagnostics: this.#decoderDiagnostics,
+      rendererDiagnostics: this.#rendererDiagnostics,
       presentation,
       trace: trace ? Object.freeze([...this.#trace]) : Object.freeze([])
     });
@@ -968,11 +1009,9 @@ class PlayerImpl implements Player {
   public async dispose(): Promise<void> {
     if (!this.#disposed) {
       this.#disposed = true;
+      this.#clearContextRestoreTimer();
+      this.#awaitingContextRestore = false;
       this.#animationGeneration += 1;
-      this.#input.canvas.removeEventListener(
-        "webglcontextrestored",
-        this.#contextRestored
-      );
       this.#preparationDeadline.dispose();
       this.#preparationParent?.dispose();
       this.#preparationParent = null;
@@ -1227,6 +1266,8 @@ class PlayerImpl implements Player {
   }
 
   async #performAnimationResourceRetirement(): Promise<void> {
+    this.#clearContextRestoreTimer();
+    this.#awaitingContextRestore = false;
     this.#cancelFrame();
     this.#preparationDeadline.cancel(abortError());
     const active = this.#active;
@@ -1245,6 +1286,9 @@ class PlayerImpl implements Player {
       ...this.#resident.values(),
       ...(renderer === null ? [] : [renderer.settled()])
     ]);
+    if (renderer !== null) {
+      this.#captureRendererDiagnostic(renderer.snapshot().failure);
+    }
     const decoders = this.#decoders;
     if (decoders !== null) {
       this.#captureDecoderDiagnostics(decoders.snapshot().decoderDiagnostics);
@@ -1274,6 +1318,13 @@ class PlayerImpl implements Player {
       this.#renderer,
       true
     );
+  }
+
+  #clearContextRestoreTimer(): void {
+    const timer = this.#contextRestoreTimer;
+    if (timer === null) return;
+    this.#contextRestoreTimer = null;
+    this.#input.platform.clearTimeout(timer);
   }
 
   #hasResident(unit: string, frame: number): boolean {
@@ -1955,6 +2006,23 @@ class PlayerImpl implements Player {
     });
   }
 
+  #captureRendererDiagnostic(
+    diagnostic: Readonly<RendererFailureDiagnostic> | null
+  ): void {
+    if (
+      diagnostic === null ||
+      diagnostic === this.#capturedRendererDiagnostic ||
+      this.#rendererDiagnostics.length > 0
+    ) return;
+    this.#capturedRendererDiagnostic = diagnostic;
+    this.#rendererDiagnostics = publishRendererDiagnostics(
+      this.#input,
+      Object.freeze([diagnostic]),
+      this.#sourceIndex,
+      this.#rendition
+    );
+  }
+
   #ensureResident(unit: Unit): Promise<void> {
     if (this.#residentReady.has(unit.id)) return Promise.resolve();
     const existing = this.#resident.get(unit.id);
@@ -2127,7 +2195,13 @@ class PlayerImpl implements Player {
       this.#animationResourceRetirement !== null ||
       this.#animationResourcesRetired
     )) return;
-    void this.#terminate(playbackFailureCode(reason), "playback");
+    if (reason instanceof RendererFailureError) {
+      this.#captureRendererDiagnostic(reason.diagnostic);
+    }
+    void this.#terminate(
+      playbackFailureCode(reason),
+      rendererFailureOperation(reason, "playback")
+    );
   }
 
   #terminate(
@@ -2158,11 +2232,11 @@ class PlayerImpl implements Player {
     operation: string
   ): Promise<AvalPlaybackError> {
     this.#cancelFrame();
+    this.#clearContextRestoreTimer();
     this.#awaitingContextRestore = false;
-    this.#input.canvas.removeEventListener(
-      "webglcontextrestored",
-      this.#contextRestored
-    );
+    if (this.#renderer !== null) {
+      this.#captureRendererDiagnostic(this.#renderer.snapshot().failure);
+    }
     if (this.#decoders !== null) {
       this.#captureDecoderDiagnostics(
         this.#decoders.snapshot().decoderDiagnostics
@@ -2615,6 +2689,7 @@ function admissionFailure(error: unknown): boolean {
 }
 
 function playbackFailureCode(reason: unknown): "renderer-failure" | "worker-decode-failure" {
+  if (reason instanceof RendererFailureError) return "renderer-failure";
   const message = errorString(reason, "message") ?? "";
   return /canvas|context|draw|renderer|texture|viewport|webgl/i.test(message)
     ? "renderer-failure"
@@ -2623,6 +2698,7 @@ function playbackFailureCode(reason: unknown): "renderer-failure" | "worker-deco
 
 function preparationFailureCode(reason: unknown):
   "readiness-failure" | "renderer-failure" | "worker-decode-failure" {
+  if (reason instanceof RendererFailureError) return "renderer-failure";
   const message = errorString(reason, "message") ?? "";
   if (/canvas|context|draw|renderer|texture|viewport|webgl/i.test(message)) {
     return "renderer-failure";
@@ -2642,6 +2718,7 @@ function selectionFailureCode(reason: unknown):
   | "unsupported-profile" {
   const name = errorString(reason, "name") ?? "";
   const message = errorString(reason, "message") ?? "";
+  if (reason instanceof RendererFailureError) return "renderer-failure";
   if (name === "NotSupportedError") return "unsupported-profile";
   if (admissionFailure(reason)) return "resource-rejection";
   if (/canvas|context|draw|renderer|texture|viewport|webgl/i.test(message)) {
@@ -2652,6 +2729,16 @@ function selectionFailureCode(reason: unknown):
   }
   if (/invalid aval|manifest|asset/i.test(message)) return "invalid-asset";
   return "readiness-failure";
+}
+
+function rendererFailureOperation(
+  reason: unknown,
+  fallback: string
+): string {
+  if (!(reason instanceof RendererFailureError)) return fallback;
+  if (reason.diagnostic.operation === "restore") return "restore";
+  if (reason.diagnostic.phase === "resize") return "resize";
+  return reason.diagnostic.operation === "construct" ? "prepare" : "render";
 }
 
 function policyReason(reason: StaticReason | null): reason is
@@ -2734,6 +2821,29 @@ function mergePlayerDecoderDiagnostics(
   );
 }
 
+function publishRendererDiagnostics(
+  input: Readonly<PlayerInput>,
+  diagnostics: readonly Readonly<RendererFailureDiagnostic>[],
+  sourceIndex: number,
+  rendition: Readonly<Rendition>
+): readonly Readonly<PlayerRendererDiagnostic>[] {
+  const enriched = Object.freeze(
+    diagnostics.slice(-MAX_RETAINED_RENDERER_DIAGNOSTICS).map((diagnostic) =>
+      Object.freeze({
+        ...diagnostic,
+        sourceIndex,
+        rendition: rendition.id,
+        codec: rendition.codec
+      }) satisfies Readonly<PlayerRendererDiagnostic>
+    )
+  );
+  if (enriched.length > 0) {
+    try { input.onRendererDiagnostics?.(enriched); }
+    catch { /* diagnostics cannot replace the playback outcome */ }
+  }
+  return enriched;
+}
+
 const EMPTY_DECODER_GRAPH_DIAGNOSTIC = Object.freeze({
   requestedState: null,
   visualState: null,
@@ -2799,7 +2909,11 @@ class PublicationGate {
       onDecoderDiagnostics: (
         diagnostics: readonly Readonly<PlayerDecoderDiagnostic>[]
       ) =>
-        target.onDecoderDiagnostics?.(diagnostics)
+        target.onDecoderDiagnostics?.(diagnostics),
+      onRendererDiagnostics: (
+        diagnostics: readonly Readonly<PlayerRendererDiagnostic>[]
+      ) =>
+        target.onRendererDiagnostics?.(diagnostics)
     });
   }
 

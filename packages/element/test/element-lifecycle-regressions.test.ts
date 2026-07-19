@@ -4,6 +4,7 @@ import type {
   Player,
   PlayerDecoderDiagnostic,
   PlayerInput,
+  PlayerRendererDiagnostic,
   PlayerSnapshot
 } from "../src/player-contract.js";
 import type { AvalElement, Binding } from "../src/public-types.js";
@@ -86,6 +87,7 @@ vi.mock("../src/player.js", () => ({
     let animationRetired = false;
     let disposal: Promise<void> | null = null;
     let decoderDiagnostics: readonly Readonly<PlayerDecoderDiagnostic>[] = Object.freeze([]);
+    let rendererDiagnostics: readonly Readonly<PlayerRendererDiagnostic>[] = Object.freeze([]);
     const metadata = Object.freeze({
       initialState: "idle",
       stateNames: Object.freeze(["idle", "hover"]),
@@ -120,6 +122,7 @@ vi.mock("../src/player.js", () => ({
       contextLossCount: 0,
       contextRecoveryCount: 0,
       decoderDiagnostics,
+      rendererDiagnostics,
       presentation: Object.freeze({
         cssWidth: disposed || animationRetired ? 0 : 16,
         cssHeight: disposed || animationRetired ? 0 : 16,
@@ -336,6 +339,68 @@ vi.mock("../src/player.js", () => ({
         animationRetired = true;
         input.onAnimationResourcesRetired();
         return input.onPlaybackFailure("worker-decode-failure", "playback");
+      },
+      failRendererActive: () => {
+        const diagnostic: Readonly<PlayerRendererDiagnostic> = Object.freeze({
+          sourceIndex: 0,
+          rendition: "main",
+          codec: "avc1.64001E",
+          phase: "rgba-copy",
+          operation: "runtime",
+          operationOrdinal: 7,
+          exception: Object.freeze({
+            name: "EncodingError",
+            message: "synthetic renderer copy failed"
+          }),
+          glError: null,
+          contextLost: false,
+          uploadPath: "rgba-copy",
+          textureOrdinal: null,
+          layout: Object.freeze({
+            codedWidth: 16,
+            codedHeight: 16,
+            storageWidth: 16,
+            storageHeight: 16,
+            logicalWidth: 16,
+            logicalHeight: 16
+          }),
+          backing: Object.freeze({ width: 16, height: 16 }),
+          bytes: Object.freeze({
+            stagingBytes: 1_024,
+            residentBytes: 0,
+            textureBytes: 3_840,
+            backingBytes: 1_280,
+            runtimeBytes: 6_144,
+            maxTextureBytes: 16_000_000,
+            maxBackingBytes: 16_000_000,
+            maxRuntimeBytes: 16_000_000
+          }),
+          limits: Object.freeze({
+            maxTextureSize: 8_192,
+            maxViewportWidth: 8_192,
+            maxViewportHeight: 8_192,
+            maxResidentTextures: 4_096
+          }),
+          contextAttributes: Object.freeze({
+            alpha: true,
+            antialias: false,
+            depth: false,
+            desynchronized: true,
+            failIfMajorPerformanceCaveat: false,
+            powerPreference: "default",
+            premultipliedAlpha: true,
+            preserveDrawingBuffer: false,
+            stencil: false,
+            xrCompatible: false
+          }),
+          vendor: "Synthetic Vendor",
+          renderer: "Synthetic Renderer"
+        });
+        rendererDiagnostics = Object.freeze([diagnostic]);
+        input.onRendererDiagnostics?.(rendererDiagnostics);
+        animationRetired = true;
+        input.onAnimationResourcesRetired();
+        return input.onPlaybackFailure("renderer-failure", "render");
       },
       disposed: () => disposed
     };
@@ -734,6 +799,66 @@ describe("element lifecycle regressions", () => {
     );
   });
 
+  it("retains one deeply frozen renderer cause until a newer source generation", async () => {
+    harness.brokerMode = "immediate";
+    const { element, source } = createConnectedElement("motion.avl");
+    await element.prepare();
+    const player = playerAt(0);
+    let diagnosticsAtEvent: ReturnType<AvalElement["getDiagnostics"]> | null = null;
+    element.addEventListener("error", () => {
+      diagnosticsAtEvent = element.getDiagnostics();
+    }, { once: true });
+
+    const error = player.failRendererActive();
+
+    expect(diagnosticsAtEvent).not.toBeNull();
+    const captured = diagnosticsAtEvent as unknown as ReturnType<
+      AvalElement["getDiagnostics"]
+    >;
+    const [playerDiagnostic] = player.snapshot(false).rendererDiagnostics;
+    const [publicDiagnostic] = captured.runtime.rendererDiagnostics;
+    expect(publicDiagnostic).toEqual({
+      ...playerDiagnostic,
+      sourceGeneration: 1
+    });
+    expect(publicDiagnostic).toMatchObject({
+      sourceGeneration: 1,
+      sourceIndex: 0,
+      rendition: "main",
+      codec: "avc1.64001E",
+      phase: "rgba-copy",
+      operation: "runtime",
+      operationOrdinal: 7,
+      exception: {
+        name: "EncodingError",
+        message: "synthetic renderer copy failed"
+      },
+      glError: null,
+      contextLost: false,
+      uploadPath: "rgba-copy"
+    });
+    expect(Object.isFrozen(captured.runtime.rendererDiagnostics)).toBe(true);
+    expectDeeplyFrozen(publicDiagnostic);
+    await expect(element.prepare()).rejects.toBe(error);
+
+    await eventually(() => player.disposed());
+    const diagnosticsAfterCleanup =
+      element.getDiagnostics().runtime.rendererDiagnostics;
+    expect(diagnosticsAfterCleanup).toHaveLength(1);
+    expect(diagnosticsAfterCleanup[0]).toBe(publicDiagnostic);
+
+    source.setAttribute("src", "replacement.avl");
+    FakeMutationObserver.instances[0]!.enqueue(attributeMutation(source));
+    await expect(element.prepare()).resolves.toMatchObject({ mode: "animated" });
+    const replacement = element.getDiagnostics();
+    expect(replacement.sourceGeneration).toBe(2);
+    expect(replacement.lastFailure).toBeNull();
+    expect(replacement.runtime.rendererDiagnostics).toEqual([]);
+    expect(replacement.runtime.rendererDiagnostics).not.toBe(
+      diagnosticsAfterCleanup
+    );
+  });
+
   it("does not let deferred terminal retirement cancel an error-listener replacement", async () => {
     harness.brokerMode = "immediate";
     const { element, source } = createConnectedElement("motion.avl");
@@ -870,6 +995,7 @@ interface DeferredFailure {
 
 interface TestPlayer extends Player {
   failActive(): AvalPlaybackError;
+  failRendererActive(): AvalPlaybackError;
   disposed(): boolean;
 }
 

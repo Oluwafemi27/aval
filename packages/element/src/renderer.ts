@@ -1,4 +1,13 @@
 import { sameAspectRatio } from "./media-geometry.js";
+import {
+  createRendererFailureDiagnostic,
+  RendererFailureError,
+  type RendererDiagnosticContextAttributes,
+  type RendererDiagnosticOperation,
+  type RendererDiagnosticPhase,
+  type RendererDiagnosticUploadPath,
+  type RendererFailureDiagnostic
+} from "./renderer-diagnostics.js";
 
 export interface RenderLayout {
   readonly codedWidth: number;
@@ -19,13 +28,38 @@ export interface RendererLimits {
   readonly copyTimeoutMs?: number;
   readonly setTimeout?: (callback: () => void, delay: number) => number;
   readonly clearTimeout?: (handle: number) => void;
-  readonly onContextChange?: (state: "lost" | "restored" | "error") => void;
+  readonly onContextChange?: (change: Readonly<RendererContextChange>) => void;
   readonly initialPresentation?: Readonly<{
     width: number;
     height: number;
     dpr: number;
     fit: string;
   }>;
+}
+
+export type RendererContextChange =
+  | Readonly<{ state: "lost"; error: null }>
+  | Readonly<{ state: "restored"; error: null }>
+  | Readonly<{ state: "error"; error: RendererFailureError }>;
+
+export interface RendererSnapshot {
+  readonly cssWidth: number;
+  readonly cssHeight: number;
+  readonly backingWidth: number;
+  readonly backingHeight: number;
+  readonly effectiveDprX: number;
+  readonly effectiveDprY: number;
+  readonly contextLossCount: number;
+  readonly contextRecoveryCount: number;
+  readonly stagingBytes: number;
+  readonly residentBytes: number;
+  readonly textureBytes: number;
+  readonly runtimeBytes: number;
+  readonly pendingOperations: number;
+  readonly sourceCopiesInFlight: number;
+  readonly resourceCount: number;
+  readonly contextListenerCount: number;
+  readonly failure: Readonly<RendererFailureDiagnostic> | null;
 }
 
 type State = "active" | "lost" | "error" | "disposed";
@@ -49,7 +83,8 @@ export class Renderer {
   readonly #copyTimeoutMs: number;
   readonly #setTimeout: (callback: () => void, delay: number) => number;
   readonly #clearTimeout: (handle: number) => void;
-  readonly #onContextChange: ((state: "lost" | "restored" | "error") => void) | undefined;
+  readonly #onContextChange:
+    ((change: Readonly<RendererContextChange>) => void) | undefined;
   readonly #resident = new Map<string, WebGLTexture>();
   readonly #reserved = new Set<string>();
   #staging: Uint8Array;
@@ -75,6 +110,12 @@ export class Renderer {
   #losses = 0;
   #recoveries = 0;
   #sourceCopiesInFlight = 0;
+  #operationSequence = 0;
+  #initializingTextureCount = 0;
+  #failureError: RendererFailureError | null = null;
+  #contextAttributes: Readonly<RendererDiagnosticContextAttributes> | null = null;
+  #vendor: string | null = null;
+  #rendererName: string | null = null;
 
   public constructor(
     canvas: HTMLCanvasElement,
@@ -128,12 +169,22 @@ export class Renderer {
     }
     const oldWidth = canvas.width;
     const oldHeight = canvas.height;
+    const operationOrdinal = this.#beginOperation();
     try {
       if (initial !== undefined) {
-        canvas.width = width;
-        canvas.height = height;
-        if (canvas.width !== width || canvas.height !== height) {
-          throw new Error("canvas rejected its exact backing dimensions");
+        try {
+          canvas.width = width;
+          canvas.height = height;
+          if (canvas.width !== width || canvas.height !== height) {
+            throw new Error("canvas rejected its exact backing dimensions");
+          }
+        } catch (reason) {
+          throw this.#failure(
+            "backing-admission",
+            "construct",
+            operationOrdinal,
+            reason
+          );
         }
         this.#cssWidth = Math.max(1, initial.width);
         this.#cssHeight = Math.max(1, initial.height);
@@ -144,7 +195,7 @@ export class Renderer {
       this.#staging = new Uint8Array(this.#storageBytesPerFrame);
       canvas.addEventListener("webglcontextlost", this.#lost);
       canvas.addEventListener("webglcontextrestored", this.#restored);
-      this.#initialize();
+      this.#initialize("construct", operationOrdinal);
     } catch (error) {
       canvas.removeEventListener("webglcontextlost", this.#lost);
       canvas.removeEventListener("webglcontextrestored", this.#restored);
@@ -176,11 +227,24 @@ export class Renderer {
     const dpr = Math.max(0.1, devicePixelRatio);
     const width = Math.max(1, Math.round(cssWidth * dpr));
     const height = Math.max(1, Math.round(cssHeight * dpr));
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
+      throw new RangeError("renderer backing dimensions are invalid");
+    }
+    const operationOrdinal = this.#beginOperation();
     if (
-      !Number.isSafeInteger(width) || !Number.isSafeInteger(height) ||
       width > this.#maxTextureSize || height > this.#maxTextureSize ||
       width > this.#maxViewportWidth || height > this.#maxViewportHeight
-    ) throw new RangeError("renderer backing dimensions exceed device limits");
+    ) {
+      const error = this.#failure(
+        "resize",
+        "runtime",
+        operationOrdinal,
+        new Error("renderer backing dimensions exceed device limits"),
+        { contextLost: this.#gl === null ? false : contextLost(this.#gl) }
+      );
+      this.#terminal(error);
+      throw error;
+    }
     const backingBytes = this.#backingBytes(width, height);
     this.#assertBudget(this.#resident.size + this.#reserved.size, backingBytes);
     const oldWidth = this.#canvas.width;
@@ -191,12 +255,18 @@ export class Renderer {
       if (this.#canvas.width !== width || this.#canvas.height !== height) {
         throw new Error("canvas rejected its exact backing dimensions");
       }
-    } catch (error) {
+    } catch (reason) {
       try {
         this.#canvas.width = oldWidth;
         this.#canvas.height = oldHeight;
       } catch { /* terminalized below */ }
-      this.#terminal();
+      const error = this.#failure(
+        "resize",
+        "runtime",
+        operationOrdinal,
+        reason
+      );
+      this.#terminal(error);
       throw error;
     }
     this.#cssWidth = Math.max(1, cssWidth);
@@ -206,7 +276,9 @@ export class Renderer {
     if (this.#last !== null && !this.#resizeQueued) {
       this.#resizeQueued = true;
       void this.#enqueue(() => {
-        if (this.#state === "active") this.#drawLast();
+        if (this.#state === "active") {
+          this.#drawLast("runtime", this.#beginOperation());
+        }
       }).catch(() => undefined).finally(() => {
         this.#resizeQueued = false;
       });
@@ -219,14 +291,15 @@ export class Renderer {
         this.#last = null;
         throw unavailable();
       }
+      const operationOrdinal = this.#beginOperation();
       const slot = this.#nextStream;
       const texture = this.#streams[slot];
       if (texture === undefined) throw unavailable();
-      if (!await this.#uploadFrame(texture, frame)) {
+      if (!await this.#uploadFrame(texture, frame, operationOrdinal)) {
         this.#last = null;
         throw unavailable();
       }
-      this.#render(texture);
+      this.#render(texture, "runtime", operationOrdinal);
       if (this.#state !== "active") throw unavailable();
       this.#last = slot;
       this.#nextStream = (slot + 1) % STREAMS;
@@ -244,18 +317,73 @@ export class Renderer {
     );
     this.#reserved.add(key);
     return this.#enqueue(async () => {
-      const rect = validateFrame(frame, this.#layout);
-      const staging = await this.#copy(frame, rect);
+      const operationOrdinal = this.#beginOperation();
+      let rect: DOMRectReadOnly;
+      try { rect = validateFrame(frame, this.#layout); }
+      catch (reason) {
+        throw this.#failure(
+          "semantic-upload",
+          "runtime",
+          operationOrdinal,
+          reason
+        );
+      }
+      const staging = await this.#copy(frame, rect, operationOrdinal);
       if (this.#state === "disposed" || this.#state === "error") {
         throw unavailable();
       }
       if (this.#state !== "active") throw unavailable();
       const gl = this.#gl;
       if (gl === null) throw unavailable();
-      const texture = this.#createTexture(gl, staging);
-      if (gl.isContextLost()) {
-        this.#markLost();
-        throw unavailable();
+      let texture: WebGLTexture;
+      try { texture = this.#createTexture(gl); }
+      catch (reason) {
+        throw this.#failure(
+          "resident-texture-create",
+          "runtime",
+          operationOrdinal,
+          reason,
+          {
+            glError: capturedGlError(reason, gl),
+            contextLost: contextLost(gl),
+            uploadPath: "rgba-copy"
+          }
+        );
+      }
+      if (contextLost(gl)) {
+        throw this.#failure(
+          "resident-texture-create",
+          "runtime",
+          operationOrdinal,
+          new Error("WebGL context was lost during resident texture creation"),
+          { contextLost: true, uploadPath: "rgba-copy" }
+        );
+      }
+      try { this.#uploadPixels(gl, texture, staging); }
+      catch (reason) {
+        const glError = capturedGlError(reason, gl);
+        try { gl.deleteTexture(texture); } catch { /* preserve upload cause */ }
+        throw this.#failure(
+          "rgba-upload",
+          "runtime",
+          operationOrdinal,
+          reason,
+          {
+            glError,
+            contextLost: contextLost(gl),
+            uploadPath: "rgba-copy"
+          }
+        );
+      }
+      if (contextLost(gl)) {
+        try { gl.deleteTexture(texture); } catch { /* preserve context-loss cause */ }
+        throw this.#failure(
+          "rgba-upload",
+          "runtime",
+          operationOrdinal,
+          new Error("WebGL context was lost during resident RGBA upload"),
+          { contextLost: true, uploadPath: "rgba-copy" }
+        );
       }
       this.#resident.set(key, texture);
     }).finally(() => {
@@ -270,9 +398,10 @@ export class Renderer {
     }
     return this.#enqueue(() => {
       if (this.#state === "lost") throw unavailable();
+      const operationOrdinal = this.#beginOperation();
       const texture = this.#resident.get(key);
       if (texture === undefined) throw unavailable();
-      this.#render(texture);
+      this.#render(texture, "runtime", operationOrdinal);
       if (this.#state !== "active") throw unavailable();
       this.#last = key;
     });
@@ -296,24 +425,7 @@ export class Renderer {
     );
   }
 
-  public snapshot(): Readonly<{
-    cssWidth: number;
-    cssHeight: number;
-    backingWidth: number;
-    backingHeight: number;
-    effectiveDprX: number;
-    effectiveDprY: number;
-    contextLossCount: number;
-    contextRecoveryCount: number;
-    stagingBytes: number;
-    residentBytes: number;
-    textureBytes: number;
-    runtimeBytes: number;
-    pendingOperations: number;
-    sourceCopiesInFlight: number;
-    resourceCount: number;
-    contextListenerCount: number;
-  }> {
+  public snapshot(): Readonly<RendererSnapshot> {
     const backingBytes = this.#state === "disposed"
       ? 0 : this.#backingBytes(this.#canvas.width, this.#canvas.height);
     const residentCount = this.#resident.size;
@@ -347,7 +459,8 @@ export class Renderer {
       resourceCount: Number(this.#program !== null) +
         this.#streams.length +
         this.#resident.size,
-      contextListenerCount: this.#state === "disposed" ? 0 : 2
+      contextListenerCount: this.#state === "disposed" ? 0 : 2,
+      failure: this.#failureError?.diagnostic ?? null
     });
   }
 
@@ -378,8 +491,20 @@ export class Renderer {
       }
       try {
         return await task();
-      } catch (error) {
-        if (this.#state === "active") this.#terminal();
+      } catch (reason) {
+        if (this.#state !== "active" && isAbortError(reason)) throw reason;
+        if (reason instanceof RendererArithmeticError) throw reason;
+        const error = reason instanceof RendererFailureError
+          ? reason
+          : this.#failure(
+              "context-event",
+              "runtime",
+              this.#beginOperation(),
+              reason
+            );
+        if (this.#state === "active" || this.#state === "lost") {
+          this.#terminal(error);
+        }
         throw error;
       }
     }).finally(() => {
@@ -394,14 +519,23 @@ export class Renderer {
     this.#pending += 1;
     const restore = this.#tail.then(() => {
       if (this.#state !== "lost") return;
+      const operationOrdinal = this.#beginOperation();
       try {
-        this.#initialize();
+        this.#initialize("restore", operationOrdinal);
         this.#state = "active";
         this.#recoveries += 1;
-        this.#notify("restored");
-        if (this.#last !== null) this.#drawLast();
-      } catch {
-        this.#terminal();
+        this.#notify(Object.freeze({ state: "restored", error: null }));
+        if (this.#last !== null) this.#drawLast("restore", operationOrdinal);
+      } catch (reason) {
+        const error = reason instanceof RendererFailureError
+          ? reason
+          : this.#failure(
+              "context-event",
+              "restore",
+              operationOrdinal,
+              reason
+            );
+        this.#terminal(error);
       }
     }).finally(() => {
       this.#pending -= 1;
@@ -409,29 +543,73 @@ export class Renderer {
     this.#tail = restore.then(() => undefined, () => undefined);
   }
 
-  #initialize(): void {
+  #initialize(
+    operation: RendererDiagnosticOperation,
+    operationOrdinal: number
+  ): void {
     this.#assertBudget(
       this.#resident.size,
       this.#backingBytes(this.#canvas.width, this.#canvas.height)
     );
-    const gl = this.#canvas.getContext("webgl2", {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      stencil: false,
-      desynchronized: true,
-      premultipliedAlpha: true,
-      preserveDrawingBuffer: false
-    });
-    if (gl === null || gl.isContextLost()) throw new Error("WebGL2 is unavailable");
-    const maxTextureSize = positiveGl(gl.getParameter(gl.MAX_TEXTURE_SIZE));
-    const maxResidentTextures = Math.min(
-      4096,
-      positiveGl(gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS))
-    );
-    const viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as ArrayLike<unknown> | null;
-    const maxViewportWidth = positiveGl(viewport?.[0]);
-    const maxViewportHeight = positiveGl(viewport?.[1]);
+    let gl: WebGL2RenderingContext | null = null;
+    try {
+      gl = this.#canvas.getContext("webgl2", {
+        alpha: true,
+        antialias: false,
+        depth: false,
+        stencil: false,
+        desynchronized: true,
+        premultipliedAlpha: true,
+        preserveDrawingBuffer: false
+      });
+    } catch (reason) {
+      throw this.#failure(
+        "context-create",
+        operation,
+        operationOrdinal,
+        reason
+      );
+    }
+    if (gl === null || contextLost(gl)) {
+      throw this.#failure(
+        "context-create",
+        operation,
+        operationOrdinal,
+        new Error("WebGL2 is unavailable"),
+        { contextLost: gl === null ? false : contextLost(gl) }
+      );
+    }
+    this.#contextAttributes = readContextAttributes(gl);
+    const device = readDeviceIdentity(gl);
+    this.#vendor = device.vendor;
+    this.#rendererName = device.renderer;
+    let maxTextureSize: number;
+    let maxResidentTextures: number;
+    let maxViewportWidth: number;
+    let maxViewportHeight: number;
+    try {
+      maxTextureSize = positiveGl(gl.getParameter(gl.MAX_TEXTURE_SIZE));
+      maxResidentTextures = Math.min(
+        4096,
+        positiveGl(gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS))
+      );
+      const viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as
+        ArrayLike<unknown> | null;
+      maxViewportWidth = positiveGl(viewport?.[0]);
+      maxViewportHeight = positiveGl(viewport?.[1]);
+    } catch (reason) {
+      throw this.#failure(
+        "capability-query",
+        operation,
+        operationOrdinal,
+        reason,
+        { glError: readGlError(gl), contextLost: contextLost(gl) }
+      );
+    }
+    this.#maxTextureSize = maxTextureSize;
+    this.#maxViewportWidth = maxViewportWidth;
+    this.#maxViewportHeight = maxViewportHeight;
+    this.#maxResidentTextures = maxResidentTextures;
     if (
       this.#layout.codedWidth > maxTextureSize ||
       this.#layout.codedHeight > maxTextureSize ||
@@ -439,16 +617,66 @@ export class Renderer {
       this.#canvas.height > maxTextureSize ||
       this.#canvas.width > maxViewportWidth ||
       this.#canvas.height > maxViewportHeight
-    ) throw new Error("renderer dimensions exceed WebGL limits");
+    ) {
+      throw this.#failure(
+        "device-limits",
+        operation,
+        operationOrdinal,
+        new Error("renderer dimensions exceed WebGL limits"),
+        { contextLost: contextLost(gl) }
+      );
+    }
     if (this.#resident.size > maxResidentTextures) {
-      throw new Error("resident texture count exceeds WebGL limits");
+      throw this.#failure(
+        "device-limits",
+        operation,
+        operationOrdinal,
+        new Error("resident texture count exceeds WebGL limits"),
+        { contextLost: contextLost(gl) }
+      );
     }
     let program: WebGLProgram | null = null;
     const streams: WebGLTexture[] = [];
+    this.#initializingTextureCount = 0;
     try {
-      program = createProgram(gl, this.#layout);
+      try {
+        program = createProgram(gl, this.#layout);
+        const glError = readGlError(gl);
+        if (glError !== null) {
+          throw new RendererGlOperationError(
+            "WebGL program creation failed",
+            glError
+          );
+        }
+      } catch (reason) {
+        throw this.#failure(
+          "program-create",
+          operation,
+          operationOrdinal,
+          reason,
+          {
+            glError: capturedGlError(reason, gl),
+            contextLost: contextLost(gl)
+          }
+        );
+      }
       for (let index = 0; index < STREAMS; index += 1) {
-        streams.push(this.#createTexture(gl));
+        try {
+          streams.push(this.#createTexture(gl));
+          this.#initializingTextureCount = streams.length;
+        } catch (reason) {
+          throw this.#failure(
+            "stream-texture-create",
+            operation,
+            operationOrdinal,
+            reason,
+            {
+              glError: capturedGlError(reason, gl),
+              contextLost: contextLost(gl),
+              textureOrdinal: index
+            }
+          );
+        }
       }
       gl.clearColor(0, 0, 0, 0);
       gl.disable(gl.BLEND);
@@ -456,26 +684,55 @@ export class Renderer {
       this.#gl = gl;
       this.#program = program;
       this.#streams = streams;
+      this.#initializingTextureCount = 0;
       this.#nextStream = 0;
       this.#native = 1;
-      this.#maxTextureSize = maxTextureSize;
-      this.#maxViewportWidth = maxViewportWidth;
-      this.#maxViewportHeight = maxViewportHeight;
-      this.#maxResidentTextures = maxResidentTextures;
-    } catch (error) {
-      for (const stream of streams) gl.deleteTexture(stream);
-      if (program !== null) gl.deleteProgram(program);
+    } catch (reason) {
+      const error = reason instanceof RendererFailureError
+        ? reason
+        : this.#failure(
+            "context-event",
+            operation,
+            operationOrdinal,
+            reason,
+            {
+              glError: capturedGlError(reason, gl),
+              contextLost: contextLost(gl)
+            }
+          );
+      for (const stream of streams) {
+        try { gl.deleteTexture(stream); } catch { /* preserve initialization cause */ }
+      }
+      if (program !== null) {
+        try { gl.deleteProgram(program); } catch { /* preserve initialization cause */ }
+      }
+      this.#initializingTextureCount = 0;
       throw error;
     }
   }
 
-  async #uploadFrame(texture: WebGLTexture, frame: VideoFrame): Promise<boolean> {
-    const rect = validateFrame(frame, this.#layout);
+  async #uploadFrame(
+    texture: WebGLTexture,
+    frame: VideoFrame,
+    operationOrdinal: number
+  ): Promise<boolean> {
+    let rect: DOMRectReadOnly;
+    try { rect = validateFrame(frame, this.#layout); }
+    catch (reason) {
+      throw this.#failure(
+        "semantic-upload",
+        "runtime",
+        operationOrdinal,
+        reason
+      );
+    }
     if (this.#state !== "active") return false;
     const gl = this.#gl;
     if (gl === null) return false;
     if (this.#native !== 0) {
-      if (this.#native === 1) drainErrors(gl);
+      drainErrors(gl);
+      let nativeError: number | null = null;
+      let nativeReason: unknown = null;
       try {
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texSubImage2D(
@@ -487,66 +744,127 @@ export class Renderer {
           gl.UNSIGNED_BYTE,
           frame
         );
-        if (
-          (this.#native === 2 || gl.getError() === gl.NO_ERROR) &&
-          !gl.isContextLost()
-        ) {
+        nativeError = readGlError(gl);
+        if (nativeError === null && !contextLost(gl)) {
           this.#native = 2;
           return true;
         }
-      } catch { /* bounded RGBA copy below */ }
-      if (gl.isContextLost()) {
-        this.#markLost();
-        return false;
+      } catch (reason) {
+        nativeReason = reason;
+        nativeError = readGlError(gl);
+      }
+      if (contextLost(gl)) {
+        throw this.#failure(
+          "native-upload",
+          "runtime",
+          operationOrdinal,
+          nativeReason ?? new Error(
+            "WebGL context was lost during native frame upload"
+          ),
+          {
+            glError: nativeError,
+            contextLost: true,
+            uploadPath: "native"
+          }
+        );
       }
       this.#native = 0;
       drainErrors(gl);
     }
-    const pixels = await this.#copy(frame, rect);
+    const pixels = await this.#copy(frame, rect, operationOrdinal);
     if (this.#state !== "active" || this.#gl !== gl) return false;
-    this.#uploadPixels(gl, texture, pixels);
-    if (gl.isContextLost()) {
-      this.#markLost();
-      return false;
+    try { this.#uploadPixels(gl, texture, pixels); }
+    catch (reason) {
+      throw this.#failure(
+        "rgba-upload",
+        "runtime",
+        operationOrdinal,
+        reason,
+        {
+          glError: capturedGlError(reason, gl),
+          contextLost: contextLost(gl),
+          uploadPath: "rgba-copy"
+        }
+      );
+    }
+    if (contextLost(gl)) {
+      throw this.#failure(
+        "rgba-upload",
+        "runtime",
+        operationOrdinal,
+        new Error("WebGL context was lost during RGBA frame upload"),
+        { contextLost: true, uploadPath: "rgba-copy" }
+      );
     }
     return true;
   }
 
-  async #copy(frame: VideoFrame, rect: DOMRectReadOnly): Promise<Uint8Array> {
+  async #copy(
+    frame: VideoFrame,
+    rect: DOMRectReadOnly,
+    operationOrdinal: number
+  ): Promise<Uint8Array> {
     const staging = this.#staging;
     if (staging.byteLength !== this.#storageBytesPerFrame) throw unavailable();
     staging.fill(0);
     const stride = this.#layout.storageWidth * 4;
-    const raw = frame.copyTo(staging, {
-      format: "RGBA",
-      rect,
-      layout: [{ offset: 0, stride }]
-    });
+    let raw: Promise<readonly PlaneLayout[]>;
+    try {
+      raw = frame.copyTo(staging, {
+        format: "RGBA",
+        rect,
+        layout: [{ offset: 0, stride }]
+      });
+    } catch (reason) {
+      throw this.#failure(
+        "rgba-copy",
+        "runtime",
+        operationOrdinal,
+        reason,
+        { uploadPath: "rgba-copy" }
+      );
+    }
     this.#sourceCopiesInFlight += 1;
     void raw.then(
       () => { this.#sourceCopiesInFlight -= 1; },
       () => { this.#sourceCopiesInFlight -= 1; }
     );
-    const planes = await timed(
-      raw,
-      this.#copyTimeoutMs,
-      this.#setTimeout,
-      this.#clearTimeout
-    );
+    let planes: readonly PlaneLayout[];
+    try {
+      planes = await timed(
+        raw,
+        this.#copyTimeoutMs,
+        this.#setTimeout,
+        this.#clearTimeout
+      );
+    } catch (reason) {
+      throw this.#failure(
+        "rgba-copy",
+        "runtime",
+        operationOrdinal,
+        reason,
+        { uploadPath: "rgba-copy" }
+      );
+    }
     const plane = planes[0];
     if (
       planes.length !== 1 ||
       plane === undefined ||
       plane.offset !== 0 ||
       plane.stride !== stride
-    ) throw new Error("decoded frame copy layout is invalid");
+    ) {
+      throw this.#failure(
+        "rgba-copy",
+        "runtime",
+        operationOrdinal,
+        new Error("decoded frame copy layout is invalid"),
+        { uploadPath: "rgba-copy" }
+      );
+    }
     return staging;
   }
 
-  #createTexture(
-    gl: WebGL2RenderingContext,
-    pixels?: Uint8Array
-  ): WebGLTexture {
+  #createTexture(gl: WebGL2RenderingContext): WebGLTexture {
     const texture = gl.createTexture();
     if (texture === null) throw new Error("WebGL texture is unavailable");
     try {
@@ -563,11 +881,21 @@ export class Renderer {
         this.#layout.codedWidth,
         this.#layout.codedHeight
       );
-      if (pixels !== undefined) this.#uploadPixels(gl, texture, pixels);
-      if (gl.getError() !== gl.NO_ERROR) throw new Error("WebGL texture allocation failed");
+      const glError = readGlError(gl);
+      if (glError !== null) {
+        throw new RendererGlOperationError(
+          "WebGL texture allocation failed",
+          glError
+        );
+      }
       return texture;
-    } catch (error) {
-      gl.deleteTexture(texture);
+    } catch (reason) {
+      const error = captureGlOperationError(
+        gl,
+        reason,
+        "WebGL texture allocation failed"
+      );
+      try { gl.deleteTexture(texture); } catch { /* preserve allocation cause */ }
       throw error;
     }
   }
@@ -592,9 +920,17 @@ export class Renderer {
       gl.UNSIGNED_BYTE,
       pixels
     );
+    const glError = readGlError(gl);
+    if (glError !== null) {
+      throw new RendererGlOperationError("WebGL RGBA upload failed", glError);
+    }
   }
 
-  #render(texture: WebGLTexture): void {
+  #render(
+    texture: WebGLTexture,
+    operation: RendererDiagnosticOperation,
+    operationOrdinal: number
+  ): void {
     const gl = this.#gl;
     const program = this.#program;
     if (this.#state !== "active" || gl === null || program === null) {
@@ -619,32 +955,53 @@ export class Renderer {
     if (
       !Number.isSafeInteger(width) || !Number.isSafeInteger(height) ||
       width > this.#maxViewportWidth || height > this.#maxViewportHeight
-    ) throw new RangeError("renderer viewport exceeds device limits");
-    gl.viewport(0, 0, backingWidth, backingHeight);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.viewport(
-      Math.round((backingWidth - width) / 2),
-      Math.round((backingHeight - height) / 2),
-      width,
-      height
-    );
-    gl.useProgram(program);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    if (gl.isContextLost() || this.#state !== "active") {
-      this.#markLost();
-      throw unavailable();
+    ) throw new RendererArithmeticError("renderer viewport exceeds device limits");
+    try {
+      gl.viewport(0, 0, backingWidth, backingHeight);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.viewport(
+        Math.round((backingWidth - width) / 2),
+        Math.round((backingHeight - height) / 2),
+        width,
+        height
+      );
+      gl.useProgram(program);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      const glError = readGlError(gl);
+      if (glError !== null) {
+        throw new RendererGlOperationError("WebGL draw failed", glError);
+      }
+      if (contextLost(gl) || this.#state !== "active") {
+        throw new Error("WebGL context was lost during draw");
+      }
+    } catch (reason) {
+      throw this.#failure(
+        "draw",
+        operation,
+        operationOrdinal,
+        reason,
+        {
+          glError: capturedGlError(reason, gl),
+          contextLost: contextLost(gl)
+        }
+      );
     }
   }
 
-  #drawLast(): void {
+  #drawLast(
+    operation: RendererDiagnosticOperation,
+    operationOrdinal: number
+  ): void {
     const last = this.#last;
     if (last === null) return;
     const texture = typeof last === "number"
       ? this.#streams[last]
       : this.#resident.get(last);
-    if (texture !== null && texture !== undefined) this.#render(texture);
+    if (texture !== null && texture !== undefined) {
+      this.#render(texture, operation, operationOrdinal);
+    }
   }
 
   #markLost(): void {
@@ -656,34 +1013,161 @@ export class Renderer {
     this.#streams = [];
     this.#nextStream = 0;
     this.#native = 1;
+    this.#maxTextureSize = 0;
+    this.#maxViewportWidth = 0;
+    this.#maxViewportHeight = 0;
+    this.#maxResidentTextures = 0;
+    this.#contextAttributes = null;
+    this.#vendor = null;
+    this.#rendererName = null;
     this.#last = null;
     this.#resident.clear();
-    this.#notify("lost");
+    this.#notify(Object.freeze({ state: "lost", error: null }));
   }
 
-  #terminal(): void {
+  #terminal(error?: RendererFailureError): void {
     if (this.#state === "disposed" || this.#state === "error") return;
+    const terminalError = error ?? this.#failure(
+      "context-event",
+      "runtime",
+      this.#beginOperation(),
+      new Error("WebGL renderer failed")
+    );
     this.#state = "error";
     this.#destroy();
     this.#resident.clear();
     this.#reserved.clear();
     this.#last = null;
     this.#staging = new Uint8Array(0);
-    this.#notify("error");
+    this.#notify(Object.freeze({ state: "error", error: terminalError }));
   }
 
-  #notify(state: "lost" | "restored" | "error"): void {
+  #notify(change: Readonly<RendererContextChange>): void {
     queueMicrotask(() => {
-      try { this.#onContextChange?.(state); } catch { /* Host callbacks are isolated. */ }
+      try { this.#onContextChange?.(change); } catch { /* Host callbacks are isolated. */ }
     });
+  }
+
+  #beginOperation(): number {
+    if (this.#operationSequence === Number.MAX_SAFE_INTEGER) {
+      throw new RangeError("renderer operation identity is exhausted");
+    }
+    const ordinal = this.#operationSequence;
+    this.#operationSequence += 1;
+    return ordinal;
+  }
+
+  #failure(
+    phase: RendererDiagnosticPhase,
+    operation: RendererDiagnosticOperation,
+    operationOrdinal: number,
+    reason: unknown,
+    details: Readonly<{
+      glError?: number | null;
+      contextLost?: boolean;
+      uploadPath?: RendererDiagnosticUploadPath | null;
+      textureOrdinal?: number | null;
+    }> = {}
+  ): RendererFailureError {
+    if (reason instanceof RendererFailureError) return reason;
+    if (this.#failureError !== null) return this.#failureError;
+    const bytes = this.#diagnosticBytes();
+    const diagnostic = createRendererFailureDiagnostic({
+      phase,
+      operation,
+      operationOrdinal,
+      reason,
+      glError: details.glError ?? null,
+      contextLost: details.contextLost ?? false,
+      uploadPath: details.uploadPath ?? null,
+      textureOrdinal: details.textureOrdinal ?? null,
+      layout: this.#layout,
+      backing: {
+        width: diagnosticScalar(this.#canvas.width),
+        height: diagnosticScalar(this.#canvas.height)
+      },
+      bytes,
+      limits: {
+        maxTextureSize: this.#maxTextureSize,
+        maxViewportWidth: this.#maxViewportWidth,
+        maxViewportHeight: this.#maxViewportHeight,
+        maxResidentTextures: this.#maxResidentTextures
+      },
+      contextAttributes: this.#contextAttributes,
+      vendor: this.#vendor,
+      renderer: this.#rendererName
+    });
+    this.#failureError = new RendererFailureError(diagnostic);
+    return this.#failureError;
+  }
+
+  #diagnosticBytes(): Readonly<{
+    stagingBytes: number;
+    residentBytes: number;
+    textureBytes: number;
+    backingBytes: number;
+    runtimeBytes: number;
+    maxTextureBytes: number;
+    maxBackingBytes: number;
+    maxRuntimeBytes: number;
+  }> {
+    try {
+      const backingBytes = this.#backingBytes(
+        this.#canvas.width,
+        this.#canvas.height
+      );
+      const textureCount = this.#initializingTextureCount +
+        (this.#state === "active"
+          ? this.#resident.size + this.#streams.length
+          : 0);
+      const textureBytes = textureCount === 0
+        ? 0
+        : allocationBytes(checkedProduct(
+            this.#textureBytesPerFrame,
+            textureCount
+          ));
+      const residentBytes = 0;
+      return Object.freeze({
+        stagingBytes: this.#staging.byteLength,
+        residentBytes,
+        textureBytes,
+        backingBytes,
+        runtimeBytes: checkedSum([
+          this.#staging.byteLength,
+          residentBytes,
+          textureBytes,
+          backingBytes
+        ]),
+        maxTextureBytes: this.#maxTextureBytes,
+        maxBackingBytes: this.#maxBackingBytes,
+        maxRuntimeBytes: this.#maxRuntimeBytes
+      });
+    } catch {
+      return Object.freeze({
+        stagingBytes: diagnosticScalar(this.#staging.byteLength),
+        residentBytes: 0,
+        textureBytes: 0,
+        backingBytes: 0,
+        runtimeBytes: diagnosticScalar(this.#staging.byteLength),
+        maxTextureBytes: this.#maxTextureBytes,
+        maxBackingBytes: this.#maxBackingBytes,
+        maxRuntimeBytes: this.#maxRuntimeBytes
+      });
+    }
   }
 
   #destroy(): void {
     const gl = this.#gl;
     if (gl !== null) {
-      for (const texture of this.#resident.values()) gl.deleteTexture(texture);
-      for (const stream of this.#streams) gl.deleteTexture(stream);
-      if (this.#program !== null) gl.deleteProgram(this.#program);
+      for (const texture of this.#resident.values()) {
+        try { gl.deleteTexture(texture); } catch { /* terminal cleanup */ }
+      }
+      for (const stream of this.#streams) {
+        try { gl.deleteTexture(stream); } catch { /* terminal cleanup */ }
+      }
+      if (this.#program !== null) {
+        try { gl.deleteProgram(this.#program); } catch { /* terminal cleanup */ }
+      }
     }
     this.#gl = null;
     this.#program = null;
@@ -715,7 +1199,11 @@ export class Renderer {
       textureBytes > this.#maxTextureBytes ||
       backingBytes > this.#maxBackingBytes ||
       runtimeBytes > this.#maxRuntimeBytes
-    ) throw new RangeError("renderer resource byte cap exceeded");
+    ) {
+      const error = new RangeError("renderer resource byte cap exceeded");
+      error.name = "ResourceBudgetError";
+      throw error;
+    }
     return Object.freeze({ textureBytes, runtimeBytes });
   }
 }
@@ -876,14 +1364,138 @@ function positiveGl(value: unknown): number {
   return value;
 }
 
-function drainErrors(gl: WebGL2RenderingContext): void {
-  for (let index = 0; index < 8 && gl.getError() !== gl.NO_ERROR; index += 1) {
-    // Error draining is bounded because a lost context may report forever.
+class RendererGlOperationError extends Error {
+  public constructor(
+    message: string,
+    public readonly glError: number | null
+  ) {
+    super(message);
+    this.name = "RendererGlOperationError";
   }
+}
+
+class RendererArithmeticError extends RangeError {}
+
+function capturedGlError(
+  reason: unknown,
+  gl: WebGL2RenderingContext
+): number | null {
+  return reason instanceof RendererGlOperationError
+    ? reason.glError
+    : readGlError(gl);
+}
+
+function captureGlOperationError(
+  gl: WebGL2RenderingContext,
+  reason: unknown,
+  fallbackMessage: string
+): RendererGlOperationError {
+  if (reason instanceof RendererGlOperationError) return reason;
+  let message = fallbackMessage;
+  try {
+    if (reason instanceof Error && reason.message.length > 0) {
+      message = reason.message;
+    }
+  } catch { /* retain the fixed fallback message */ }
+  return new RendererGlOperationError(message, readGlError(gl));
+}
+
+function readGlError(gl: WebGL2RenderingContext): number | null {
+  try {
+    const value = gl.getError();
+    return Number.isSafeInteger(value) && value >= 0 && value !== gl.NO_ERROR
+      ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function contextLost(gl: WebGL2RenderingContext): boolean {
+  try { return gl.isContextLost() === true; }
+  catch { return false; }
+}
+
+function readContextAttributes(
+  gl: WebGL2RenderingContext
+): Readonly<RendererDiagnosticContextAttributes> | null {
+  let value: unknown;
+  try { value = gl.getContextAttributes(); }
+  catch { return null; }
+  if (typeof value !== "object" || value === null) return null;
+  try {
+    const record = value as Readonly<Record<string, unknown>>;
+    const powerPreference = record.powerPreference;
+    return Object.freeze({
+      alpha: diagnosticBoolean(record.alpha),
+      antialias: diagnosticBoolean(record.antialias),
+      depth: diagnosticBoolean(record.depth),
+      desynchronized: diagnosticBoolean(record.desynchronized),
+      failIfMajorPerformanceCaveat:
+        diagnosticBoolean(record.failIfMajorPerformanceCaveat),
+      powerPreference:
+        powerPreference === "default" ||
+        powerPreference === "high-performance" ||
+        powerPreference === "low-power"
+          ? powerPreference : null,
+      premultipliedAlpha: diagnosticBoolean(record.premultipliedAlpha),
+      preserveDrawingBuffer: diagnosticBoolean(record.preserveDrawingBuffer),
+      stencil: diagnosticBoolean(record.stencil),
+      xrCompatible: diagnosticBoolean(record.xrCompatible)
+    });
+  } catch {
+    return null;
+  }
+}
+
+function diagnosticBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function diagnosticScalar(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value : 0;
+}
+
+function readDeviceIdentity(gl: WebGL2RenderingContext): Readonly<{
+  vendor: string | null;
+  renderer: string | null;
+}> {
+  try {
+    const extension = gl.getExtension("WEBGL_debug_renderer_info") as
+      Readonly<{
+        UNMASKED_VENDOR_WEBGL?: unknown;
+        UNMASKED_RENDERER_WEBGL?: unknown;
+      }> | null;
+    if (extension === null) return Object.freeze({ vendor: null, renderer: null });
+    const vendor = typeof extension.UNMASKED_VENDOR_WEBGL === "number"
+      ? gl.getParameter(extension.UNMASKED_VENDOR_WEBGL) : null;
+    const renderer = typeof extension.UNMASKED_RENDERER_WEBGL === "number"
+      ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : null;
+    return Object.freeze({
+      vendor: typeof vendor === "string" ? vendor : null,
+      renderer: typeof renderer === "string" ? renderer : null
+    });
+  } catch {
+    return Object.freeze({ vendor: null, renderer: null });
+  }
+}
+
+function drainErrors(gl: WebGL2RenderingContext): void {
+  try {
+    for (let index = 0; index < 8 && gl.getError() !== gl.NO_ERROR; index += 1) {
+      // Error draining is bounded because a lost context may report forever.
+    }
+  } catch { /* Error polling is diagnostic-only. */ }
 }
 
 function unavailable(): Error {
   return new DOMException("WebGL renderer is unavailable", "AbortError");
+}
+
+function isAbortError(reason: unknown): boolean {
+  if (typeof reason !== "object" || reason === null) return false;
+  try { return (reason as Readonly<{ name?: unknown }>).name === "AbortError"; }
+  catch { return false; }
 }
 
 function timed<T>(
@@ -924,6 +1536,7 @@ function createProgram(
   let fragment: WebGLShader | null = null;
   let program: WebGLProgram | null = null;
   try {
+    drainErrors(gl);
     vertex = shader(gl, gl.VERTEX_SHADER, `#version 300 es
 const vec2 p[3]=vec2[](vec2(-1,-1),vec2(3,-1),vec2(-1,3));
 out vec2 v;void main(){vec2 q=p[gl_VertexID];v=(q+1.)/2.;gl_Position=vec4(q,0,1);}`);
@@ -950,13 +1563,31 @@ void main(){vec2 u=v;u.y=1.-u.y;vec3 r=texture(f,c.xy+u*c.zw).rgb;float q=h>.5?t
     uv(gl, color, layout.colorRect, layout);
     uv(gl, alpha, layout.alphaRect ?? layout.colorRect, layout);
     gl.uniform1f(hasAlpha, layout.alphaRect === undefined ? 0 : 1);
+    const glError = readGlError(gl);
+    if (glError !== null) {
+      throw new RendererGlOperationError(
+        "WebGL program creation failed",
+        glError
+      );
+    }
     return program;
-  } catch (error) {
-    if (program !== null) gl.deleteProgram(program);
+  } catch (reason) {
+    const error = captureGlOperationError(
+      gl,
+      reason,
+      "WebGL program creation failed"
+    );
+    if (program !== null) {
+      try { gl.deleteProgram(program); } catch { /* preserve program cause */ }
+    }
     throw error;
   } finally {
-    if (vertex !== null) gl.deleteShader(vertex);
-    if (fragment !== null) gl.deleteShader(fragment);
+    if (vertex !== null) {
+      try { gl.deleteShader(vertex); } catch { /* preserve program cause */ }
+    }
+    if (fragment !== null) {
+      try { gl.deleteShader(fragment); } catch { /* preserve program cause */ }
+    }
   }
 }
 
@@ -967,13 +1598,29 @@ function shader(
 ): WebGLShader {
   const result = gl.createShader(kind);
   if (result === null) throw new Error("WebGL shader is unavailable");
-  gl.shaderSource(result, source);
-  gl.compileShader(result);
-  if (!gl.getShaderParameter(result, gl.COMPILE_STATUS)) {
-    gl.deleteShader(result);
-    throw new Error("WebGL shader compilation failed");
+  try {
+    gl.shaderSource(result, source);
+    gl.compileShader(result);
+    if (!gl.getShaderParameter(result, gl.COMPILE_STATUS)) {
+      throw new Error("WebGL shader compilation failed");
+    }
+    const glError = readGlError(gl);
+    if (glError !== null) {
+      throw new RendererGlOperationError(
+        "WebGL shader creation failed",
+        glError
+      );
+    }
+    return result;
+  } catch (reason) {
+    const error = captureGlOperationError(
+      gl,
+      reason,
+      "WebGL shader creation failed"
+    );
+    try { gl.deleteShader(result); } catch { /* preserve shader cause */ }
+    throw error;
   }
-  return result;
 }
 
 function uv(

@@ -11,6 +11,7 @@ import type {
   Player,
   PlayerDecoderDiagnostic,
   PlayerInput,
+  PlayerRendererDiagnostic,
   PlayerSnapshot,
   Source
 } from "./player-contract.js";
@@ -46,6 +47,7 @@ import type {
   AvalMotion,
   AvalPublicFailure,
   AvalReadinessChangeDetail,
+  AvalRendererDiagnostic,
   Binding,
   RuntimeReadiness,
   RuntimeReadinessResult,
@@ -171,6 +173,9 @@ export function createAvalElementClass(
     #cleanupFailureCount = 0;
     #decoderDiagnosticLimit = 0;
     #decoderDiagnostics: readonly Readonly<AvalDecoderDiagnostic>[] =
+      Object.freeze([]);
+    #rendererDiagnosticLimit = 0;
+    #rendererDiagnostics: readonly Readonly<AvalRendererDiagnostic>[] =
       Object.freeze([]);
     #cleanup: Readonly<Record<string, unknown>> | null = null;
     #terminalCleanup: Readonly<Record<string, unknown>> | null = null;
@@ -757,6 +762,8 @@ export function createAvalElementClass(
       this.#cleanupFailureCount = 0;
       this.#decoderDiagnosticLimit = 0;
       this.#decoderDiagnostics = Object.freeze([]);
+      this.#rendererDiagnosticLimit = 0;
+      this.#rendererDiagnostics = Object.freeze([]);
       this.#mode = null;
       this.#staticReason = null;
       this.#layers.resetSource(generation);
@@ -777,6 +784,10 @@ export function createAvalElementClass(
         sources.length,
         MAX_RETAINED_DECODER_SOURCES
       ) * ELEMENT_DECODER_CAPACITY.workerCount;
+      this.#rendererDiagnosticLimit = Math.min(
+        sources.length,
+        MAX_RETAINED_DECODER_SOURCES
+      );
       const view = document.defaultView;
       if (!runtimeHostSupported(this.#layers.stylesSupported, view)) {
         throw this.#publishTerminalFailure(
@@ -941,6 +952,10 @@ export function createAvalElementClass(
           onDecoderDiagnostics: (diagnostics) => {
             if (!this.#publicationCurrent(generation, token)) return;
             this.#retainDecoderDiagnostics(diagnostics, generation);
+          },
+          onRendererDiagnostics: (diagnostics) => {
+            if (!this.#publicationCurrent(generation, token)) return;
+            this.#retainRendererDiagnostics(diagnostics, generation);
           }
         });
         if (!this.#current(generation, token)) {
@@ -1064,6 +1079,10 @@ export function createAvalElementClass(
             retired.decoderDiagnostics,
             this.#sourceGeneration
           );
+          this.#retainRendererDiagnostics(
+            retired.rendererDiagnostics,
+            this.#sourceGeneration
+          );
           this.#retiringDeclaredFileBytes = retired.declaredFileBytes;
           this.#counters.contextRecovery += retired.contextRecoveryCount;
         } catch {
@@ -1100,6 +1119,10 @@ export function createAvalElementClass(
       this.#captureCleanupFailures(snapshot);
       this.#retainDecoderDiagnostics(
         snapshot?.decoderDiagnostics ?? Object.freeze([]),
+        this.#sourceGeneration
+      );
+      this.#retainRendererDiagnostics(
+        snapshot?.rendererDiagnostics ?? Object.freeze([]),
         this.#sourceGeneration
       );
       if (disposed && !failed && playerSnapshotDisposed(snapshot)) {
@@ -1895,6 +1918,37 @@ export function createAvalElementClass(
       );
     }
 
+    #retainRendererDiagnostics(
+      diagnostics: readonly Readonly<PlayerRendererDiagnostic>[],
+      generation: number
+    ): void {
+      if (
+        generation !== this.#sourceGeneration ||
+        diagnostics.length === 0 ||
+        this.#rendererDiagnosticLimit === 0
+      ) return;
+      const bySource = new Map<number, Readonly<AvalRendererDiagnostic>>(
+        this.#rendererDiagnostics.map((diagnostic) => [
+          diagnostic.sourceIndex,
+          diagnostic
+        ] as const)
+      );
+      for (const diagnostic of diagnostics) {
+        if (!bySource.has(diagnostic.sourceIndex)) {
+          bySource.set(
+            diagnostic.sourceIndex,
+            freezeAvalRendererDiagnostic(diagnostic, generation)
+          );
+        }
+      }
+      const retained = [...bySource.values()].sort((left, right) =>
+        left.sourceIndex - right.sourceIndex
+      );
+      this.#rendererDiagnostics = Object.freeze(
+        retained.slice(-this.#rendererDiagnosticLimit)
+      );
+    }
+
     #pageSnapshot(): Readonly<PageResourcesSnapshot> {
       return pageResourcesSnapshot(
         this.#pageRealm ?? this.ownerDocument.defaultView ?? globalThis
@@ -1939,6 +1993,12 @@ export function createAvalElementClass(
       if (runtime.decoderDiagnostics.length > 0) {
         this.#retainDecoderDiagnostics(
           runtime.decoderDiagnostics,
+          this.#sourceGeneration
+        );
+      }
+      if (runtime.rendererDiagnostics.length > 0) {
+        this.#retainRendererDiagnostics(
+          runtime.rendererDiagnostics,
           this.#sourceGeneration
         );
       }
@@ -2020,7 +2080,8 @@ export function createAvalElementClass(
             this.#cleanupFailureCount,
             runtime.cleanupFailureCount ?? 0
           ),
-          decoderDiagnostics: this.#decoderDiagnostics
+          decoderDiagnostics: this.#decoderDiagnostics,
+          rendererDiagnostics: this.#rendererDiagnostics
         }),
         motion: Object.freeze({
           configured: this.motion,
@@ -2687,6 +2748,26 @@ function freezeAvalDecoderColorSpace(
       ];
 }
 
+function freezeAvalRendererDiagnostic(
+  diagnostic: Readonly<PlayerRendererDiagnostic>,
+  sourceGeneration: number
+): Readonly<AvalRendererDiagnostic> {
+  return Object.freeze({
+    ...diagnostic,
+    sourceGeneration,
+    exception: diagnostic.exception === null
+      ? null
+      : Object.freeze({ ...diagnostic.exception }),
+    layout: Object.freeze({ ...diagnostic.layout }),
+    backing: Object.freeze({ ...diagnostic.backing }),
+    bytes: Object.freeze({ ...diagnostic.bytes }),
+    limits: Object.freeze({ ...diagnostic.limits }),
+    contextAttributes: diagnostic.contextAttributes === null
+      ? null
+      : Object.freeze({ ...diagnostic.contextAttributes })
+  }) satisfies Readonly<AvalRendererDiagnostic>;
+}
+
 function emptyRuntime(): PlayerSnapshot {
   return Object.freeze({
     requestedState: null,
@@ -2709,6 +2790,7 @@ function emptyRuntime(): PlayerSnapshot {
     contextRecoveryCount: 0,
     cleanupFailureCount: 0,
     decoderDiagnostics: Object.freeze([]),
+    rendererDiagnostics: Object.freeze([]),
     presentation: Object.freeze({
       cssWidth: 0,
       cssHeight: 0,
