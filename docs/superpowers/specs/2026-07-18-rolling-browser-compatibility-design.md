@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-18
 
-**Status:** Approved
+**Status:** Approved; desktop-matrix amendment approved by the user's
+autonomous-continuation instruction on 2026-07-19
 
 **Decision:** AVAL owns deterministic playback qualification and structured
 failure reporting. It does not generate, select, reveal, or otherwise own
@@ -34,8 +35,15 @@ to make a browser test pass.
 
 Every release is certified on these reference configurations:
 
-- Windows 11 with the current, previous, and previous-two stable Chrome
-  releases;
+- Windows 11 with the current, previous, and previous-two stable Chrome and
+  Firefox releases plus each browser's retained build nearest the 24-month
+  boundary, and branded Brave current and boundary releases whose exact
+  Chromium builds are recorded;
+- the current supported macOS generation and the macOS generation nearest the
+  24-month boundary, using the three latest available stable Safari point
+  releases, the current/previous/previous-two stable Chrome and Firefox
+  releases plus their 24-month sentinels, and branded Brave current and
+  boundary releases;
 - the three latest current-generation Mobile Safari point releases on real
   iPhones, plus the previous iOS major closest to the 24-month boundary;
 - Android 15 with the exactly observed Chrome installed by the device provider,
@@ -60,15 +68,34 @@ A certified configuration must:
 6. terminate failed operations with a structured public failure rather than a
    blank canvas, indefinite preparation, or misleading support state.
 
+For an interactive asset, "render" means more than reaching a readiness flag.
+The release witness must visibly complete the authored initial state, request
+every public interaction state exposed by the example, observe the matching
+`transitionstart`, `visualstatechange`, `transitionend`, and settled state, and
+return to the initial state. Hover and focus are exercised separately on
+desktop; pointer/tap engagement is exercised on touch devices. At least one
+60-second soak repeats the transition cycle and crosses every loop boundary.
+Any missing visual transition, corrupt pixels, stale requested state, or
+readiness signal that disagrees with the canvas fails the configuration.
+
 ### 2.2 Compatibility boundary
 
-The release also exercises the browser builds closest to the 24-month boundary,
-currently Chrome 127, Safari/iOS 18, and Android 15. Full interaction is the
-goal on the reference device. iOS 17 and Android 14 may be run as informational
-beyond-policy diagnostics, but do not gate a release. A configuration that
-cannot provide the required decoder or renderer path is still
-compatibility-safe when AVAL terminates deterministically and raises the public
-failure contract. AVAL itself does not display alternate content.
+The release also exercises the browser and OS builds closest to the 24-month
+boundary, currently Chrome 127, Firefox 128, Safari/iOS 18, Android 15, and the
+corresponding retained macOS generation available from the device provider.
+Full interaction is required on a certified reference device. iOS 17 and
+Android 14 may be run as informational beyond-policy diagnostics, but do not
+gate a release. A configuration that cannot provide the required decoder or
+renderer path is compatibility-safe outside the certified tier only when AVAL
+terminates deterministically and raises the public failure contract. It is not
+reported as playback-compatible. AVAL itself does not display alternate
+content.
+
+Brave results must come from a branded Brave binary. Chromium or Chrome results
+may guide diagnosis but cannot be relabeled as Brave certification. When the
+primary remote provider does not offer Brave, the release uses a second remote
+provider or a locally managed clean Brave binary and records that limitation;
+an absent branded run leaves the Brave matrix slot unverified.
 
 The policy does not imply that every hardware model, driver, codec accelerator,
 or intervening monthly Chromium release is individually certified. It promises
@@ -262,17 +289,22 @@ Playwright engine tests remain the fast CI gate but are not treated as branded
 browser certification. Before release, BrowserStack or equivalent real-browser
 evidence covers:
 
-- Windows 11 Chrome current/current-1/current-2 and the 24-month sentinel;
+- Windows 11 Chrome and Firefox current/current-1/current-2 plus the 24-month
+  sentinels, and branded Brave current plus its 24-month sentinel;
+- current and boundary macOS generations with Safari current/current-1/
+  current-2, Chrome and Firefox current/current-1/current-2 plus their 24-month
+  sentinels, and branded Brave current plus its 24-month sentinel;
 - real iPhones for current, previous, and boundary Safari generations; and
 - Android 15 on a real Samsung or comparable device; Android 16 joins the
   required matrix when the provider can bind exact browser identity and
   DevTools evidence, while Android 14 remains an optional beyond-policy
   diagnostic.
 
-Each session verifies opaque H.264, packed-alpha H.264, interaction transitions,
-optional-codec truthfulness, failure settlement, and resource cleanup. A single
-blank canvas, corrupt alpha result, indefinite state, or false playable claim
-fails that configuration.
+Each session verifies opaque H.264, packed-alpha H.264, interaction transitions
+in both directions, repeated-loop stability, optional-codec truthfulness,
+failure settlement, and resource cleanup. A single blank canvas, corrupt alpha
+result, missing or stale state transition, indefinite state, or false playable
+claim fails that configuration.
 
 The matrix is rerun after each root-cause fix. A release report records exact
 browser, OS, device, selected codec, qualification outcome, and any structured
@@ -316,15 +348,19 @@ This design does not:
 
 The work is complete when:
 
-1. current Chrome, Safari, and Android reference configurations qualify and
-   interact through the mandatory H.264 path;
+1. current and boundary Chrome, Firefox, Safari, Brave, iOS, and Android
+   reference configurations qualify, render correctly, and complete authored
+   interaction states through the mandatory H.264 path;
 2. optional codecs are reported playable only after real qualification;
 3. packed alpha is visually correct on the Android reference devices;
 4. every terminal failure produces one actionable public error and rejected
    preparation with no AVAL-owned fallback presentation;
 5. no tested failure leaves a blank-but-nonterminal or indefinitely preparing
    generation;
-6. the 24-month sentinels either qualify or terminate through the same public
-   failure contract; and
-7. the branded-browser evidence and documented support matrix are committed for
+6. every in-policy 24-month sentinel qualifies and completes its interaction
+   witness; deterministic terminal errors remain the required behavior only
+   outside the certified window;
+7. every required Windows, macOS, iOS, and Android branded-browser slot has
+   exact-version playback and state-transition evidence; and
+8. the branded-browser evidence and documented support matrix are committed for
    the release candidate.
