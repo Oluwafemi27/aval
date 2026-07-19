@@ -4,7 +4,7 @@
 
 **Goal:** Qualify authored AVAL sources through their first real decoded and rendered frame, then fall through AV1 → VP9 → HEVC → H.264 when a provisional codec path fails.
 
-**Architecture:** Keep source-list ownership in a small `Player` facade until one provisional `PlayerImpl` completes startup qualification. Each attempt receives a discardable publication gate and its own bounded preparation deadline; failed attempts fully retire before the selector opens the next authored rendition, while the first successful attempt is committed and becomes the permanent runtime player. Asset, integrity, network, abort, and global-deadline failures remain terminal, and no codec switch occurs after `interactiveReady`.
+**Architecture:** Keep source-list ownership inside `createPlayer()` until one provisional `PlayerImpl` completes its existing production `prepare()` path and validated initial draw. Each attempt receives a discardable publication gate and its own bounded preparation deadline; failed attempts fully retire before the selector opens the next authored rendition, while the first successful attempt is returned already prepared and becomes the permanent runtime player when the element activates it. Asset, integrity, network, abort, cleanup, renderer, transport, and watchdog failures remain terminal, and no codec switch occurs after `interactiveReady`.
 
 **Tech Stack:** TypeScript, WebCodecs, custom elements, Vitest, Playwright, Vite, BrowserStack real-device Safari.
 
@@ -138,41 +138,46 @@ Give `PublicationGate` three states: `pending`, `active`, and `discarded`. `acti
 
 Keep `onDecoderDiagnostics` observable for rejected attempts, but retain diagnostics by `(sourceIndex, lane)` rather than lane alone, with a fixed bound of two lanes per authored source.
 
-- [ ] **Step 3: Introduce the source-qualifying Player facade**
+- [ ] **Step 3: Qualify provisional players inside `createPlayer()`**
 
-Implement a private `StartupSelectingPlayer implements Player`. It owns `SelectionState`, the total selection deadline, the current `ProvisionalPlayer`, and one cached `prepare()` transaction. Its preparation loop must have this shape:
+Keep the total selection deadline and `SelectionState` in `createPlayer()`. After `selectPlayer()` returns a positive-probe live candidate, call that candidate's existing production `prepare()` while its publication gate is still provisional. The loop must have this shape:
 
 ```ts
 for (;;) {
+  const publications = new PublicationGate(input, provisionalPlaybackFailure);
+  const current = await selectPlayer(
+    publications.input,
+    totalDeadline,
+    publications,
+    state
+  );
   try {
-    const result = await current.player.prepare(options);
+    await current.player.prepare();
     totalDeadline.complete();
-    if (activated) current.player.activate();
-    return result;
+    return current.player;
   } catch (error) {
     const code = startupFailureCode(error, totalDeadline);
     current.publications.discard();
-    await current.player.dispose();
     retainAttemptDiagnostics(current.player.snapshot(false));
-    if (!retryableStartupFailure(code) || totalDeadline.timedOut) {
+    await current.player.dispose();
+    if (!retryableStartupFailure(error, current.player) ||
+      totalDeadline.timedOut) {
       throw publishTerminalOnce(code, "prepare");
     }
     state.reports.push(candidateFailureReport(current, code));
-    current = await selectPlayer(input, totalDeadline, state);
-    replayPrecommitState(current.player);
   }
 }
 ```
 
-`activate()`, `resize()`, `setVisibility()`, `pause()`, and motion-policy changes must be remembered and replayed across provisional attempts. `setState()` and `resume()` must await facade preparation before delegating. `send()`, `canSend()`, and `readyFor()` return false before commit. After commit every method delegates directly to the winning `PlayerImpl` and no later failure re-enters selection.
+Do not call `PlayerImpl.activate()` during qualification. The gate buffers metadata, initial graph events, readiness, and first-draw publication. The element activates only the winning already-prepared player, which flushes that gate; rejected candidates' gates are discarded. The element's subsequent `player.prepare()` joins the winning player's cached preparation result. No wrapper remains after `createPlayer()` returns, so later runtime failures cannot re-enter source selection.
 
 - [ ] **Step 4: Separate total and attempt deadlines**
 
-Keep the existing five-second generation deadline as the total bound. Create a child `PreparationDeadline` for each positive-probe attempt, parented by the total signal and capped at 2,500 ms or the remaining total time, whichever is smaller. A child timeout is retryable while total time remains; a total timeout publishes `watchdog-timeout` once. Disposing a rejected child must never abort the total selector deadline.
+Keep the existing five-second generation deadline as the total bound. Create a child `PreparationDeadline` for each positive-probe attempt, parented by the total signal and capped at 2,500 ms or the remaining total time, whichever is smaller. Any watchdog remains generation-terminal; the child exists so rejected-candidate cleanup cannot abort the total selector controller. Disposing a rejected child must never abort the total deadline.
 
 - [ ] **Step 5: Classify retryable startup failures narrowly**
 
-Return `true` only for pre-commit `worker-decode-failure`, candidate-local `renderer-failure`, and child `watchdog-timeout`. Keep `invalid-asset`, `load-failure`, `range-response-invalid`, `entity-changed`, `integrity-mismatch`, `resource-rejection`, abort, cleanup failure, and the total watchdog terminal. Preserve current boolean `supported:false` advancement and support-probe transport-exception behavior.
+Return `true` only for a pre-commit `worker-decode-failure` with retained codec-qualification evidence: `invalid-output`, `unsupported-config`, or an `EncodingError`/`NotSupportedError` raised during configure, decode, flush, or output validation. Keep worker transport, renderer/context, `invalid-asset`, `load-failure`, `range-response-invalid`, `entity-changed`, `integrity-mismatch`, `resource-rejection`, abort, cleanup failure, and watchdog failures terminal. Preserve current boolean `supported:false` advancement and support-probe transport-exception behavior.
 
 - [ ] **Step 6: Run the focused startup and selection tests**
 
