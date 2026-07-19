@@ -5,10 +5,10 @@ is not branded-browser certification. Each release targets a rolling 24-month
 matrix: Windows 11 stable-channel Chrome current/current-1/current-2 plus the
 stable build closest to the boundary, the three latest current-generation
 Mobile Safari point releases
-plus the previous iOS major closest to the boundary, and a real Android 15
-device with an exactly observed Chrome version. Android 16 remains a diagnostic
-target until the provider exposes enough browser identity and DevTools evidence
-to bind a result to an exact version. iOS 17 and Android 14 are useful
+plus the previous iOS major closest to the boundary, and real Android 17, 16,
+and 15 devices with exactly observed Chrome versions. The signed-in
+BrowserStack sessions report Chrome/Chromium 145.0.0.0 for both Pixel 9 slots
+and the Samsung Galaxy S25 slot. iOS 17 and Android 14 are useful
 beyond-policy diagnostics, not release requirements. The generated table below
 records evidence only after named-profile reports have been committed. Durable
 profile evidence retains the exact browser version, build, and release channel;
@@ -18,6 +18,22 @@ For Chrome, Microsoft Edge, and Firefox, the build's leading component must
 match the reported product-version major. Safari and Mobile Safari retain the
 independently reported numeric WebKit/Safari build identifier instead of
 pretending that it shares the marketing-version major.
+
+Desktop Safari certification uses only provider-observable versions: Safari
+26.4 on macOS Tahoe and Safari 18.4 on macOS Sequoia in the signed-in
+BrowserStack inventory checked on 2026-07-19. Safari 26.3, 26.2, 18.3, and 18.2
+were not offered for those desktop OS profiles and therefore are not represented
+by synthetic or relabeled slots. The three-latest requirement applies to the
+real-device Mobile Safari 26.5, 26.4, and 26.0 slots.
+
+BrowserStack Live Device Info and screenshots are manual operator evidence,
+not formal automated certification. A formal run starts by writing immutable
+`run-identity.json`, captures through a real BrowserStack Automate/Playwright
+page with the exact provider session id, and lets the evidence assembler create
+`manifest.json` only after the raw policy-exact tree is complete. When Automate
+credentials or that page session are unavailable, the formal matrix remains
+pending; manual Live screenshots are never assigned invented session ids or
+reported as machine-verifiable captures.
 
 The player evaluates direct-child sources in author order. It validates each
 required codec hint and probes every otherwise-eligible authored rendition
@@ -32,21 +48,29 @@ authored rendition or source. A pre-commit decoder failure also advances when
 its bounded diagnostic evidence identifies a codec qualification failure:
 unsupported configuration, invalid decoded output, or an `EncodingError`/
 `NotSupportedError` during configure, decode, flush, or output validation.
-Network, CORS/CSP, integrity, malformed-asset, worker transport,
-WebGL/resource, renderer/context, cleanup, abort, and watchdog failures remain
-terminal for that generation. They reject `prepare()` with
-`AvalPlaybackError` and raise one fatal `error` event; the application decides
-how to respond. Within a file, renditions remain in authored quality order.
+One renderer qualification failure also advances before commit: an exact,
+candidate-scoped `NotSupportedError` from the RGBA-copy runtime path with no GL,
+context-loss, or cleanup failure. Network, CORS/CSP, integrity, malformed-asset,
+worker transport, every other WebGL/resource or renderer/context failure,
+cleanup, abort, and watchdog failures remain terminal for that generation. They
+reject `prepare()` with `AvalPlaybackError` and raise one fatal `error` event;
+the application decides how to respond. Within a file, renditions remain in
+authored quality order.
 After `interactiveReady`, a fatal decoder failure is terminal and never
 re-enters source selection. The runtime never silently changes canvas size,
 frame rate, or active codec.
 
-H.264 8-bit 4:2:0 is the mandatory compatibility rendition and should use the
-minimum practical profile and level for the asset. AV1, VP9, and H.265/HEVC are
-optional efficiency paths and are reported as playable only after production
-qualification succeeds. Authors normally place them before H.264 in preferred
-order; source order, not a hardcoded codec ranking, defines the ladder. Ten-bit
-AV1 is not a baseline requirement.
+H.264 8-bit 4:2:0 is the mandatory last-resort rendition and should use the
+minimum practical profile and level for the asset. The supported reference
+contract and bundled examples publish the exact order AV1 → VP9 → H.265/HEVC →
+H.264. H.264 is selected only after every earlier authored candidate is
+deterministically unsupported or fails the narrow startup qualification above;
+certification rejects an H.264 selection without candidate-scoped proof for
+each skipped modern codec. Source order remains the public preference contract,
+so custom markup that places H.264 first explicitly opts out of this ladder.
+Normal iPhone certification requires HEVC or a higher-ranked selected codec;
+an H.264 result is a failing HEVC-path investigation, not a support claim.
+Ten-bit AV1 is not a baseline requirement.
 
 <!-- BEGIN GENERATED SUPPORT -->
 | Profile | Fatal error boundary | Runtime scheduling | Observed display |

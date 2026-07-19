@@ -22,6 +22,7 @@ import {
   type DecoderOutputFailureKind,
   type DecoderOutputField
 } from "./decoder-diagnostics.js";
+import { saturatingIncrement } from "./playback-lifecycle.js";
 
 export interface DecodeSample {
   readonly data: ArrayBuffer;
@@ -64,6 +65,12 @@ export interface DecoderSnapshot {
   readonly workerCount: number;
   readonly openFrames: number;
   readonly openFrameBytes: number;
+  readonly lifecycle: Readonly<{
+    readonly outputsAccepted: number;
+    readonly runsClosed: number;
+    readonly nativeDecoderCreates: number;
+    readonly nativeDecoderCloses: number;
+  }>;
   readonly diagnostic: Readonly<DecoderFailureDiagnostic> | null;
 }
 
@@ -97,6 +104,12 @@ export class Decoder {
   #disposed = false;
   #error: Error | undefined;
   #diagnostic: Readonly<DecoderFailureDiagnostic> | null = null;
+  #outputsAccepted = 0;
+  #runsClosed = 0;
+  #nativeDecoderCreates = 0;
+  #nativeDecoderCloses = 0;
+  #nativeCreateGenerationFloor = 0;
+  #nativeCloseGenerationFloor = 0;
 
   public constructor(
     config: Readonly<VideoDecoderConfig>,
@@ -231,6 +244,12 @@ export class Decoder {
       workerCount: this.#disposed || this.#error !== undefined ? 0 : 1,
       openFrames: this.#run?.openFrames ?? 0,
       openFrameBytes: this.#decodedBytes,
+      lifecycle: Object.freeze({
+        outputsAccepted: this.#outputsAccepted,
+        runsClosed: this.#runsClosed,
+        nativeDecoderCreates: this.#nativeDecoderCreates,
+        nativeDecoderCloses: this.#nativeDecoderCloses
+      }),
       diagnostic: this.#diagnostic
     });
   }
@@ -325,21 +344,44 @@ export class Decoder {
         event.frame.close();
         return;
       }
+      if (event.t === "started") this.#recordNativeCreate(event.run);
       if (isDecoderTerminalEvent(event)) {
+        this.#recordNativeClose(event.run);
         this.#settleClosed(lane.run);
       }
       // Start and acceptance may already be in flight when local close wins.
       return;
     }
     if (lane.phase === "retained") {
-      if (event.t === "frame") event.frame.close();
       const reason = new Error("AVAL decoder emitted after flush");
+      if (event.t !== "frame") {
+        this.#fail(reason, this.#runDiagnostic(
+          "flush",
+          "decoder-operation",
+          reason,
+          lane.run,
+          event
+        ));
+        return;
+      }
+      const inspection = inspectDecoderFrameMetadata(event.frame);
+      event.frame.close();
+      const ordinal = lane.run.ordinal(event.timestamp);
+      const outputFailure = inspection.outputFailure ??
+        createDecoderOutputFailure({
+          kind: ordinal === null ? "unknown-output" : "duplicate-output",
+          validationLayer: "host-expectation",
+          field: ordinal === null ? "timestamp" : "ordinal",
+          expected: null,
+          actual: observedOutputMetadata(inspection.metadata, null)
+        });
       this.#fail(reason, this.#runDiagnostic(
         "output-validation",
         "invalid-output",
         reason,
         lane.run,
-        event
+        event,
+        outputFailure
       ));
       return;
     }
@@ -368,6 +410,11 @@ export class Decoder {
       ));
       return;
     }
+    if (event.t === "started") this.#recordNativeCreate(event.run);
+    if (event.t === "frame") {
+      this.#outputsAccepted = saturatingIncrement(this.#outputsAccepted);
+    }
+    if (isDecoderTerminalEvent(event)) this.#recordNativeClose(event.run);
     if (event.t === "flushed") this.#retain(lane.run);
   }
 
@@ -400,6 +447,7 @@ export class Decoder {
       generationFloor: run.generation
     };
     this.#deleteRun(run);
+    this.#runsClosed = saturatingIncrement(this.#runsClosed);
   }
 
   #retain(run: DecodeRun): void {
@@ -422,6 +470,7 @@ export class Decoder {
         generationFloor: run.generation
       };
       this.#deleteRun(run);
+      this.#runsClosed = saturatingIncrement(this.#runsClosed);
       return;
     }
     if (this.#lane.phase !== "running" || this.#lane.run !== run) {
@@ -510,6 +559,18 @@ export class Decoder {
     }
   }
 
+  #recordNativeCreate(generation: number): void {
+    if (generation <= this.#nativeCreateGenerationFloor) return;
+    this.#nativeCreateGenerationFloor = generation;
+    this.#nativeDecoderCreates = saturatingIncrement(this.#nativeDecoderCreates);
+  }
+
+  #recordNativeClose(generation: number): void {
+    if (generation <= this.#nativeCloseGenerationFloor) return;
+    this.#nativeCloseGenerationFloor = generation;
+    this.#nativeDecoderCloses = saturatingIncrement(this.#nativeDecoderCloses);
+  }
+
   #localDiagnostic(
     phase: DecoderDiagnosticPhase,
     code: DecoderDiagnosticCode,
@@ -533,7 +594,8 @@ export class Decoder {
     code: DecoderDiagnosticCode,
     reason: unknown,
     run: DecodeRun,
-    event: DecoderRunEvent
+    event: DecoderRunEvent,
+    outputFailure: Readonly<DecoderOutputFailure> | null = null
   ): Readonly<DecoderFailureDiagnostic> {
     return createDecoderFailureDiagnostic({
       phase,
@@ -541,7 +603,9 @@ export class Decoder {
       reason,
       run: run.generation,
       decodeOrdinal: event.t === "frame" ? run.ordinal(event.timestamp) : null,
-      firstFrame: run.diagnosticFirstFrame
+      firstFrame: run.diagnosticFirstFrame,
+      lastGoodFrame: run.diagnosticLastGoodFrame,
+      outputFailure
     });
   }
 

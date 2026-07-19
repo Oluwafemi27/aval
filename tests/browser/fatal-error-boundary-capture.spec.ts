@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 
 import { canonicalJsonBytes } from "../../packages/certification/src/canonical-json.js";
 import { evaluateFatalErrorBoundaryLedger } from "../../packages/certification/src/fatal-error-boundary-ledger.js";
+import { FUNCTIONAL_FIXTURE_DIGEST } from "../../apps/playground/src/certification/functional-fixture.js";
 
 interface BrowserCertificationApi {
   readonly ready: Promise<void>;
@@ -33,7 +34,7 @@ interface BrowserCertificationApi {
 }
 
 const candidateManifestDigest = "c".repeat(64);
-const fixtureDigest = "a77d616640162f6f1ac504dc39bc5d55cce83e0927286cc97bc5632bb10f3898";
+const fixtureDigest = FUNCTIONAL_FIXTURE_DIGEST;
 const harnessDigest = "d".repeat(64);
 const runId = "candidate-boundary-browser-test";
 const environment = Object.freeze({

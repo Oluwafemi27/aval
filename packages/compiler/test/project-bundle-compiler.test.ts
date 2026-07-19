@@ -196,8 +196,9 @@ describe.skipIf(!HAS_VP9)("project codec bundle compiler", () => {
       expect(front.manifest.codec).toBe(codec);
       expect(front.manifest.renditions[0]?.bitDepth).toBe(codec === "av1" ? 10 : 8);
       if (codec === "h264") {
-        expect(front.records.some(
-          (record, decodeIndex) => record.presentationTimestamp !== decodeIndex
+        expect(front.manifest.renditions[0]?.codec).toMatch(/^avc1\.42E0/u);
+        expect(front.records.every(
+          (record, decodeIndex) => record.presentationTimestamp === decodeIndex
         )).toBe(true);
       }
     }

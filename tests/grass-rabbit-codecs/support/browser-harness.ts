@@ -164,6 +164,25 @@ export async function supportSnapshot(
   return snapshot;
 }
 
+export async function activateFirstInteractiveCodec(
+  page: Page,
+  support: Readonly<Record<Codec, SupportState>>
+): Promise<Codec | undefined> {
+  for (const codec of CODECS) {
+    if (support[codec] !== "supported") continue;
+    await codecTab(page, codec).click();
+    await codecPanel(page, codec).scrollIntoViewIfNeeded();
+    await page.evaluate(async (requested) => {
+      await window.grassRabbitCodecs.activate(requested);
+    }, codec);
+    const snapshot = await activePlayerSnapshot(page);
+    if (snapshot.readiness === "interactiveReady" && snapshot.lastFailure === null) {
+      return codec;
+    }
+  }
+  return undefined;
+}
+
 export async function selectedCodec(page: Page): Promise<Codec> {
   const selected = page.locator('[role="tab"][aria-selected="true"]');
   await expect(selected).toHaveCount(1);

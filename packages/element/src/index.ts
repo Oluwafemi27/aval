@@ -16,6 +16,7 @@ export {
   type AvalFit,
   type AvalMode,
   type AvalMotion,
+  type AvalPlaybackLifecycleCounters,
   type AvalPrepareOptions,
   type AvalPublicFailure,
   type AvalReadinessChangeDetail,

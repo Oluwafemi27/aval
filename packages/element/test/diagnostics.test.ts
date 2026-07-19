@@ -288,6 +288,7 @@ function runtime(
     openFrames: override.openFrames ?? 0,
     contextLossCount: 0,
     contextRecoveryCount: 0,
+    playbackLifecycle: lifecycleCounters(),
     decoderDiagnostics: Object.freeze([]),
     rendererDiagnostics: Object.freeze([]),
     presentation: Object.freeze({
@@ -305,5 +306,20 @@ function runtime(
       sourceCopiesInFlight: override.sourceCopiesInFlight ?? 0
     }),
     trace: Object.freeze([])
+  });
+}
+
+function lifecycleCounters() {
+  return Object.freeze({
+    outputsAccepted: 0,
+    drawsCompleted: 0,
+    logicalRunsCreated: 0,
+    candidateCommits: 0,
+    runsClosed: 0,
+    transitionStarts: 0,
+    transitionEnds: 0,
+    loopCrossings: 0,
+    nativeDecoderCreatesByLane: Object.freeze([0, 0] as const),
+    nativeDecoderClosesByLane: Object.freeze([0, 0] as const)
   });
 }

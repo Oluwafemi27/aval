@@ -15,8 +15,8 @@
   },
   "buildReport": {
     "path": "fixtures/conformance/v1/build.json",
-    "bytes": 23898,
-    "sha256": "129a64e8046be5716a395dd04658ab5f2ae49e5d9831b7afe3f95ff7e37b90b6"
+    "bytes": 24443,
+    "sha256": "ba41620be81fd21ba0724713f2685a36666939a9cf201ceb5e7f144ca971cc43"
   },
   "outputs": [
     {
@@ -36,20 +36,20 @@
     },
     {
       "path": "fixtures/conformance/v1/h264.avl",
-      "bytes": 11471,
-      "sha256": "a77d616640162f6f1ac504dc39bc5d55cce83e0927286cc97bc5632bb10f3898"
+      "bytes": 13675,
+      "sha256": "2c3d03e20655cb6a6fdf5c889f2d30ac0ad67ee3a7183e80286c2b38da34461b"
     }
   ],
   "codecStrings": {
     "av1": "av01.0.00M.10.0.110.01.01.01.0",
     "vp9": "vp09.00.10.08.01.01.01.01.00",
     "h265": "hvc1.1.6.L30.90",
-    "h264": "avc1.64000A"
+    "h264": "avc1.42E00B"
   },
   "toolchain": {
     "aggregateMemoryLimit": "derived",
     "ffmpeg": {
-      "calibrationSha256": "bbbae147fe7b5b4dea2c0dd333bcefa0ac31407c3b610ba685ee99c0872cf1d9",
+      "calibrationSha256": "c94bf285200b291927ebb961b1b7b46184f107aea7541bd336a4cb9fde462561",
       "configurationSha256": "b809566072f4ad92e517aaebc0a2701151e03e74a619be39a7196a37f7dc34d4",
       "encodersOutputSha256": "e76ee773e9049d67796e3b5992b5374e9969ab3b80f14af260b295adc41bbdc2",
       "executableIdentity": {

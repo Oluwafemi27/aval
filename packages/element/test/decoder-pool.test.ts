@@ -53,7 +53,7 @@ describe("DecoderPool", () => {
       t: "flush",
       run: foreground.generation
     });
-    expect(pool.snapshot()).toEqual({
+    expect(pool.snapshot()).toMatchObject({
       workerCount: 2,
       openFrames: 1,
       openFrameBytes: 1_024,
@@ -94,6 +94,15 @@ describe("DecoderPool", () => {
     candidate.commit();
     candidate.commit();
     candidate.cancel();
+    expect(pool.snapshot().playbackLifecycle).toMatchObject({
+      logicalRunsCreated: 2,
+      candidateCommits: 1,
+      nativeDecoderCreatesByLane: [0, 1],
+      nativeDecoderClosesByLane: [0, 0]
+    });
+    expect(Object.isFrozen(
+      pool.snapshot().playbackLifecycle.nativeDecoderCreatesByLane
+    )).toBe(true);
     expect(foreground.closed).toBe(true);
     expect(pool.candidateAvailable).toBe(false);
     harness.workers[0]!.emit({ t: "closed", run: foreground.generation });
@@ -161,7 +170,7 @@ describe("DecoderPool", () => {
       frame: decodedFrame()
     });
 
-    expect(pool.snapshot()).toEqual({
+    expect(pool.snapshot()).toMatchObject({
       workerCount: 2,
       openFrames: 2,
       openFrameBytes: 2_048,
@@ -175,7 +184,7 @@ describe("DecoderPool", () => {
     expect(decodedBytes).toEqual([1_024, 2_048, 1_024]);
 
     pool.dispose();
-    expect(pool.snapshot()).toEqual({
+    expect(pool.snapshot()).toMatchObject({
       workerCount: 0,
       openFrames: 0,
       openFrameBytes: 0,
@@ -211,7 +220,7 @@ describe("DecoderPool", () => {
     await expect(candidate.run.take(0)).rejects.toThrow(
       "AVAL decoded surfaces exceed their byte ceiling"
     );
-    expect(pool.snapshot()).toEqual({
+    expect(pool.snapshot()).toMatchObject({
       workerCount: 1,
       openFrames: 1,
       openFrameBytes: 1_024,

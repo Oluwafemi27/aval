@@ -7,7 +7,11 @@ import type {
   PlayerRendererDiagnostic,
   PlayerSnapshot
 } from "../src/player-contract.js";
-import type { AvalElement, Binding } from "../src/public-types.js";
+import type {
+  AvalElement,
+  AvalPlaybackLifecycleCounters,
+  Binding
+} from "../src/public-types.js";
 import { AvalPlaybackError } from "../src/errors.js";
 
 const harness = vi.hoisted(() => ({
@@ -16,13 +20,16 @@ const harness = vi.hoisted(() => ({
   players: [] as unknown[],
   failNextPrepare: false,
   failNextPrepareGeneric: false,
+  deferNextPrepare: false,
   deferNextPrepareFailure: false,
   deferNextDispose: false,
+  deferredPreparations: [] as DeferredPreparation[],
   deferredFailures: [] as DeferredFailure[],
   deferredDisposals: [] as Array<() => void>,
   participants: new Set<BrokerParticipant>(),
   tickets: [] as BrokerTicket[],
   bindings: [] as Binding[],
+  eventStates: new Map<string, string>(),
   operations: [] as string[]
 }));
 
@@ -80,6 +87,8 @@ vi.mock("../src/player.js", () => ({
     harness.failNextPrepare = false;
     const failPrepareGeneric = harness.failNextPrepareGeneric;
     harness.failNextPrepareGeneric = false;
+    const deferPrepare = harness.deferNextPrepare;
+    harness.deferNextPrepare = false;
     const deferPrepareFailure = harness.deferNextPrepareFailure;
     harness.deferNextPrepareFailure = false;
     let state = input.initialState ?? "idle";
@@ -88,6 +97,18 @@ vi.mock("../src/player.js", () => ({
     let disposal: Promise<void> | null = null;
     let decoderDiagnostics: readonly Readonly<PlayerDecoderDiagnostic>[] = Object.freeze([]);
     let rendererDiagnostics: readonly Readonly<PlayerRendererDiagnostic>[] = Object.freeze([]);
+    let playbackLifecycle: AvalPlaybackLifecycleCounters = {
+      outputsAccepted: 0,
+      drawsCompleted: 0,
+      logicalRunsCreated: 0,
+      candidateCommits: 0,
+      runsClosed: 0,
+      transitionStarts: 0,
+      transitionEnds: 0,
+      loopCrossings: 0,
+      nativeDecoderCreatesByLane: [0, 0],
+      nativeDecoderClosesByLane: [0, 0]
+    };
     const metadata = Object.freeze({
       initialState: "idle",
       stateNames: Object.freeze(["idle", "hover"]),
@@ -121,6 +142,17 @@ vi.mock("../src/player.js", () => ({
       openFrames: 0,
       contextLossCount: 0,
       contextRecoveryCount: 0,
+      playbackLifecycle: Object.freeze({
+        ...playbackLifecycle,
+        nativeDecoderCreatesByLane: Object.freeze([
+          playbackLifecycle.nativeDecoderCreatesByLane[0],
+          playbackLifecycle.nativeDecoderCreatesByLane[1]
+        ] as const),
+        nativeDecoderClosesByLane: Object.freeze([
+          playbackLifecycle.nativeDecoderClosesByLane[0],
+          playbackLifecycle.nativeDecoderClosesByLane[1]
+        ] as const)
+      }),
       decoderDiagnostics,
       rendererDiagnostics,
       presentation: Object.freeze({
@@ -174,6 +206,13 @@ vi.mock("../src/player.js", () => ({
       publish,
       prepare: () => {
         harness.operations.push("prepare");
+        if (deferPrepare) {
+          return new Promise((resolve) => {
+            harness.deferredPreparations.push({
+              complete: () => resolve(granted ? animatedResult() : queuedResult())
+            });
+          });
+        }
         if (deferPrepareFailure) {
           return new Promise((_, reject) => {
             harness.deferredFailures.push({
@@ -219,6 +258,7 @@ vi.mock("../src/player.js", () => ({
       canSend: () => false,
       send: (event) => {
         harness.operations.push(`send:${event}`);
+        state = harness.eventStates.get(event) ?? state;
         return true;
       },
       readyFor: () => true,
@@ -402,6 +442,19 @@ vi.mock("../src/player.js", () => ({
         input.onAnimationResourcesRetired();
         return input.onPlaybackFailure("renderer-failure", "render");
       },
+      setLifecycle: (next) => {
+        playbackLifecycle = {
+          ...playbackLifecycle,
+          ...next,
+          nativeDecoderCreatesByLane:
+            next.nativeDecoderCreatesByLane ??
+            playbackLifecycle.nativeDecoderCreatesByLane,
+          nativeDecoderClosesByLane:
+            next.nativeDecoderClosesByLane ??
+            playbackLifecycle.nativeDecoderClosesByLane
+        };
+      },
+      restart: (nextState) => input.onRestart?.(nextState),
       disposed: () => disposed
     };
     harness.inputs.push(input);
@@ -426,12 +479,15 @@ afterEach(async () => {
   harness.players.length = 0;
   harness.failNextPrepare = false;
   harness.failNextPrepareGeneric = false;
+  harness.deferNextPrepare = false;
   harness.deferNextPrepareFailure = false;
   harness.deferNextDispose = false;
+  harness.deferredPreparations.length = 0;
   harness.deferredFailures.length = 0;
   harness.deferredDisposals.length = 0;
   harness.tickets.length = 0;
   harness.bindings.length = 0;
+  harness.eventStates.clear();
   harness.operations.length = 0;
   FakeMutationObserver.instances.length = 0;
   await settleMicrotasks();
@@ -463,6 +519,143 @@ describe("element lifecycle regressions", () => {
       expect.soft(sent, event).toBeLessThan(prepare);
     }
     expect.soft(prepare).toBeLessThan(publish);
+  });
+
+  it("transfers touch hover ownership on document pointerdown", async () => {
+    harness.brokerMode = "immediate";
+    harness.bindings.push(
+      { source: "engagement.on", event: "engaged" },
+      { source: "engagement.off", event: "disengaged" }
+    );
+    const { element, view } = createConnectedElement("motion.avl");
+    await element.prepare();
+    expect(view.document.inputListenerOperations).toEqual([
+      "add:pointerdown:true",
+      "add:pointerup:true"
+    ]);
+    const interactionStart = harness.operations.length;
+
+    view.document.dispatchEvent(pointerDown("touch", [
+      element as unknown as EventTarget,
+      view.document
+    ]));
+    view.document.dispatchEvent(pointerDown("mouse", [view.document]));
+    view.document.dispatchEvent(pointerDown("touch", [view.document]));
+
+    expect(harness.operations.slice(interactionStart)).toEqual([
+      "send:engaged",
+      "send:disengaged"
+    ]);
+
+    await element.dispose();
+    expect(view.document.inputListenerOperations).toEqual([
+      "add:pointerdown:true",
+      "add:pointerup:true",
+      "remove:pointerdown:true",
+      "remove:pointerup:true"
+    ]);
+    const disposed = harness.operations.length;
+    view.document.dispatchEvent(pointerDown("touch", [
+      element as unknown as EventTarget,
+      view.document
+    ]));
+    expect(harness.operations).toHaveLength(disposed);
+  });
+
+  it("keeps focus engagement until an outside touch blurs the target", async () => {
+    harness.brokerMode = "immediate";
+    harness.bindings.push(
+      { source: "focus.in", event: "focus-active" },
+      { source: "focus.out", event: "focus-idle" },
+      { source: "engagement.on", event: "engaged" },
+      { source: "engagement.off", event: "disengaged" }
+    );
+    const { element, view } = createConnectedElement("motion.avl");
+    await element.prepare();
+    const interactionStart = harness.operations.length;
+
+    view.document.dispatchEvent(pointerDown("touch", [
+      element as unknown as EventTarget,
+      view.document
+    ]));
+    view.document.activeElement = element as unknown as Element;
+    element.dispatchEvent(new Event("focusin"));
+    view.document.dispatchEvent(pointerDown("touch", [view.document]));
+
+    expect(harness.operations.slice(interactionStart)).toEqual([
+      "send:engaged",
+      "send:focus-active"
+    ]);
+    view.document.dispatchEvent(pointerUp("touch", [view.document]));
+    expect(harness.operations.slice(interactionStart)).toEqual([
+      "send:engaged",
+      "send:focus-active"
+    ]);
+    await settleMicrotasks();
+    expect(harness.operations.slice(interactionStart)).toEqual([
+      "send:engaged",
+      "send:focus-active",
+      "send:focus-idle",
+      "send:disengaged"
+    ]);
+  });
+
+  it("publishes only the final combined engagement after deferred renderer qualification", async () => {
+    harness.brokerMode = "immediate";
+    harness.deferNextPrepare = true;
+    harness.bindings.push(
+      { source: "pointer.enter", event: "pointer-active" },
+      { source: "pointer.leave", event: "pointer-idle" },
+      { source: "focus.in", event: "focus-active" },
+      { source: "focus.out", event: "focus-idle" },
+      { source: "engagement.on", event: "engaged" },
+      { source: "engagement.off", event: "disengaged" }
+    );
+    harness.eventStates.set("engaged", "hover");
+    harness.eventStates.set("disengaged", "idle");
+    const { element, view } = createConnectedElement("motion.avl");
+    const requestedStates: string[] = [];
+    element.addEventListener("requestedstatechange", ((event: CustomEvent) => {
+      requestedStates.push(String(event.detail.to));
+    }) as EventListener);
+
+    const preparation = element.prepare();
+    await eventually(() => harness.deferredPreparations.length === 1);
+    const interactionStart = harness.operations.length;
+
+    element.dispatchEvent(new Event("pointerenter"));
+    view.document.activeElement = element as unknown as Element;
+    element.dispatchEvent(new Event("focusin"));
+    element.dispatchEvent(new Event("pointerleave"));
+    view.document.activeElement = null;
+    element.dispatchEvent(new Event("focusout"));
+    await settleMicrotasks();
+    element.dispatchEvent(new Event("pointerenter"));
+    view.document.activeElement = element as unknown as Element;
+    element.dispatchEvent(new Event("focusin"));
+    element.dispatchEvent(new Event("pointerleave"));
+
+    expect(requestedStates).toEqual([]);
+    expect(harness.operations.slice(interactionStart)).toEqual([
+      "send:pointer-active",
+      "send:engaged",
+      "send:focus-active",
+      "send:pointer-idle",
+      "send:focus-idle",
+      "send:disengaged",
+      "send:pointer-active",
+      "send:engaged",
+      "send:focus-active",
+      "send:pointer-idle"
+    ]);
+
+    harness.deferredPreparations[0]!.complete();
+    await expect(preparation).resolves.toMatchObject({ mode: "animated" });
+
+    expect(requestedStates).toEqual(["hover"]);
+    expect(element.requestedState).toBe("hover");
+    expect(element.visualState).toBe("hover");
+    expect(harness.operations.slice(interactionStart).at(-1)).toBe("publish");
   });
 
   it("retains one canonical playback error until a newer source generation", async () => {
@@ -859,6 +1052,91 @@ describe("element lifecycle regressions", () => {
     );
   });
 
+  it("retains lifecycle high-water marks through teardown and resets on replacement", async () => {
+    harness.brokerMode = "immediate";
+    const { element, source } = createConnectedElement("motion.avl");
+    await element.prepare();
+    const player = playerAt(0);
+    player.setLifecycle({
+      outputsAccepted: 91,
+      drawsCompleted: 47,
+      logicalRunsCreated: 8,
+      candidateCommits: 6,
+      runsClosed: 7,
+      transitionStarts: 4,
+      transitionEnds: 4,
+      loopCrossings: 3,
+      nativeDecoderCreatesByLane: [5, 3],
+      nativeDecoderClosesByLane: [4, 3]
+    });
+
+    const live = element.getDiagnostics().runtime.playbackLifecycle;
+    expect(live).toMatchObject({
+      outputsAccepted: 91,
+      drawsCompleted: 47,
+      nativeDecoderCreatesByLane: [5, 3]
+    });
+    const error = player.failActive();
+    await expect(element.prepare()).rejects.toBe(error);
+    await eventually(() => player.disposed());
+
+    const retained = element.getDiagnostics().runtime.playbackLifecycle;
+    expect(retained).toEqual(live);
+    expect(Object.isFrozen(retained)).toBe(true);
+    expect(Object.isFrozen(retained.nativeDecoderCreatesByLane)).toBe(true);
+
+    source.setAttribute("src", "replacement.avl");
+    FakeMutationObserver.instances[0]!.enqueue(attributeMutation(source));
+    await expect(element.prepare()).resolves.toMatchObject({ mode: "animated" });
+    expect(element.getDiagnostics().runtime.playbackLifecycle).toEqual({
+      outputsAccepted: 0,
+      drawsCompleted: 0,
+      logicalRunsCreated: 0,
+      candidateCommits: 0,
+      runsClosed: 0,
+      transitionStarts: 0,
+      transitionEnds: 0,
+      loopCrossings: 0,
+      nativeDecoderCreatesByLane: [0, 0],
+      nativeDecoderClosesByLane: [0, 0]
+    });
+  });
+
+  it("retains lifecycle high-water marks across a same-source player restart", async () => {
+    harness.brokerMode = "immediate";
+    const { element } = createConnectedElement("motion.avl");
+    await element.prepare();
+    const first = playerAt(0);
+    first.setLifecycle({
+      outputsAccepted: 91,
+      drawsCompleted: 47,
+      logicalRunsCreated: 8,
+      candidateCommits: 6,
+      runsClosed: 7,
+      transitionStarts: 4,
+      transitionEnds: 4,
+      loopCrossings: 3,
+      nativeDecoderCreatesByLane: [5, 3],
+      nativeDecoderClosesByLane: [4, 3]
+    });
+    const before = element.getDiagnostics().runtime.playbackLifecycle;
+
+    first.restart("idle");
+    await eventually(() => harness.players.length === 2);
+    await element.prepare();
+    const replacement = playerAt(1);
+    replacement.setLifecycle({
+      outputsAccepted: 4,
+      drawsCompleted: 3,
+      logicalRunsCreated: 2,
+      candidateCommits: 1,
+      runsClosed: 1
+    });
+
+    expect(first.disposed()).toBe(true);
+    expect(element.getDiagnostics().runtime.playbackLifecycle).toEqual(before);
+  });
+
   it("does not let deferred terminal retirement cancel an error-listener replacement", async () => {
     harness.brokerMode = "immediate";
     const { element, source } = createConnectedElement("motion.avl");
@@ -993,9 +1271,15 @@ interface DeferredFailure {
   fail(): void;
 }
 
+interface DeferredPreparation {
+  complete(): void;
+}
+
 interface TestPlayer extends Player {
   failActive(): AvalPlaybackError;
   failRendererActive(): AvalPlaybackError;
+  setLifecycle(counters: Partial<AvalPlaybackLifecycleCounters>): void;
+  restart(state: string): void;
   disposed(): boolean;
 }
 
@@ -1154,6 +1438,11 @@ class FakeHTMLElement extends EventTarget {
   public matches(_selector: string): boolean { return false; }
   public contains(node: unknown): boolean { return node === this; }
   public getRootNode(): Document { return this.ownerDocument as unknown as Document; }
+  public blur(): void {
+    if (this.ownerDocument.activeElement !== this as unknown as Element) return;
+    this.ownerDocument.activeElement = null;
+    this.dispatchEvent(new Event("focusout"));
+  }
 }
 
 class FakeElement extends EventTarget {
@@ -1258,10 +1547,59 @@ class FakeDocument extends EventTarget {
   public visibilityState: DocumentVisibilityState = "visible";
   public activeElement: Element | null = null;
   public readonly baseURI = "https://example.test/";
+  public readonly inputListenerOperations: string[] = [];
   public constructor(public readonly defaultView: FakeWindow) { super(); }
+  public override addEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: boolean | AddEventListenerOptions
+  ): void {
+    if (type === "pointerdown" || type === "pointerup") {
+      this.inputListenerOperations.push(`add:${type}:${String(capture(options))}`);
+    }
+    super.addEventListener(type, callback, options);
+  }
+  public override removeEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: boolean | EventListenerOptions
+  ): void {
+    if (type === "pointerdown" || type === "pointerup") {
+      this.inputListenerOperations.push(`remove:${type}:${String(capture(options))}`);
+    }
+    super.removeEventListener(type, callback, options);
+  }
   public createElement(localName: string): FakeElement {
     return new FakeElement(localName, this);
   }
+}
+
+function capture(options?: boolean | EventListenerOptions): boolean {
+  return typeof options === "boolean" ? options : options?.capture === true;
+}
+
+function pointerDown(
+  pointerType: "mouse" | "pen" | "touch",
+  path: readonly EventTarget[]
+): Event {
+  const event = new Event("pointerdown", { bubbles: true, composed: true });
+  Object.defineProperties(event, {
+    pointerType: { value: pointerType },
+    composedPath: { value: () => [...path] }
+  });
+  return event;
+}
+
+function pointerUp(
+  pointerType: "mouse" | "pen" | "touch",
+  path: readonly EventTarget[]
+): Event {
+  const event = new Event("pointerup", { bubbles: true, composed: true });
+  Object.defineProperties(event, {
+    pointerType: { value: pointerType },
+    composedPath: { value: () => [...path] }
+  });
+  return event;
 }
 
 function attributeMutation(target: FakeElement): MutationRecord {

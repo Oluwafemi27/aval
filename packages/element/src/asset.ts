@@ -346,7 +346,7 @@ function read64(view: DataView, offset: number): number {
 
 function codec(value: unknown): { family: Codec; bitDepth: 8 | 10 } {
   if (typeof value !== "string") bad();
-  if (/^avc1\.6400(?:0A|0B|0C|0D|14|15|16|1E|1F|20|28|29|2A|32|33|34|3C|3D|3E)$/.test(value)) {
+  if (/^avc1\.(?:42E0|6400)(?:0A|0B|0C|0D|14|15|16|1E|1F|20|28|29|2A|32|33|34|3C|3D|3E)$/.test(value)) {
     return { family: "h264", bitDepth: 8 };
   }
   const h265 = /^hvc1\.1\.(0|[1-9A-F][0-9A-F]*)\.[LH](0|[1-9][0-9]*)\.((?:[0-9A-F]{2}\.){0,5}(?!00)[0-9A-F]{2})$/.exec(value);

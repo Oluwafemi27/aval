@@ -5,9 +5,18 @@ graphite calibration ball rotates in every state, its meridian seams and shell
 light uniformly during hover, and a separately authored forward-playing exit
 returns it to idle without reversing or resetting the rotation.
 
-The 512×512 source is opaque H.264 at 24 fps. The source and compiled rendition
-both use CRF 16 to keep independently encoded state boundaries visually quiet.
-The first proof compiles only an H.264 `.avl` rendition:
+The 512×512 authoring source is opaque H.264 at 24 fps. Compilation publishes
+equivalent AV1, VP9, H.265/HEVC, and H.264 `.avl` renditions in that preferred
+order. The browser qualifies each source in order and uses H.264 only when none
+of the three more modern codecs works. Conservative constant-quality settings
+keep independently encoded state boundaries visually quiet:
+
+- AV1 8-bit, CRF 24
+- VP9, CRF 26
+- H.265/HEVC, CRF 20
+- H.264 Constrained Baseline, CRF 16
+
+Every rendition preserves the same authored graph:
 
 - `intro`: `[0, 24)`
 - `idle-loop`: `[24, 48)`
@@ -29,8 +38,8 @@ same forward velocity across every source boundary.
 
 ## Regenerate the source
 
-Python 3.10+, Blender 5.1, and FFmpeg with `libx264` are required. From the
-repository root:
+Python 3.10+, Blender 5.1, and FFmpeg with `libaom-av1`, `libvpx-vp9`,
+`libx265`, and `libx264` are required. From the repository root:
 
 ```sh
 npm run render:kinetic-orb

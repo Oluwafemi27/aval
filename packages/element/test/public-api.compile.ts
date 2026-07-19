@@ -6,6 +6,7 @@ import type {
   AvalErrorDetail,
   AvalFit,
   AvalPublicFailure,
+  AvalPlaybackLifecycleCounters,
   AvalReadinessChangeDetail,
   AvalSourceCandidate,
   StaticReason
@@ -40,6 +41,9 @@ const diagnostics = element.getDiagnostics();
 const retainedDecoderDiagnostics: readonly Readonly<AvalDecoderDiagnostic>[] =
   diagnostics.runtime.decoderDiagnostics;
 void retainedDecoderDiagnostics;
+const lifecycle: Readonly<AvalPlaybackLifecycleCounters> =
+  diagnostics.runtime.playbackLifecycle;
+void lifecycle.nativeDecoderCreatesByLane[0];
 void decoderDiagnostic.sourceGeneration;
 void decoderDiagnostic.exception?.message;
 
@@ -105,6 +109,10 @@ playbackError.failure.operation = null;
 decoderDiagnostic.sourceGeneration = 7;
 // @ts-expect-error nested decoder exception evidence is immutable
 decoderDiagnostic.exception!.message = "forged";
+// @ts-expect-error playback lifecycle counters are immutable
+lifecycle.drawsCompleted = 7;
+// @ts-expect-error playback decoder lane tuples are immutable
+lifecycle.nativeDecoderCreatesByLane[0] = 7;
 // @ts-expect-error fit is closed
 const badFit: AvalFit = "scale-down";
 void badFit;

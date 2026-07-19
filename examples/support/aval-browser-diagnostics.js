@@ -11,7 +11,7 @@ export const AVAL_BROWSER_DIAGNOSTIC_LIMITS = Object.freeze({
   runtimeTrace: 64,
   stringLength: 4_096,
   valueBytes: 524_288,
-  valueNodes: 4_096
+  valueNodes: 8_192
 });
 
 const AUTHORED_SOURCE_LIMIT = AVAL_BROWSER_DIAGNOSTIC_LIMITS.authoredSources;
@@ -39,6 +39,8 @@ const JSON_TEXT_ENCODER = new TextEncoder();
 const DIAGNOSTICS_QUERY = "avalDiagnostics";
 const DIAGNOSTICS_VALUE = "1";
 const OVERLAY_ATTRIBUTE = "data-aval-browser-diagnostics";
+const OVERLAY_FAILURE_LINE_LIMIT = 12;
+const OVERLAY_FIELD_LENGTH = 96;
 
 /**
  * Query-gated, page-resident diagnostics used by the real-browser matrix.
@@ -283,7 +285,14 @@ function captureEnvironment(serialize) {
       videoFrame: typeof window.VideoFrame === "function",
       offscreenCanvas: typeof window.OffscreenCanvas === "function",
       webgl2: typeof window.WebGL2RenderingContext === "function",
-      webgpu: "gpu" in navigator
+      webgpu: "gpu" in navigator,
+      braveBrandApi: (() => {
+        try {
+          return typeof navigator.brave?.isBrave === "function";
+        } catch {
+          return false;
+        }
+      })()
     })
   });
 }
@@ -453,19 +462,15 @@ function installOverlay(diagnostics) {
       const runtime = element?.diagnostics?.runtime;
       const failure = element?.diagnostics?.lastFailure;
       const outcome = runtime?.selectedCodec ?? failure?.code ?? "pending";
-      const decoderDiagnostic = Array.isArray(runtime?.decoderDiagnostics)
-        ? runtime.decoderDiagnostics[0]
-        : null;
-      const evidence = decoderDiagnostic === null || decoderDiagnostic === undefined
-        ? null
-        : `[${String(decoderDiagnostic.sourceIndex)}] ` +
-          `${String(decoderDiagnostic.code)}@${String(decoderDiagnostic.phase)}`;
       const summary = [
         `${String(report.checkpoints.length)}/${String(CHECKPOINT_LIMIT)} checkpoints`,
-        element?.readiness ?? "pending",
-        outcome
+        overlayDiagnosticField(element?.readiness ?? "pending"),
+        overlayDiagnosticField(outcome)
       ].join(" · ");
-      status.textContent = evidence === null ? summary : `${summary}\n${evidence}`;
+      status.textContent = [
+        summary,
+        ...overlayFailureSummaries(runtime)
+      ].join("\n");
     });
   };
 
@@ -473,6 +478,88 @@ function installOverlay(diagnostics) {
     document.addEventListener("DOMContentLoaded", mount, { once: true });
   } else {
     mount();
+  }
+}
+
+function overlayFailureSummaries(runtime) {
+  if (!isDiagnosticRecord(runtime)) return [];
+  const lines = [];
+  const decoderDiagnostics = Array.isArray(runtime.decoderDiagnostics)
+    ? runtime.decoderDiagnostics
+    : [];
+  for (const diagnostic of decoderDiagnostics) {
+    if (lines.length >= OVERLAY_FAILURE_LINE_LIMIT) break;
+    if (!isDiagnosticRecord(diagnostic)) continue;
+    const outputFailure = isDiagnosticRecord(diagnostic.outputFailure)
+      ? diagnostic.outputFailure
+      : null;
+    const fields = [
+      `decoder[${overlayDiagnosticField(diagnostic.sourceIndex)}]`,
+      `${overlayDiagnosticField(diagnostic.code)}@` +
+        overlayDiagnosticField(diagnostic.phase),
+      `lane=${overlayDiagnosticField(diagnostic.lane)}`,
+      `run=${overlayDiagnosticField(diagnostic.run)}`,
+      `logical=${overlayDiagnosticField(diagnostic.logicalRunId)}`,
+      `unit=${overlayDiagnosticField(diagnostic.unit)}`
+    ];
+    if (outputFailure !== null) {
+      fields.push(
+        "mismatch=" +
+          `${overlayDiagnosticField(outputFailure.kind)}/` +
+          `${overlayDiagnosticField(outputFailure.field)}/` +
+          overlayDiagnosticField(outputFailure.validationLayer)
+      );
+    }
+    lines.push(fields.join(" "));
+  }
+
+  const rendererDiagnostics = Array.isArray(runtime.rendererDiagnostics)
+    ? runtime.rendererDiagnostics
+    : [];
+  for (const diagnostic of rendererDiagnostics) {
+    if (lines.length >= OVERLAY_FAILURE_LINE_LIMIT) break;
+    if (!isDiagnosticRecord(diagnostic)) continue;
+    const contextState = diagnostic.contextLost === true
+      ? "lost"
+      : diagnostic.contextLost === false ? "available" : "unknown";
+    lines.push([
+      `renderer[${overlayDiagnosticField(diagnostic.sourceIndex)}]`,
+      `phase=${overlayDiagnosticField(diagnostic.phase)}`,
+      `gl=${overlayGlError(diagnostic.glError)}`,
+      `context=${contextState}`
+    ].join(" "));
+  }
+  return lines;
+}
+
+function overlayDiagnosticField(value) {
+  if (value === null || value === undefined) return "none";
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) ? String(value) : "unknown";
+  }
+  if (typeof value !== "string") return "unknown";
+  const singleLine = boundedDiagnosticText(value).replace(/\s+/gu, " ");
+  if (singleLine.length <= OVERLAY_FIELD_LENGTH) return singleLine;
+  return `${singleLine.slice(
+    0,
+    OVERLAY_FIELD_LENGTH - TRUNCATION_MARKER.length
+  )}${TRUNCATION_MARKER}`;
+}
+
+function overlayGlError(value) {
+  if (value === null || value === undefined) return "none";
+  if (!Number.isSafeInteger(value) || value < 0) return "unknown";
+  const hex = `0x${value.toString(16).toUpperCase().padStart(4, "0")}`;
+  switch (value) {
+    case 0x0000: return `NO_ERROR(${hex})`;
+    case 0x0500: return `INVALID_ENUM(${hex})`;
+    case 0x0501: return `INVALID_VALUE(${hex})`;
+    case 0x0502: return `INVALID_OPERATION(${hex})`;
+    case 0x0505: return `OUT_OF_MEMORY(${hex})`;
+    case 0x0506: return `INVALID_FRAMEBUFFER_OPERATION(${hex})`;
+    case 0x9242: return `CONTEXT_LOST_WEBGL(${hex})`;
+    default: return hex;
   }
 }
 
@@ -522,7 +609,7 @@ function serializeDiagnosticValue(value, limits = {}) {
 }
 
 function serializeDiagnosticValueInternal(value, state, depth, key) {
-  if (isSensitiveDiagnosticKey(key)) {
+  if (isSensitiveDiagnosticValue(key, value) || isBinaryDiagnosticValue(value)) {
     return serializeDiagnosticScalar(REDACTED_SENSITIVE_VALUE, state);
   }
   if (value === null || typeof value === "boolean" || typeof value === "number") {
@@ -725,7 +812,13 @@ function boundedArrayTail(value, limit) {
 
 function diagnosticPageLocation() {
   const url = new URL(location.href);
-  const query = `?${DIAGNOSTICS_QUERY}=${DIAGNOSTICS_VALUE}`;
+  const certificationMode = url.searchParams.get("avalCertificationMode");
+  const certificationQuery = certificationMode === "forced-h264" ||
+    certificationMode === "full-ladder"
+    ? `&avalCertificationMode=${certificationMode}`
+    : "";
+  const query = `?${DIAGNOSTICS_QUERY}=${DIAGNOSTICS_VALUE}` +
+    certificationQuery;
   const maximumPathLength = STRING_LIMIT - query.length;
   const pathname = url.pathname.length <= maximumPathLength
     ? url.pathname
@@ -824,11 +917,39 @@ function isSensitiveQueryParameterName(name) {
     .test(normalized);
 }
 
-function isSensitiveDiagnosticKey(key) {
+function isSensitiveDiagnosticValue(key, value) {
   if (typeof key !== "string") return false;
   const normalized = key.replace(/[^a-z0-9]/giu, "").toLowerCase();
-  return /(?:authorization|cookie|credential|etag|headers?|integrity|password|passwd|passphrase|responsetext|secret|token|apikey|accesskey)/u
+  if (
+    /(?:authorization|cookie|credential|etag|headers?|integrity|password|passwd|passphrase|responsetext|secret|token|apikey|accesskey)/u
+      .test(normalized)
+  ) return true;
+  if (/(?:sourcebytes|body|payload)$/u.test(normalized)) return true;
+  if (normalized === "bytes") return !isNumericByteCounterRecord(value);
+  return /(?:arraybuffer|binarydata|bytearray|encodedchunk|rawbytes|sourcebuffer|sourcechunk|sourcedata|typedarray|uint8array)$/u
     .test(normalized);
+}
+
+function isNumericByteCounterRecord(value) {
+  if (!isDiagnosticRecord(value)) return false;
+  let count = 0;
+  for (const key in value) {
+    if (!Object.hasOwn(value, key)) continue;
+    count += 1;
+    const entry = value[key];
+    if (!Number.isSafeInteger(entry) || entry < 0) return false;
+  }
+  return count > 0 && count <= GENERAL_OBJECT_KEY_LIMIT;
+}
+
+function isBinaryDiagnosticValue(value) {
+  if (typeof value !== "object" || value === null) return false;
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return true;
+  if (typeof Blob === "function" && value instanceof Blob) return true;
+  if (typeof ImageData === "function" && value instanceof ImageData) return true;
+  if (typeof VideoFrame === "function" && value instanceof VideoFrame) return true;
+  return typeof EncodedVideoChunk === "function" &&
+    value instanceof EncodedVideoChunk;
 }
 
 function isStackDiagnosticKey(key) {
@@ -840,6 +961,9 @@ function isStackDiagnosticKey(key) {
 function isLocationDiagnosticKey(key) {
   if (typeof key !== "string") return false;
   const normalized = key.replace(/[^a-z0-9]/giu, "").toLowerCase();
+  // Renderer diagnostics use this field for the semantic upload strategy
+  // ("native" or "rgba-copy"), not for a filesystem or network location.
+  if (normalized === "uploadpath") return false;
   return /(?:file|filename|href|path|pathname|src|uri|url)$/u.test(normalized);
 }
 

@@ -7,11 +7,12 @@ import { parseFrontIndex } from "@pixel-point/aval-format";
 
 const EXAMPLE_PATH = resolve("examples/kinetic-orb");
 const PROJECT_PATH = resolve(EXAMPLE_PATH, "motion.json");
-const BUILD_PATH = resolve(EXAMPLE_PATH, "public/kinetic-orb/build.json");
-const ASSET_PATH = resolve(EXAMPLE_PATH, "public/kinetic-orb/h264.avl");
+const BUNDLE_PATH = resolve(EXAMPLE_PATH, "public/kinetic-orb");
+const BUILD_PATH = resolve(BUNDLE_PATH, "build.json");
 const HTML_PATH = resolve(EXAMPLE_PATH, "index.html");
+const CODECS = ["av1", "vp9", "h265", "h264"] as const;
 
-test("preserves the phase-locked H.264 graph", async () => {
+test("preserves the phase-locked graph across the preferred codec ladder", async () => {
   const project = JSON.parse(await readFile(PROJECT_PATH, "utf8")) as {
     encodings: {
       codec: string;
@@ -51,24 +52,35 @@ test("preserves the phase-locked H.264 graph", async () => {
   };
   const report = JSON.parse(await readFile(BUILD_PATH, "utf8")) as {
     assets: {
-      codec: string;
+      codec: typeof CODECS[number];
+      codecString: string;
       path: string;
       bytes: number;
       integrity: string;
       sha256: string;
+      type: string;
     }[];
     encodings: {
       codec: string;
       renditions: { id: string; width: number; height: number; crf: number }[];
     }[];
+    sourceMarkup: string;
   };
-  const bytes = await readFile(ASSET_PATH);
   const html = await readFile(HTML_PATH, "utf8");
-  const front = parseFrontIndex(bytes);
+  const fronts = new Map<
+    typeof CODECS[number],
+    ReturnType<typeof parseFrontIndex>
+  >();
 
-  expect(project.encodings.map(({ codec }) => codec)).toEqual(["h264"]);
-  expect(project.encodings[0]?.renditions).toEqual([
-    { id: "video.1x", width: 512, height: 512, crf: 16 }
+  expect(project.encodings.map(({ codec }) => codec)).toEqual(CODECS);
+  expect(project.encodings.map(({ codec, renditions }) => ({
+    codec,
+    crf: renditions[0]?.crf
+  }))).toEqual([
+    { codec: "av1", crf: 24 },
+    { codec: "vp9", crf: 26 },
+    { codec: "h265", crf: 20 },
+    { codec: "h264", crf: 16 }
   ]);
   expect(project.units.map(({ id, range }) => ({ id, range }))).toEqual([
     { id: "intro", range: [0, 24] },
@@ -91,20 +103,54 @@ test("preserves the phase-locked H.264 graph", async () => {
       { id: "hover.exiting", wait: 2 }
     ]);
 
-  expect(report.assets).toHaveLength(1);
-  expect(report.assets[0]).toMatchObject({ codec: "h264", path: "h264.avl" });
-  expect(report.encodings[0]?.renditions).toEqual([
-    { id: "video.1x", width: 512, height: 512, crf: 16 }
-  ]);
-  expect(report.assets[0]?.bytes).toBe(bytes.byteLength);
-  const digest = createHash("sha256").update(bytes).digest();
-  expect(report.assets[0]?.sha256).toBe(digest.toString("hex"));
-  expect(report.assets[0]?.integrity).toBe(`sha256-${digest.toString("base64")}`);
-  expect(html).toContain(`integrity="${report.assets[0]?.integrity}"`);
+  expect(report.assets.map(({ codec, path }) => ({ codec, path }))).toEqual(
+    CODECS.map((codec) => ({ codec, path: `${codec}.avl` }))
+  );
+  expect(report.encodings.map(({ codec }) => codec)).toEqual(CODECS);
+  expect(report.sourceMarkup).toBe(report.assets.map((asset) =>
+    `<source src="${asset.path}" type='${asset.type}' integrity="${asset.integrity}">`
+  ).join("\n"));
+
+  let previousSourceIndex = -1;
+  for (const asset of report.assets) {
+    const bytes = await readFile(resolve(BUNDLE_PATH, asset.path));
+    const digest = createHash("sha256").update(bytes).digest();
+    const front = parseFrontIndex(bytes);
+    const sourceElement = `<source src="%BASE_URL%kinetic-orb/${asset.path}" ` +
+      `type='${asset.type}' integrity="${asset.integrity}">`;
+    const sourceIndex = html.indexOf(sourceElement);
+
+    expect(bytes.subarray(0, 4)).toEqual(Buffer.from("AVLF"));
+    expect(asset.bytes).toBe(bytes.byteLength);
+    expect(asset.sha256).toBe(digest.toString("hex"));
+    expect(asset.integrity).toBe(`sha256-${digest.toString("base64")}`);
+    expect(asset.type).toBe(
+      `application/vnd.aval; codecs="${asset.codecString}"`
+    );
+    expect(front.header.declaredFileLength).toBe(bytes.byteLength);
+    expect(front.manifest.codec).toBe(asset.codec);
+    expect(front.manifest.renditions[0]?.codec).toBe(asset.codecString);
+    expect(sourceIndex).toBeGreaterThan(previousSourceIndex);
+    previousSourceIndex = sourceIndex;
+    fronts.set(asset.codec, front);
+  }
+
+  const front = fronts.get("h264");
+  if (front === undefined) throw new Error("Missing compiled H.264 fallback asset");
   expect(front.manifest.canvas).toMatchObject({ width: 512, height: 512 });
   expect(front.manifest.frameRate).toEqual({ numerator: 24, denominator: 1 });
   expect(front.manifest.initialState).toBe(project.initialState);
-  expect(compiledTopology(front.manifest)).toEqual(sourceTopology(project));
+  expect(front.manifest.edges).toContainEqual({
+    id: "exiting.entering",
+    from: "exiting",
+    to: "entering",
+    trigger: { type: "event", name: "hover.enter" },
+    start: { type: "finish", targetPort: "default", maxWaitFrames: 11 },
+    continuity: "exact-authored"
+  });
+  for (const candidate of fronts.values()) {
+    expect(compiledTopology(candidate.manifest)).toEqual(sourceTopology(project));
+  }
 });
 
 function sourceTopology(project: Readonly<{

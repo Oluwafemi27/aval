@@ -182,14 +182,19 @@ test("retires a positively configured AV1 startup failure before selecting VP9",
               decoderDiagnostics: readonly Readonly<{
                 sourceIndex: number;
                 rendition: string;
-                codec: string;
-                lane: number;
-                phase: string;
-                code: string;
-                firstFrame: Readonly<{
+              codec: string;
+              lane: number;
+              phase: string;
+              code: string;
+              firstFrame: Readonly<{
                   displayWidth: number;
                   displayHeight: number;
                 }> | null;
+                lastGoodFrame: Readonly<{
+                  displayWidth: number;
+                  displayHeight: number;
+                }> | null;
+                outputFailure: unknown;
               }>[];
             }>;
           }>;
@@ -234,6 +239,20 @@ test("retires a positively configured AV1 startup failure before selecting VP9",
       firstFrame: expect.objectContaining({
         displayWidth: expect.any(Number),
         displayHeight: expect.any(Number)
+      }),
+      lastGoodFrame: null,
+      outputFailure: expect.objectContaining({
+        kind: "display-aspect",
+        validationLayer: "host-expectation",
+        field: "display-aspect",
+        expected: expect.objectContaining({
+          displayAspectWidth: expect.any(Number),
+          displayAspectHeight: expect.any(Number)
+        }),
+        actual: expect.objectContaining({
+          displayWidth: expect.any(Number),
+          displayHeight: expect.any(Number)
+        })
       })
     })
   ]));
@@ -671,8 +690,18 @@ function installStartupFailoverWorker(): void {
           const first = command.chunks[0]!;
           const codedWidth = positiveInteger(configuration!.codedWidth, 640);
           const codedHeight = positiveInteger(configuration!.codedHeight, 360);
-          const width = positiveInteger(configuration!.displayAspectWidth, codedWidth) - 1;
-          const height = positiveInteger(configuration!.displayAspectHeight, codedHeight) - 1;
+          const expectedWidth = positiveInteger(
+            configuration!.displayAspectWidth,
+            codedWidth
+          );
+          const expectedHeight = positiveInteger(
+            configuration!.displayAspectHeight,
+            codedHeight
+          );
+          const width = Math.max(1, expectedWidth - 1);
+          const height = Math.max(1, expectedHeight - 1);
+          const visibleRect = { x: 0, y: 0, width: codedWidth, height: codedHeight };
+          const colorSpace = ["bt709", "bt709", "bt709", false] as const;
           emit({ t: "accepted", run: command.run });
           emit({
             t: "error",
@@ -690,15 +719,38 @@ function installStartupFailoverWorker(): void {
                 duration: first.duration,
                 codedWidth,
                 codedHeight,
-                displayWidth: Math.max(1, width),
-                displayHeight: Math.max(1, height),
-                visibleRect: {
-                  x: 0,
-                  y: 0,
-                  width: Math.max(1, width),
-                  height: Math.max(1, height)
+                displayWidth: width,
+                displayHeight: height,
+                visibleRect,
+                colorSpace
+              },
+              lastGoodFrame: null,
+              outputFailure: {
+                kind: "display-aspect",
+                validationLayer: "host-expectation",
+                field: "display-aspect",
+                expected: {
+                  timestamp: first.timestamp,
+                  duration: first.duration,
+                  codedWidth,
+                  codedHeight,
+                  displayAspectWidth: expectedWidth,
+                  displayAspectHeight: expectedHeight,
+                  visibleRect,
+                  colorSpace,
+                  frameCount: null
                 },
-                colorSpace: ["bt709", "bt709", "bt709", false]
+                actual: {
+                  timestamp: first.timestamp,
+                  duration: first.duration,
+                  codedWidth,
+                  codedHeight,
+                  displayWidth: width,
+                  displayHeight: height,
+                  visibleRect,
+                  colorSpace,
+                  receivedFrameCount: null
+                }
               }
             }
           });

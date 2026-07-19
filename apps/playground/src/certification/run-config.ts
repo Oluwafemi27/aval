@@ -1,3 +1,8 @@
+import {
+  FUNCTIONAL_FIXTURE_DIGEST,
+  FUNCTIONAL_SOURCE_URL
+} from "./functional-fixture.js";
+
 const SHA256 = /^[0-9a-f]{64}$/u;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 const MAX_CONFIG_BYTES = 256 * 1024;
@@ -23,11 +28,6 @@ export interface CertificationRunConfig {
   readonly expectedRepetitions: number;
   readonly environment: Readonly<Record<string, unknown>>;
 }
-
-export const FUNCTIONAL_FIXTURE_DIGEST =
-  "a77d616640162f6f1ac504dc39bc5d55cce83e0927286cc97bc5632bb10f3898";
-export const FUNCTIONAL_SOURCE_URL =
-  "/__aval_v1__/h264.avl?session=m9-functional";
 
 export function createFunctionalRunConfig(): CertificationRunConfig {
   return Object.freeze({

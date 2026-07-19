@@ -7,6 +7,11 @@ import {
 } from "./decoder.js";
 import { ELEMENT_DECODER_LANE_IDS } from "./decoder-capacity.js";
 import type { DecoderFailureDiagnostic } from "./decoder-diagnostics.js";
+import {
+  freezePlaybackLifecycleCounters,
+  saturatingIncrement
+} from "./playback-lifecycle.js";
+import type { AvalPlaybackLifecycleCounters } from "./public-types.js";
 
 const MAX_BYTES = Number.MAX_SAFE_INTEGER;
 
@@ -36,6 +41,7 @@ export interface DecoderPoolSnapshot {
   readonly workerCount: number;
   readonly openFrames: number;
   readonly openFrameBytes: number;
+  readonly playbackLifecycle: Readonly<AvalPlaybackLifecycleCounters>;
   readonly decoderDiagnostics: readonly Readonly<DecoderPoolDiagnostic>[];
 }
 
@@ -70,6 +76,8 @@ export class DecoderPool {
   #foregroundRun: DecodeRun | null = null;
   #candidateRun: DecodeRun | null = null;
   #sequence = 0;
+  #logicalRunsCreated = 0;
+  #candidateCommits = 0;
   #disposed = false;
   #decoderDiagnostics: readonly Readonly<DecoderPoolDiagnostic>[] =
     Object.freeze([]);
@@ -196,6 +204,7 @@ export class DecoderPool {
         this.#candidateRun = previousForeground;
         state = "committed";
         previousForeground?.close();
+        this.#candidateCommits = saturatingIncrement(this.#candidateCommits);
       },
       cancel: () => {
         if (state === "committed" || state === "canceled") return;
@@ -214,11 +223,37 @@ export class DecoderPool {
   public snapshot(): DecoderPoolSnapshot {
     const first = this.#lanes[0].decoder.snapshot();
     const second = this.#lanes[1].decoder.snapshot();
+    const firstLifecycle = first.lifecycle ?? EMPTY_DECODER_LIFECYCLE;
+    const secondLifecycle = second.lifecycle ?? EMPTY_DECODER_LIFECYCLE;
     this.#captureDecoderDiagnostics(first.diagnostic, second.diagnostic);
     return Object.freeze({
       workerCount: first.workerCount + second.workerCount,
       openFrames: first.openFrames + second.openFrames,
       openFrameBytes: first.openFrameBytes + second.openFrameBytes,
+      playbackLifecycle: freezePlaybackLifecycleCounters({
+        outputsAccepted: checkedCounterAggregate(
+          firstLifecycle.outputsAccepted,
+          secondLifecycle.outputsAccepted
+        ),
+        drawsCompleted: 0,
+        logicalRunsCreated: this.#logicalRunsCreated,
+        candidateCommits: this.#candidateCommits,
+        runsClosed: checkedCounterAggregate(
+          firstLifecycle.runsClosed,
+          secondLifecycle.runsClosed
+        ),
+        transitionStarts: 0,
+        transitionEnds: 0,
+        loopCrossings: 0,
+        nativeDecoderCreatesByLane: [
+          firstLifecycle.nativeDecoderCreates,
+          secondLifecycle.nativeDecoderCreates
+        ],
+        nativeDecoderClosesByLane: [
+          firstLifecycle.nativeDecoderCloses,
+          secondLifecycle.nativeDecoderCloses
+        ]
+      }),
       decoderDiagnostics: this.#decoderDiagnostics
     });
   }
@@ -338,6 +373,7 @@ export class DecoderPool {
       lane: lane.id
     });
     this.#ownership.set(run, Object.freeze({ identity }));
+    this.#logicalRunsCreated = saturatingIncrement(this.#logicalRunsCreated);
     return run;
   }
 
@@ -371,6 +407,13 @@ export class DecoderPool {
   }
 }
 
+const EMPTY_DECODER_LIFECYCLE = Object.freeze({
+  outputsAccepted: 0,
+  runsClosed: 0,
+  nativeDecoderCreates: 0,
+  nativeDecoderCloses: 0
+});
+
 function checkedAggregate(
   first: number,
   second: number,
@@ -380,6 +423,10 @@ function checkedAggregate(
     throw byteCeilingError(kind);
   }
   return first + second;
+}
+
+function checkedCounterAggregate(first: number, second: number): number {
+  return second > MAX_BYTES - first ? MAX_BYTES : first + second;
 }
 
 function byteCeilingError(kind: "decoded" | "encoded"): RangeError {

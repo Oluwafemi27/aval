@@ -785,6 +785,104 @@ describe("decoder worker run isolation", () => {
     });
   });
 
+  it("reuses one worker for 64 complete 24-frame generations", async () => {
+    const worker = await fakeDecoderWorker();
+    worker.command({ t: "configure", config: { codec: "avc1.42E01E" } });
+    await Promise.resolve();
+
+    for (let run = 1; run <= 64; run += 1) {
+      worker.command({ t: "start", run });
+      const decoder = worker.decoders[run - 1]!;
+      for (let batch = 0; batch < 2; batch += 1) {
+        const first = batch * 12;
+        worker.command({
+          t: "decode",
+          run,
+          chunks: Array.from({ length: 12 }, (_unused, offset) =>
+            decoderChunk((first + offset) * 33_333))
+        });
+        for (let offset = 0; offset < 12; offset += 1) {
+          decoder.callbacks.output(
+            metadataFrame((first + offset) * 33_333) as unknown as VideoFrame
+          );
+        }
+      }
+      worker.command({ t: "flush", run });
+      decoder.resolveFlush();
+      await Promise.resolve();
+    }
+
+    expect(worker.decoders).toHaveLength(64);
+    expect(worker.decoders.every(({ state }) => state === "closed")).toBe(true);
+    expect(worker.posted.filter(({ t }) => t === "started")).toHaveLength(64);
+    expect(worker.posted.filter(({ t }) => t === "flushed")).toHaveLength(64);
+    expect(worker.posted.filter(({ t }) => t === "frame")).toHaveLength(1_536);
+    expect(worker.posted.filter(({ t }) => t === "error")).toEqual([]);
+    expect(worker.posted.at(-1)).toEqual({ t: "flushed", run: 64 });
+  });
+
+  it("terminalizes generation 21 on its first invalid output", async () => {
+    const worker = await fakeDecoderWorker();
+    worker.command({ t: "configure", config: { codec: "avc1.42E01E" } });
+    await Promise.resolve();
+
+    for (let run = 1; run <= 20; run += 1) {
+      worker.command({ t: "start", run });
+      const decoder = worker.decoders[run - 1]!;
+      for (let batch = 0; batch < 2; batch += 1) {
+        const first = batch * 12;
+        worker.command({
+          t: "decode",
+          run,
+          chunks: Array.from({ length: 12 }, (_unused, offset) =>
+            decoderChunk((first + offset) * 33_333))
+        });
+        for (let offset = 0; offset < 12; offset += 1) {
+          decoder.callbacks.output(
+            metadataFrame((first + offset) * 33_333) as unknown as VideoFrame
+          );
+        }
+      }
+      worker.command({ t: "flush", run });
+      decoder.resolveFlush();
+      await Promise.resolve();
+    }
+
+    worker.command({ t: "start", run: 21 });
+    worker.command({
+      t: "decode",
+      run: 21,
+      chunks: [decoderChunk(0)]
+    });
+    const invalid = metadataFrame(0);
+    invalid.duration = Number.NaN;
+    worker.decoders[20]!.callbacks.output(invalid as unknown as VideoFrame);
+    worker.command({ t: "start", run: 22 });
+
+    expect(worker.decoders).toHaveLength(21);
+    expect(worker.decoders.every(({ state }) => state === "closed")).toBe(true);
+    expect(invalid.closed).toBe(true);
+    expect(worker.posted.filter(({ t }) => t === "error")).toHaveLength(1);
+    expect(worker.posted.at(-1)).toMatchObject({
+      t: "error",
+      diagnostic: {
+        phase: "output-validation",
+        code: "invalid-output",
+        run: 21,
+        decodeOrdinal: 0,
+        firstFrame: null,
+        lastGoodFrame: null,
+        outputFailure: {
+          kind: "metadata-shape",
+          validationLayer: "worker-shape",
+          field: "duration",
+          expected: null,
+          actual: { timestamp: 0, duration: null, receivedFrameCount: null }
+        }
+      }
+    });
+  });
+
   it("turns a malformed transport command into a global failure", async () => {
     const worker = await fakeDecoderWorker();
 
@@ -1050,6 +1148,7 @@ describe("decoder worker run isolation", () => {
 
 interface FakeDecoderInstance {
   readonly callbacks: VideoDecoderInit;
+  readonly state: CodecState;
   readonly flushCalls: number;
   resolveFlush(): void;
   rejectFlush(reason: unknown): void;

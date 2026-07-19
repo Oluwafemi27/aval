@@ -4,6 +4,13 @@ import { describe, expect, it } from "vitest";
 
 import { parseFrontIndex } from "../../format/src/parser.js";
 import {
+  makeAccessUnit,
+  makeAud,
+  makePps,
+  makeSps,
+  validInspectionInput
+} from "../../format/test/h264-fixture.js";
+import {
   createCodecValidator,
   type CodecValidationChunk,
   type CodecValidationProfile
@@ -57,12 +64,38 @@ describe("codec validator", () => {
     "rejects a %s header that changes between independently decodable units",
     (family) => {
       const fixture = loadFixture(family);
-      const changed = findContinuityOnlyMutation(fixture);
+      const changed = family === "h264"
+        ? makeH264ContinuityOnlyUnit(fixture.profile)
+        : findContinuityOnlyMutation(fixture);
+      createCodecValidator(fixture.profile).validate(changed);
       const validator = createCodecValidator(fixture.profile);
       validator.validate(fixture.units[0]!);
       expect(() => validator.validate(changed)).toThrow("Invalid AVAL encoded payload");
     }
   );
+
+  it("continues to accept the legacy High-profile H264 syntax", () => {
+    const input = validInspectionInput();
+    const validator = createCodecValidator({
+      codec: "avc1.640020",
+      bitDepth: 8,
+      codedWidth: input.profile.codedWidth,
+      codedHeight: input.profile.codedHeight,
+      visibleWidth: input.profile.expectedVisibleRect[2],
+      visibleHeight: input.profile.expectedVisibleRect[3],
+      frameRate: input.profile.frameRate,
+      averageBitrate: 100_000
+    });
+    for (const unit of input.units) {
+      validator.validate(unit.accessUnits.map((accessUnit, index) => ({
+        bytes: accessUnit.bytes,
+        timestamp: index * 33_333,
+        key: accessUnit.key,
+        displayedFrames: 1
+      })));
+    }
+    validator.complete();
+  });
 
   it("requires the exact rendition-global VP9 level and full codec string on completion", () => {
     const fixture = loadFixture("vp9");
@@ -149,6 +182,51 @@ function replaceFirstBytes(
   bytes: Uint8Array
 ): readonly CodecValidationChunk[] {
   return replaceFirst(unit, { bytes });
+}
+
+function makeH264ContinuityOnlyUnit(
+  profile: Readonly<CodecValidationProfile>
+): readonly CodecValidationChunk[] {
+  expect(profile.codec).toBe("avc1.42E00B");
+  const sps = makeSps({
+    profileIdc: 66,
+    compatibility: 0xe0,
+    levelIdc: 11,
+    widthInMacroblocks: 3,
+    heightInMacroblocks: 7,
+    crop: [0, 0, 0, 4],
+    maxNumRefFrames: 1,
+    maxNumReorderFrames: 0,
+    maxDecFrameBuffering: 1,
+    pixelAspectRatio: [1, 1]
+  });
+  const pps = makePps({ profileIdc: 66 });
+  const accessUnits = [
+    makeAccessUnit({
+      idr: true,
+      frameNum: 0,
+      sps,
+      pps,
+      aud: makeAud(0),
+      entropyCoding: false,
+      picOrderCountType: 0,
+      picOrderCntLsb: 0
+    }),
+    makeAccessUnit({
+      idr: false,
+      frameNum: 1,
+      aud: makeAud(1),
+      entropyCoding: false,
+      picOrderCountType: 0,
+      picOrderCntLsb: 2
+    })
+  ];
+  return Object.freeze(accessUnits.map((accessUnit, index) => Object.freeze({
+    bytes: accessUnit.bytes,
+    timestamp: index * 33_333,
+    key: accessUnit.key,
+    displayedFrames: 1
+  })));
 }
 
 /** Find a one-bit header change that remains valid in isolation but not after unit zero. */

@@ -45,6 +45,7 @@ import type {
   AvalFit,
   AvalMode,
   AvalMotion,
+  AvalPlaybackLifecycleCounters,
   AvalPublicFailure,
   AvalReadinessChangeDetail,
   AvalRendererDiagnostic,
@@ -53,6 +54,10 @@ import type {
   RuntimeReadinessResult,
   StaticReason
 } from "./public-types.js";
+import {
+  emptyPlaybackLifecycleCounters,
+  retainPlaybackLifecycleCounters
+} from "./playback-lifecycle.js";
 
 let runtimeModule: Promise<typeof import("./player.js")> | null = null;
 const PREPARATION_MS = 5_000;
@@ -125,6 +130,7 @@ export function createAvalElementClass(
       target: EventTarget;
       type: string;
       listener: EventListener;
+      options?: boolean | AddEventListenerOptions;
     }> = [];
     #boundInputTarget: Element | null = null;
     #bindingEpoch = 0;
@@ -177,6 +183,8 @@ export function createAvalElementClass(
     #rendererDiagnosticLimit = 0;
     #rendererDiagnostics: readonly Readonly<AvalRendererDiagnostic>[] =
       Object.freeze([]);
+    #playbackLifecycle: Readonly<AvalPlaybackLifecycleCounters> =
+      emptyPlaybackLifecycleCounters();
     #cleanup: Readonly<Record<string, unknown>> | null = null;
     #terminalCleanup: Readonly<Record<string, unknown>> | null = null;
     #intersecting = false;
@@ -737,6 +745,7 @@ export function createAvalElementClass(
     }
 
     async #startGeneration(token: number): Promise<RuntimeReadinessResult> {
+      const preservePlaybackLifecycle = this.#restartPlayer !== null;
       let restartState = this.#restartState;
       if (this.#restartPlayer !== null && this.#restartPlayer === this.#player) {
         restartState = this.#restartPlayer.snapshot(false).requestedState ??
@@ -764,6 +773,9 @@ export function createAvalElementClass(
       this.#decoderDiagnostics = Object.freeze([]);
       this.#rendererDiagnosticLimit = 0;
       this.#rendererDiagnostics = Object.freeze([]);
+      if (!preservePlaybackLifecycle) {
+        this.#playbackLifecycle = emptyPlaybackLifecycleCounters();
+      }
       this.#mode = null;
       this.#staticReason = null;
       this.#layers.resetSource(generation);
@@ -1083,6 +1095,7 @@ export function createAvalElementClass(
             retired.rendererDiagnostics,
             this.#sourceGeneration
           );
+          this.#retainPlaybackLifecycle(retired.playbackLifecycle);
           this.#retiringDeclaredFileBytes = retired.declaredFileBytes;
           this.#counters.contextRecovery += retired.contextRecoveryCount;
         } catch {
@@ -1125,6 +1138,7 @@ export function createAvalElementClass(
         snapshot?.rendererDiagnostics ?? Object.freeze([]),
         this.#sourceGeneration
       );
+      this.#retainPlaybackLifecycle(snapshot?.playbackLifecycle);
       if (disposed && !failed && playerSnapshotDisposed(snapshot)) {
         try {
           this.#setResourceBytes(0);
@@ -1661,13 +1675,27 @@ export function createAvalElementClass(
         target,
         this.interactionTarget
       );
-      const bind = (type: string, operation: () => void): void => {
-        const listener = (): void => {
-          if (current()) operation();
+      const listen = (
+        eventTarget: EventTarget,
+        type: string,
+        operation: (event: Event) => void,
+        options?: boolean | AddEventListenerOptions
+      ): void => {
+        const listener = (event: Event): void => {
+          if (current()) operation(event);
         };
-        this.#inputListeners.push({ target, type, listener });
-        target.addEventListener(type, listener);
+        this.#inputListeners.push({
+          target: eventTarget,
+          type,
+          listener,
+          ...(options === undefined ? {} : { options })
+        });
+        eventTarget.addEventListener(type, listener, options);
       };
+      const bind = (
+        type: string,
+        operation: (event: Event) => void
+      ): void => listen(target, type, operation);
       try {
         bind("pointerenter", () => {
           this.#hovered = true;
@@ -1691,6 +1719,30 @@ export function createAvalElementClass(
           this.#engagement();
         }));
         bind("click", () => this.#sendBinding("activate"));
+        const reconcileTouchHover = (event: Event): void => {
+          const hovered = event.composedPath().includes(target);
+          if (hovered === this.#hovered) return;
+          this.#hovered = hovered;
+          this.#engagement();
+        };
+        listen(this.ownerDocument, "pointerdown", (event) => {
+          const pointerType = (event as Partial<PointerEvent>).pointerType;
+          if (pointerType !== "touch" && pointerType !== "pen") return;
+          reconcileTouchHover(event);
+        }, true);
+        listen(this.ownerDocument, "pointerup", (event) => {
+          const pointerType = (event as Partial<PointerEvent>).pointerType;
+          if (
+            (pointerType !== "touch" && pointerType !== "pen") ||
+            event.composedPath().includes(target)
+          ) return;
+          const activeElement = this.ownerDocument.activeElement;
+          if (activeElement === null || !target.contains(activeElement)) return;
+          const blur = (activeElement as Partial<HTMLElement>).blur;
+          if (typeof blur !== "function") return;
+          try { blur.call(activeElement); }
+          catch { /* The focus level remains authoritative. */ }
+        }, true);
         this.#hovered = target.matches(":hover");
         this.#focused = target.contains(this.ownerDocument.activeElement);
         this.#sendBinding(this.#hovered ? "pointer.enter" : "pointer.leave");
@@ -1706,9 +1758,9 @@ export function createAvalElementClass(
       const listeners = this.#inputListeners;
       this.#inputListeners = [];
       this.#boundInputTarget = null;
-      for (const { target, type, listener } of listeners) this.#attemptRelease(
+      for (const { target, type, listener, options } of listeners) this.#attemptRelease(
         "listener",
-        () => target.removeEventListener(type, listener)
+        () => target.removeEventListener(type, listener, options)
       );
       this.#hovered = false;
       this.#focused = false;
@@ -1886,6 +1938,16 @@ export function createAvalElementClass(
       );
     }
 
+    #retainPlaybackLifecycle(
+      lifecycle: Readonly<AvalPlaybackLifecycleCounters> | undefined
+    ): void {
+      if (lifecycle === undefined) return;
+      this.#playbackLifecycle = retainPlaybackLifecycleCounters(
+        this.#playbackLifecycle,
+        lifecycle
+      );
+    }
+
     #retainDecoderDiagnostics(
       diagnostics: readonly Readonly<PlayerDecoderDiagnostic>[],
       generation: number
@@ -1990,6 +2052,7 @@ export function createAvalElementClass(
     #diagnostics(trace: boolean): Readonly<AvalDiagnostics> {
       const runtimePlayer = this.#player ?? this.#retiringPlayer;
       const runtime = runtimePlayer?.snapshot(trace) ?? emptyRuntime();
+      this.#retainPlaybackLifecycle(runtime.playbackLifecycle);
       if (runtime.decoderDiagnostics.length > 0) {
         this.#retainDecoderDiagnostics(
           runtime.decoderDiagnostics,
@@ -2080,6 +2143,7 @@ export function createAvalElementClass(
             this.#cleanupFailureCount,
             runtime.cleanupFailureCount ?? 0
           ),
+          playbackLifecycle: this.#playbackLifecycle,
           decoderDiagnostics: this.#decoderDiagnostics,
           rendererDiagnostics: this.#rendererDiagnostics
         }),
@@ -2443,7 +2507,7 @@ export function readSources(host: HTMLElement): Readonly<SourceRead> {
 }
 
 function sourceCodec(value: string): boolean {
-  if (/^avc1\.6400(?:0A|0B|0C|0D|14|15|16|1E|1F|20|28|29|2A|32|33|34|3C|3D|3E)$/u.test(value) ||
+  if (/^avc1\.(?:42E0|6400)(?:0A|0B|0C|0D|14|15|16|1E|1F|20|28|29|2A|32|33|34|3C|3D|3E)$/u.test(value) ||
     /^vp09\.00\.(?:10|11|20|21|30|31|40|41|50|51|52|60|61|62)\.08(?:\.01\.01\.01\.01\.00)?$/u.test(value) ||
     /^av01\.0\.(?:0[0-9]|[12][0-9]|3[01])[MH]\.(?:08|10)(?:\.0\.11[0-3]\.01\.01\.01\.0)?$/u.test(value)) return true;
   const h265 = /^hvc1\.1\.(0|[1-9A-F][0-9A-F]*)\.[LH](0|[1-9][0-9]*)\.((?:[0-9A-F]{2}\.){0,5}(?!00)[0-9A-F]{2})$/u.exec(value);
@@ -2789,6 +2853,7 @@ function emptyRuntime(): PlayerSnapshot {
     contextLossCount: 0,
     contextRecoveryCount: 0,
     cleanupFailureCount: 0,
+    playbackLifecycle: emptyPlaybackLifecycleCounters(),
     decoderDiagnostics: Object.freeze([]),
     rendererDiagnostics: Object.freeze([]),
     presentation: Object.freeze({

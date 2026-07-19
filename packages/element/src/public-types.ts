@@ -255,6 +255,20 @@ export interface AvalDiagnosticsCounters {
   readonly cleanup: number;
 }
 
+/** Monotonic, source-generation-scoped proof of successful playback work. */
+export interface AvalPlaybackLifecycleCounters {
+  readonly outputsAccepted: number;
+  readonly drawsCompleted: number;
+  readonly logicalRunsCreated: number;
+  readonly candidateCommits: number;
+  readonly runsClosed: number;
+  readonly transitionStarts: number;
+  readonly transitionEnds: number;
+  readonly loopCrossings: number;
+  readonly nativeDecoderCreatesByLane: readonly [lane0: number, lane1: number];
+  readonly nativeDecoderClosesByLane: readonly [lane0: number, lane1: number];
+}
+
 export type AvalDecoderColorSpaceDiagnostic = readonly [
   primaries: string | null,
   transfer: string | null,
@@ -571,6 +585,7 @@ export interface AvalDiagnostics {
     contextLossCount: number;
     contextRecoveryCount: number;
     cleanupFailureCount: number;
+    playbackLifecycle: Readonly<AvalPlaybackLifecycleCounters>;
     decoderDiagnostics: readonly Readonly<AvalDecoderDiagnostic>[];
     rendererDiagnostics: readonly Readonly<AvalRendererDiagnostic>[];
   }>;

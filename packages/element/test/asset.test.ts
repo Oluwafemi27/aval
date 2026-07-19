@@ -16,6 +16,21 @@ afterEach(() => {
 });
 
 describe("Asset manifest parity", () => {
+  it("accepts the exact constrained-baseline H264 codec grammar", async () => {
+    const body = assetBytes(
+      1,
+      new Uint8Array([1, 2, 3, 4]),
+      undefined,
+      [1, 1],
+      "avc1.42E01E"
+    );
+    vi.stubGlobal("fetch", vi.fn(async () => wholeResponse(body)));
+
+    const asset = await open(`sha256-${"A".repeat(43)}=`);
+    expect(asset.manifest.renditions[0]?.codec).toBe("avc1.42E01E");
+    await asset.dispose();
+  });
+
   it("accepts positive non-reduced pixel-aspect terms admitted by the canonical format", async () => {
     const body = assetBytes(1, new Uint8Array([1, 2, 3, 4]), undefined, [2, 2]);
     vi.stubGlobal("fetch", vi.fn(async () => wholeResponse(body)));
@@ -344,7 +359,8 @@ function assetBytes(
   unitCount: number,
   payload: Uint8Array,
   maxCompiledBytes?: number,
-  pixelAspect: readonly [number, number] = [1, 1]
+  pixelAspect: readonly [number, number] = [1, 1],
+  codecString = CODEC
 ): Uint8Array {
   const digest = createHash("sha256").update(payload).digest("hex");
   const units = Array.from({ length: unitCount }, (_, index) => {
@@ -382,7 +398,7 @@ function assetBytes(
       frameRate: { numerator: 30, denominator: 1 },
       renditions: [{
         id: "video",
-        codec: CODEC,
+        codec: codecString,
         bitDepth: 8,
         codedWidth: 16,
         codedHeight: 16,

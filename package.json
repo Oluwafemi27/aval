@@ -36,7 +36,7 @@
     "test:browser": "playwright test",
     "test:playground": "playwright test --config playwright.playground.config.ts",
     "test:grass-rabbit": "playwright test --config playwright.grass-rabbit.config.ts",
-    "test:grass-rabbit-codecs": "playwright test --config playwright.grass-rabbit-codecs.config.ts --project=chromium && playwright test --config playwright.grass-rabbit-codecs.config.ts --project=webkit",
+    "test:grass-rabbit-codecs": "playwright test --config playwright.grass-rabbit-codecs.config.ts",
     "test:kinetic-orb": "npm run build:public-packages && npm run test:kinetic-orb:prebuilt",
     "test:kinetic-orb:prebuilt": "playwright test --config playwright.kinetic-orb.config.ts",
     "test:browser:reference": "playwright test --config playwright.reference.config.ts",

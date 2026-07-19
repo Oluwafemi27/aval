@@ -19,6 +19,34 @@
   ],
   "encodings": [
     {
+      "codec": "av1",
+      "bitDepth": 8,
+      "cpuUsed": 6,
+      "tiles": { "columns": 1, "rows": 1 },
+      "rowMt": true,
+      "threads": 8,
+      "renditions": [
+        { "id": "video.1x", "width": 512, "height": 512, "crf": 24 }
+      ]
+    },
+    {
+      "codec": "vp9",
+      "deadline": "good",
+      "cpuUsed": 4,
+      "threads": 8,
+      "renditions": [
+        { "id": "video.1x", "width": 512, "height": 512, "crf": 26 }
+      ]
+    },
+    {
+      "codec": "h265",
+      "preset": "medium",
+      "threads": 8,
+      "renditions": [
+        { "id": "video.1x", "width": 512, "height": 512, "crf": 20 }
+      ]
+    },
+    {
       "codec": "h264",
       "preset": "medium",
       "renditions": [
@@ -137,6 +165,18 @@
         "sourcePort": "default",
         "targetPort": "default",
         "maxWaitFrames": 2
+      },
+      "continuity": "exact-authored"
+    },
+    {
+      "id": "exiting.entering",
+      "from": "exiting",
+      "to": "entering",
+      "trigger": { "type": "event", "name": "hover.enter" },
+      "start": {
+        "type": "finish",
+        "targetPort": "default",
+        "maxWaitFrames": 11
       },
       "continuity": "exact-authored"
     },

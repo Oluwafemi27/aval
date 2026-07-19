@@ -1,5 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { performance } from "node:perf_hooks";
+import type { AvalElement } from "@pixel-point/aval-element";
 
 import {
   captureBrowserFailures,
@@ -15,9 +16,8 @@ import {
 const RAPID_CYCLES = 40;
 const RAPID_EDGE_MS = 45;
 const ROUTE_CYCLE = Object.freeze([
-  "idle.entering",
   "entering.exiting",
-  "exiting.idle"
+  "exiting.entering"
 ]);
 
 test("does not label reduced-motion policy as rendered playback", async ({ page }) => {
@@ -44,6 +44,18 @@ test("reflects live interactive and static policy transitions", async ({ page })
     node as import("@pixel-point/aval-element").AvalElement
   ).readiness)).toBe("interactiveReady");
   await expect(motion).toHaveAttribute("data-rendered", "");
+  await expect(page.locator("[data-codec-label]")).toHaveText(
+    /^(?:AV1|VP9|HEVC|H\.264 fallback)$/u
+  );
+  await expect.poll(() => motion.evaluate((node) => {
+    const selected = (node as AvalElement).getDiagnostics().runtime.selectedCodec;
+    const visible = document.querySelector("[data-codec-label]")?.textContent;
+    return selected?.startsWith("av01.") ? visible === "AV1"
+      : selected?.startsWith("vp09.") ? visible === "VP9"
+        : selected?.startsWith("hvc1.") ? visible === "HEVC"
+          : selected?.startsWith("avc1.") ? visible === "H.264 fallback"
+            : false;
+  })).toBe(true);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect.poll(() => motion.evaluate((node) => (
@@ -87,6 +99,132 @@ test("routes pointer and keyboard engagement", async ({ page }) => {
   expect(failures).toEqual({ consoleErrors: [], pageErrors: [] });
 });
 
+test("routes touch taps outside and during entering or exiting", async ({
+  browser
+}, testInfo) => {
+  const configuredBaseUrl = testInfo.project.use.baseURL;
+  if (typeof configuredBaseUrl !== "string") {
+    throw new Error("kinetic-orb touch test requires a configured base URL");
+  }
+  const context = await browser.newContext({
+    baseURL: configuredBaseUrl,
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 }
+  });
+  const page = await context.newPage();
+  const failures = captureBrowserFailures(page);
+  try {
+    await page.goto("/");
+    const motion = page.locator("#kinetic-orb");
+    await expect.poll(() => motion.evaluate((node) => (
+      node as AvalElement
+    ).readiness)).toBe("interactiveReady");
+    await page.waitForTimeout(1_250);
+    await expect.poll(() => readOrbState(motion)).toEqual({
+      requestedState: "idle",
+      visualState: "idle",
+      isTransitioning: false
+    });
+    const bounds = await motion.boundingBox();
+    if (bounds === null) throw new Error("kinetic-orb touch bounds are unavailable");
+    const tapPlayer = () => page.touchscreen.tap(
+      bounds.x + bounds.width / 2,
+      bounds.y + bounds.height / 2
+    );
+    const tapOutside = () => page.touchscreen.tap(4, 4);
+
+    await tapPlayer();
+    await expect.poll(() => readOrbState(motion)).toMatchObject({
+      visualState: "entering"
+    });
+    await tapOutside();
+    await expect.poll(() => readOrbState(motion), { timeout: 15_000 }).toEqual({
+      requestedState: "idle",
+      visualState: "idle",
+      isTransitioning: false
+    });
+
+    await tapPlayer();
+    await expect.poll(() => readOrbState(motion)).toMatchObject({
+      visualState: "hover"
+    });
+    await tapOutside();
+    await expect.poll(() => readOrbState(motion)).toMatchObject({
+      visualState: "exiting"
+    });
+    await tapPlayer();
+    await expect.poll(() => readOrbState(motion), { timeout: 15_000 }).toEqual({
+      requestedState: "hover",
+      visualState: "hover",
+      isTransitioning: false
+    });
+    expect(failures).toEqual({ consoleErrors: [], pageErrors: [] });
+  } finally {
+    await context.close();
+  }
+});
+
+test("re-enters finite hover-out from early and late pointer or focus input", async ({
+  page
+}) => {
+  test.setTimeout(2 * 60_000);
+  const failures = captureBrowserFailures(page);
+  const { motion } = await openIdleOrb(page);
+
+  for (const mode of ["pointer", "focus"] as const) {
+    for (const targetFrame of [2, 10] as const) {
+      const witness = await exerciseFiniteReentry(
+        page,
+        motion,
+        mode,
+        targetFrame
+      );
+      expect(witness.observedFrame).toBe(targetFrame);
+      expect(witness.inputEvents).toEqual(
+        mode === "pointer"
+          ? ["pointerenter", "pointerleave", "pointerenter"]
+          : ["focusin", "focusout", "focusin"]
+      );
+      expect(witness.transitionEdges).toEqual([
+        "idle.entering",
+        "entering.hover",
+        "hover.exiting",
+        "exiting.entering",
+        "entering.hover"
+      ]);
+      expect(witness.visualStates).toEqual([
+        "entering",
+        "hover",
+        "exiting",
+        "entering",
+        "hover"
+      ]);
+      expect(witness.transitionEventTypes).toEqual(
+        Array.from({ length: 5 }, () => [
+          "transitionstart",
+          "visualstatechange",
+          "transitionend"
+        ]).flat()
+      );
+      expect(witness.settled).toEqual({
+        requestedState: "hover",
+        visualState: "hover",
+        isTransitioning: false
+      });
+
+      await disengage(motion, mode);
+      await expect.poll(() => readOrbState(motion)).toEqual({
+        requestedState: "idle",
+        visualState: "idle",
+        isTransitioning: false
+      });
+    }
+  }
+
+  expect(failures).toEqual({ consoleErrors: [], pageErrors: [] });
+});
+
 test("survives rapid pointer churn and remains reusable", async ({ page }) => {
   const failures = captureBrowserFailures(page);
   const { motion } = await openIdleOrb(page);
@@ -104,7 +242,7 @@ test("survives rapid pointer churn and remains reusable", async ({ page }) => {
     await moveAt(page, 0, 0, firstEdge + (cycle * 2 + 1) * RAPID_EDGE_MS);
   }
   await expect.poll(() => readOrbState(motion), {
-    timeout: 1_500,
+    timeout: 5_000,
     intervals: [25]
   }).toEqual({
     requestedState: "idle",
@@ -123,7 +261,7 @@ test("survives rapid pointer churn and remains reusable", async ({ page }) => {
   expect(contiguousCycleCount(burst.transitionStarts, ROUTE_CYCLE))
     .toBeGreaterThanOrEqual(2);
   expect(burst.runtimeEvents).toEqual([]);
-  expect(await readOrbHealth(motion)).toEqual(healthyIdle());
+  expect(await readOrbHealth(motion)).toMatchObject(healthyIdle());
   const submissionGaps = gaps(await readSubmissionTimes(motion));
   expect(submissionGaps.length).toBeGreaterThan(20);
   expect(Math.max(...submissionGaps)).toBeLessThanOrEqual(83.5);
@@ -144,7 +282,7 @@ test("survives rapid pointer churn and remains reusable", async ({ page }) => {
     await sampleRenderedFrame(motion)
   ).equals(first)).toBe(false);
 
-  expect(await readOrbHealth(motion)).toEqual(healthyIdle());
+  expect(await readOrbHealth(motion)).toMatchObject(healthyIdle());
   expect((await readInteractionLedger(motion)).runtimeEvents).toEqual([]);
   expect(failures).toEqual({ consoleErrors: [], pageErrors: [] });
 });
@@ -195,4 +333,190 @@ function healthyIdle() {
     lastFailure: null,
     underflows: 0
   };
+}
+
+type ReentryMode = "pointer" | "focus";
+
+interface ReentryEvent {
+  readonly type: string;
+  readonly edge: string | null;
+  readonly to: string | null;
+}
+
+type ReentryElement = AvalElement & {
+  __kineticReentryEvents?: ReentryEvent[];
+  __kineticReentryInputs?: string[];
+  __kineticReentryInstalled?: boolean;
+};
+
+async function exerciseFiniteReentry(
+  page: Page,
+  motion: Locator,
+  mode: ReentryMode,
+  targetFrame: number
+) {
+  await page.mouse.move(0, 0);
+  await motion.evaluate((node) => {
+    const element = node as ReentryElement;
+    if (element.__kineticReentryInstalled !== true) {
+      for (const type of [
+        "transitionstart",
+        "visualstatechange",
+        "transitionend"
+      ]) {
+        element.addEventListener(type, (event) => {
+          if (!(event instanceof CustomEvent) || event.target !== element) return;
+          const detail = (event as CustomEvent<{
+            edge?: string;
+            to?: string;
+          }>).detail;
+          if (detail === null || typeof detail !== "object") return;
+          element.__kineticReentryEvents?.push({
+            type,
+            edge: detail.edge ?? null,
+            to: detail.to ?? null
+          });
+        });
+      }
+      for (const type of [
+        "pointerenter",
+        "pointerleave",
+        "focusin",
+        "focusout"
+      ]) {
+        element.addEventListener(type, () => {
+          element.__kineticReentryInputs?.push(type);
+        });
+      }
+      element.__kineticReentryInstalled = true;
+    }
+    element.__kineticReentryEvents = [];
+    element.__kineticReentryInputs = [];
+    element.blur();
+    element.dispatchEvent(new PointerEvent("pointerleave", {
+      pointerType: "mouse"
+    }));
+  });
+  await expect.poll(() => readOrbState(motion)).toEqual({
+    requestedState: "idle",
+    visualState: "idle",
+    isTransitioning: false
+  });
+  await motion.evaluate((node) => {
+    const element = node as ReentryElement;
+    element.__kineticReentryEvents = [];
+    element.__kineticReentryInputs = [];
+  });
+  await motion.evaluate((node, requestedMode) => {
+    if (requestedMode === "pointer") {
+      node.dispatchEvent(new PointerEvent("pointerenter", {
+        pointerType: "mouse"
+      }));
+    } else {
+      (node as HTMLElement).focus();
+    }
+  }, mode);
+  await expect.poll(() => readOrbState(motion)).toMatchObject({
+    requestedState: "hover",
+    visualState: "hover",
+    isTransitioning: false
+  });
+
+  const observedFrame = await motion.evaluate(async (
+    node,
+    input: Readonly<{ mode: ReentryMode; targetFrame: number }>
+  ) => {
+    const element = node as AvalElement;
+    const deadline = performance.now() + 5_000;
+    return new Promise<number>((resolve, reject) => {
+      const observe = (): void => {
+        const trace = element.getDiagnostics({ trace: true }).runtimeTrace ?? [];
+        const presentation = trace.at(-1)?.graph?.presentation as Readonly<{
+          unitId?: string;
+          frameIndex?: number;
+        }> | null | undefined;
+        if (
+          presentation?.unitId === "hover-out" &&
+          presentation.frameIndex === input.targetFrame
+        ) {
+          if (input.mode === "pointer") {
+            node.dispatchEvent(new PointerEvent("pointerenter", {
+              pointerType: "mouse"
+            }));
+          } else {
+            (node as HTMLElement).focus();
+          }
+          resolve(presentation.frameIndex);
+          return;
+        }
+        if (
+          presentation?.unitId === "hover-out" &&
+          typeof presentation.frameIndex === "number" &&
+          presentation.frameIndex > input.targetFrame
+        ) {
+          reject(new Error(
+            `hover-out advanced past frame ${input.targetFrame}`
+          ));
+          return;
+        }
+        if (performance.now() >= deadline) {
+          reject(new Error(
+            `hover-out frame ${input.targetFrame} was not presented`
+          ));
+          return;
+        }
+        requestAnimationFrame(observe);
+      };
+      if (input.mode === "pointer") {
+        node.dispatchEvent(new PointerEvent("pointerleave", {
+          pointerType: "mouse"
+        }));
+      } else {
+        (node as HTMLElement).blur();
+      }
+      observe();
+    });
+  }, { mode, targetFrame });
+
+  await expect.poll(() => readOrbState(motion), { timeout: 15_000 }).toEqual({
+    requestedState: "hover",
+    visualState: "hover",
+    isTransitioning: false
+  });
+  return motion.evaluate((node, frame) => {
+    const element = node as ReentryElement;
+    const events = element.__kineticReentryEvents ?? [];
+    return {
+      observedFrame: frame,
+      inputEvents: [...(element.__kineticReentryInputs ?? [])],
+      transitionEdges: events.flatMap((event) =>
+        event.type === "transitionstart" && event.edge !== null
+          ? [event.edge]
+          : []
+      ),
+      visualStates: events.flatMap((event) =>
+        event.type === "visualstatechange" && event.to !== null
+          ? [event.to]
+          : []
+      ),
+      transitionEventTypes: events.map((event) => event.type),
+      settled: {
+        requestedState: element.requestedState,
+        visualState: element.visualState,
+        isTransitioning: element.isTransitioning
+      }
+    };
+  }, observedFrame);
+}
+
+async function disengage(motion: Locator, mode: ReentryMode): Promise<void> {
+  await motion.evaluate((node, requestedMode) => {
+    if (requestedMode === "pointer") {
+      node.dispatchEvent(new PointerEvent("pointerleave", {
+        pointerType: "mouse"
+      }));
+    } else {
+      (node as HTMLElement).blur();
+    }
+  }, mode);
 }

@@ -27,16 +27,22 @@ export type {
 export {
   H264_DECODER_SURFACE_PADDING,
   h264CodecForLevel,
+  h264CodecForProfileLevel,
+  h264LevelName,
   h264LevelLimits,
   inspectH264AnnexBRendition,
   isH264Codec,
   isH264LevelIdc,
   maximumH264DecoderSurfaceDimension,
+  minimumH264CompatibilityLevel,
   parseH264Codec,
   prepareH264EncoderRendition
 } from "./h264/index.js";
 export type {
   H264Codec,
+  H264CodecProfile,
+  H264CompatibilityLevelInput,
+  H264ConstrainedBaselineCodec,
   H264AccessUnitInput,
   H264AccessUnitSummary,
   H264ColorSummary,
@@ -46,13 +52,15 @@ export type {
   H264EncoderRenditionPreparationInput,
   H264EncoderUnitStreamInput,
   H264FrameRate,
+  H264HighCodec,
   H264LevelIdc,
   H264LevelLimits,
   H264ParameterSetSummary,
   H264RenditionInspection,
   H264RenditionInspectionInput,
   H264UnitInput,
-  H264UnitInspection
+  H264UnitInspection,
+  ParsedH264Codec
 } from "./h264/index.js";
 export { adaptManifestToMotionGraph } from "./graph-adapter.js";
 export { parseHeader } from "./header.js";

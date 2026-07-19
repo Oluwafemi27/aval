@@ -124,10 +124,18 @@
   four-demo list, direct-H.264 mode, ladder mode, interaction modes, and
   60-second soak requirement. Pin Windows Chrome 150/149/148/127,
   Firefox 152/151/150/130, and Firefox 128/129 negative sentinels. Resolve the
-  exact BrowserStack labels for both macOS generations, iOS 26.5/26.4/26.3 and
-  18.1, and Android 17/16/15 devices before capture. A moving `latest` alias is
-  invalid. The run manifest may add session data but cannot add, remove, or
-  weaken a checked-in policy slot.
+  exact BrowserStack labels for both macOS generations, iOS 26.5/26.4/26.0 and
+  the provider's iOS 18.0 launch selector, and Android 17/16/15 devices before
+  capture. The signed-in iPhone 16 session launched by that selector reports
+  exact iOS/Safari 18.6. The inventory did not expose the originally requested
+  iOS 26.3 or 18.1 labels; 26.0 and the observed 18.6 session are never
+  relabeled as the unavailable versions. The same inventory exposed only
+  desktop Safari 26.4 on Tahoe and 18.4 on Sequoia; unavailable 26.3, 26.2,
+  18.3, and 18.2 desktop versions are omitted rather than fabricated. A moving
+  `latest` alias is invalid.
+  The run manifest may add session data but cannot add, remove, or weaken a
+  checked-in policy slot. The three real-device sessions report and pin
+  Chrome/Chromium 145.0.0.0 for Android 17, 16, and 15.
 
 - [ ] **Step 2: Add offline red tests for official Brave acquisition**
 
@@ -163,13 +171,17 @@
   node scripts/browser-compatibility/brave/run-matrix.mjs \
     --policy scripts/browser-compatibility/certification-policy.json \
     --platform macos --install-root "$AVAL_BRAVE_TMP" \
-    --base-url "$TUNNEL_URL" --run-root "$RUN_ROOT"
+    --base-url "$TUNNEL_URL" --run-root "$RUN_ROOT" \
+    --source-commit "$COMMIT" --session-id "$SESSION" \
+    --tunnel-created-at "$TUNNEL_CREATED_AT"
   ```
 
 - [ ] **Step 4: Implement the single Windows Brave path**
 
-  The checked-in workflow uses only an ephemeral `windows-11` GitHub-hosted
-  runner. It runs the same resolver/acquirer pinned by the policy, verifies each
+  The checked-in workflow uses the supported ephemeral `windows-2025` x64
+  GitHub-hosted runner and records it as Windows Server 2025. Windows 11 remains
+  a separate branded BrowserStack witness; CI evidence must never be relabeled
+  as Windows 11. The workflow runs the same resolver/acquirer pinned by the policy, verifies each
   downloaded executable with PowerShell
   `Get-AuthenticodeSignature` (`Status=Valid` and Brave Software, Inc. signer),
   captures `brave.exe --version`, creates a distinct directory under
@@ -183,6 +195,7 @@
   gh workflow run brave-windows-compatibility.yml \
     --ref "$BRANCH" \
     -f tunnel_url="$TUNNEL_URL" \
+    -f tunnel_created_at="$TUNNEL_CREATED_AT" \
     -f source_commit="$COMMIT" \
     -f session_id="$SESSION"
   BRAVE_RUN_ID="$(gh run list \
@@ -192,7 +205,7 @@
     --jq "[.[] | select(.displayTitle == \\"brave-windows-$SESSION\\" and .headSha == \\"$COMMIT\\")] | if length == 1 then .[0].databaseId else error(\\"expected exactly one matching Brave run\\") end")"
   gh run watch "$BRAVE_RUN_ID" --exit-status
   gh run download "$BRAVE_RUN_ID" \
-    --name "brave-windows-$SESSION" --dir "$RUN_ROOT/windows-brave"
+    --name "brave-windows-$SESSION" --dir "$RUN_ROOT"
   node scripts/browser-compatibility/validate-evidence.mjs "$RUN_ROOT"
   ```
 
@@ -806,8 +819,10 @@
 - Create: `scripts/browser-compatibility/validate-evidence.mjs`
 - Create: `scripts/browser-compatibility/test/validate-evidence.test.ts`
 - Create: `scripts/browser-compatibility/test/source-tree-attestation.test.ts`
-- Create during capture: `manifest.json` inside the full-commit/UTC-session run
-  root resolved in Step 2
+- Create before capture: immutable `run-identity.json` inside the
+  full-commit/UTC-session run root resolved in Step 2
+- Create after capture: `manifest.json`, exclusively through the live-evidence
+  assembler after the raw tree is complete
 
 - [ ] **Step 1: Expose complete bounded failure summaries**
 
@@ -833,11 +848,16 @@
   `serve-built-examples.mjs`. It excludes only `.git`, dependency caches, and
   the artifact run root to avoid self-reference. Store the resulting
   `headCommit`, `trackedDiffSha256`, `untrackedSourceTreeSha256`,
-  `policySha256`, and `servedTreeSha256` in `manifest.json`. This permits an
-  explicitly attested dirty development capture without falsely labeling it as
-  bare HEAD; final certification requires the same digest throughout the run.
-  Never update a prior run root in place. Every manual BrowserStack checkpoint
-  writes:
+  `policySha256`, and `servedTreeSha256` in immutable `run-identity.json` by
+  calling `initializeBrowserDiagnosticEvidenceRunRoot` exactly once before any
+  capture writer starts. This permits an explicitly attested dirty development
+  capture without falsely labeling it as bare HEAD; final certification
+  requires the same identity and digest throughout the run. Capture writers
+  require this marker, verify that the run-root suffix is
+  `<headCommit>/<sessionId>`, and refuse to write after assembly. Never update a
+  prior run root in place.
+
+  A formal Playwright/BrowserStack Automate producer writes:
 
   - `<platform>/<demo>/<checkpoint>.png`;
   - `<platform>/<demo>/<checkpoint>.json` from the in-page report;
@@ -845,11 +865,23 @@
   - `<platform>/session.json` containing exact BrowserStack session id, OS, device, browser,
     browser version, tunnel URL creation time, source commit, and test time.
 
-  The checked-in certification policy, not the run manifest, defines required
-  browser/device slots. The run manifest binds every policy slot to a session
-  and defines each mode's expected authored source list:
-  multi-source demos use `[av1,vp9,h265,h264]`, Kinetic and forced-H.264 runs
-  use `[h264]`, and codec-specific controller runs use the one selected codec.
+  Signed-in BrowserStack Live is a streamed, operator-controlled UI and is not
+  itself a Playwright `Page`. Its Device Info view and screenshots are useful
+  manual evidence, but they must be stored and reported as manual observations;
+  they cannot be relabeled as the machine-verifiable files above, and provider
+  session ids must never be invented. Formal capture requires an actual
+  BrowserStack Automate/Playwright session with credentials and a provider
+  session id. If those are unavailable, report the formal matrix as pending.
+
+  After all raw sessions have been captured, the live-evidence assembler checks
+  exact policy coverage, rejects any changed marker or pre-existing manifest,
+  and exclusively creates `manifest.json`. The checked-in certification policy,
+  not the run manifest, defines required browser/device slots. The assembled
+  manifest binds every policy slot to a session and defines each mode's expected
+  authored source list:
+  full-ladder runs for End User Playground, Grass Rabbit, and Kinetic Orb use
+  `[av1,vp9,h265,h264]`; forced-H.264 runs use `[h264]`, and codec-specific
+  controller runs use the one selected codec.
 
 - [ ] **Step 3: Validate evidence invariants**
 
@@ -886,7 +918,9 @@
   ```
 
   Expected: browser capture schemas and validator fixtures pass. Real run roots
-  are validated only after their manifest and signed-in artifacts exist.
+  are validated only after capture completes, the assembler creates the
+  manifest, and all signed-in Automate artifacts exist. Manual BrowserStack Live
+  screenshots remain operator evidence and do not satisfy this gate.
 
 ## Task 8: Replace the mandatory H.264 compatibility assets
 
@@ -991,7 +1025,7 @@
 
 - [ ] **Step 4: Capture iOS post-ready decoder evidence**
 
-  On iPhone 17 / iOS 26.5 and iPhone 16 / iOS 18.1 Safari, run Kinetic for 60
+  On iPhone 17 / iOS 26.5 and iPhone 16 / iOS 18.6 Safari, run Kinetic for 60
   seconds. Save compact counter/checkpoint JSON at 0, 10, 20, 30, 45, and 60
   seconds plus screenshots at ready, after pointer, after focus, and final.
   If it fails, the artifact must show worker/host validation layer, expected,
@@ -1151,7 +1185,7 @@
   dispose during flush, candidate promotion, and failure isolation. Require no
   output relabeling, no frame leak, and bounded maps/counters.
 
-- [ ] **Step 4: Rerun iOS 26.5 and 18.1 60-second suites**
+- [ ] **Step 4: Rerun iOS 26.5 and observed iOS 18.6 60-second suites**
 
   Require Kinetic and all other demos to remain visually correct through the
   full state/soak witness. Save exact PNG, JSON, and ledger artifacts and run
@@ -1400,7 +1434,8 @@
 - [ ] **Step 2: Run current and boundary macOS desktops**
 
   On the current supported macOS and provider-retained macOS nearest 24 months,
-  run Safari current/current-1/current-2, Chrome and Firefox
+  run each exact desktop Safari version exposed for that OS (26.4 on Tahoe and
+  18.4 on Sequoia), Chrome and Firefox
   current/current-1/current-2, Chrome's 24-month sentinel, Firefox 130, and
   branded Brave current plus boundary. Run Firefox 128/129 only as the same
   deterministic-error sentinels. Every playback slot must run all four demos,
@@ -1411,7 +1446,7 @@
 - [ ] **Step 3: Run real iPhones and Android/Samsung devices**
 
   Run the policy-pinned real-device slots: iPhone 17 / iOS Safari 26.5, 26.4,
-  and 26.3 plus iPhone 16 / iOS Safari 18.1; Pixel / Android 17 Chrome, Pixel /
+  and 26.0 plus iPhone 16 / iOS Safari 18.6; Pixel / Android 17 Chrome, Pixel /
   Android 16 Chrome, and Galaxy S25 / Android 15 Chrome. Record the full
   installed Chrome product version in each Android session; an OS label or
   moving browser alias is insufficient. If the provider changes a device's

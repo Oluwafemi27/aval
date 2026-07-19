@@ -9,6 +9,8 @@ export interface BrowserFailures {
 export interface InteractionLedger {
   pointerEnters: number;
   pointerLeaves: number;
+  focusIns: number;
+  focusOuts: number;
   readonly pointerTimestamps: number[];
   readonly transitionStarts: string[];
   readonly runtimeEvents: string[];
@@ -18,6 +20,19 @@ export interface InteractionLedger {
 type InstrumentedAvalElement = AvalElement & {
   __kineticOrbLedger?: InteractionLedger;
 };
+
+interface PlaybackLifecycleSnapshot {
+  readonly outputsAccepted: number;
+  readonly drawsCompleted: number;
+  readonly logicalRunsCreated: number;
+  readonly candidateCommits: number;
+  readonly runsClosed: number;
+  readonly transitionStarts: number;
+  readonly transitionEnds: number;
+  readonly loopCrossings: number;
+  readonly nativeDecoderCreatesByLane: readonly [number, number];
+  readonly nativeDecoderClosesByLane: readonly [number, number];
+}
 
 export function captureBrowserFailures(page: Page): BrowserFailures {
   const failures: BrowserFailures = { consoleErrors: [], pageErrors: [] };
@@ -65,6 +80,8 @@ export async function installInteractionLedger(motion: Locator): Promise<void> {
     const ledger: InteractionLedger = {
       pointerEnters: 0,
       pointerLeaves: 0,
+      focusIns: 0,
+      focusOuts: 0,
       pointerTimestamps: [],
       transitionStarts: [],
       runtimeEvents: [],
@@ -79,6 +96,8 @@ export async function installInteractionLedger(motion: Locator): Promise<void> {
       ledger.pointerLeaves += 1;
       ledger.pointerTimestamps.push(performance.now());
     });
+    element.addEventListener("focusin", () => { ledger.focusIns += 1; });
+    element.addEventListener("focusout", () => { ledger.focusOuts += 1; });
     element.addEventListener("transitionstart", (event) => {
       ledger.transitionStarts.push(event.detail.edge);
     });
@@ -97,6 +116,8 @@ export async function readInteractionLedger(
     return {
       pointerEnters: ledger.pointerEnters,
       pointerLeaves: ledger.pointerLeaves,
+      focusIns: ledger.focusIns,
+      focusOuts: ledger.focusOuts,
       pointerTimestamps: [...ledger.pointerTimestamps],
       transitionStarts: [...ledger.transitionStarts],
       runtimeEvents: [...ledger.runtimeEvents],
@@ -144,7 +165,10 @@ export async function readOrbHealth(motion: Locator) {
       visualState: diagnostics.visualState,
       isTransitioning: diagnostics.isTransitioning,
       lastFailure: diagnostics.lastFailure,
-      underflows: diagnostics.counters.underflow
+      underflows: diagnostics.counters.underflow,
+      playbackLifecycle: (diagnostics.runtime as unknown as Readonly<{
+        playbackLifecycle: Readonly<PlaybackLifecycleSnapshot>;
+      }>).playbackLifecycle
     };
   });
 }

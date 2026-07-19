@@ -25,6 +25,29 @@ exposes deadline/CPU controls, and AV1 exposes 8/10-bit, CPU, tile, row-MT, and
 thread controls. Direct input requires `--codec` and lowers through the same
 one-codec bundle pipeline; arbitrary FFmpeg arguments are not accepted.
 
+New H.264 renditions are always 8-bit 4:2:0 Constrained Baseline and use the
+canonical `avc1.42E0xx` codec string. The compiler selects the lowest supported
+level that admits the macroblock dimensions, exact rational macroblock rate,
+one-reference DPB, and the configured MaxBR/CPB limits. It applies the
+compatibility restrictions after the requested preset: one reference, closed
+GOPs, no B-pictures, CABAC, weighted prediction, or 8×8 transform, exact crop,
+and BT.709 limited-range signalling. The selected level's MaxBR and CPB limits
+are emitted as FFmpeg `-maxrate` and `-bufsize`; CRF 0 and renditions outside
+the bounded level table fail compilation.
+
+The current permanent compatibility rows are:
+
+| Coded rendition | Frame rate | Emitted codec |
+| --- | --- | --- |
+| 48×112 | 30 fps | `avc1.42E00B` |
+| 512×512 | 24 fps | `avc1.42E01E` |
+| 640×368 | 24 fps | `avc1.42E01E` |
+| 1280×720 | 24 fps | `avc1.42E01F` |
+
+Format-version `1.0` readers continue to accept canonical legacy High-profile
+`avc1.6400xx` assets, but the compiler never emits that profile for new H.264
+bundles.
+
 See [preparing video and authoring states](compiler/authoring-video-and-states.md)
 for accepted files, timing and alpha requirements, half-open ranges, a complete
 multi-state project, exact no-downscale sizing behavior, and consumer code.

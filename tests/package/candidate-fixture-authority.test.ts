@@ -4,12 +4,35 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import {
+  FUNCTIONAL_FIXTURE_DIGEST,
+  FUNCTIONAL_SOURCE_TYPE
+} from "../../apps/playground/src/certification/functional-fixture.js";
 import * as certification from "../../packages/certification/src/index.js";
 import { loadCandidateFixtureAuthority } from "../../scripts/certification/candidate-fixtures.mjs";
 
 const fixtureSource = resolve("fixtures/conformance/v1/h264.avl");
+const fixtureReport = resolve("fixtures/conformance/v1/build.json");
 
 describe("candidate fixture authority stable reads", () => {
+  it("binds the functional harness identity to the checked-in H.264 fixture", async () => {
+    const bytes = await readFile(fixtureSource);
+    const report = JSON.parse(await readFile(fixtureReport, "utf8")) as {
+      assets: readonly Readonly<{
+        codec: string;
+        sha256: string;
+        type: string;
+      }>[];
+    };
+    const h264 = report.assets.find(({ codec }) => codec === "h264");
+    const digest = createHash("sha256").update(bytes).digest("hex");
+
+    expect(h264).toBeDefined();
+    expect(FUNCTIONAL_FIXTURE_DIGEST).toBe(digest);
+    expect(h264?.sha256).toBe(digest);
+    expect(FUNCTIONAL_SOURCE_TYPE).toBe(h264?.type);
+  });
+
   it("separately binds the exact fatal-boundary source and certification harness", async () => {
     const root = await temporaryRoot("fatal-boundary");
     try {

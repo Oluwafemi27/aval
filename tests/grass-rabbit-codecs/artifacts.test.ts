@@ -144,6 +144,9 @@ describe("grass-rabbit native multi-codec artifacts", () => {
       const rendition = front.manifest.renditions[0]!;
       expect(parseVideoCodecString(rendition.codec)?.family).toBe(codec);
       expect(reported.codecString).toBe(rendition.codec);
+      if (codec === "h264") {
+        expect(rendition.codec).toBe("avc1.42E01F");
+      }
       expect(reported.type).toBe(
         `application/vnd.aval; codecs="${rendition.codec}"`
       );
@@ -288,6 +291,14 @@ const EXPECTED_EDGES = Object.freeze([
     to: "hover",
     trigger: { type: "completion" },
     start: { type: "finish", targetPort: "default", maxWaitFrames: 66 },
+    continuity: "exact-authored"
+  }),
+  Object.freeze({
+    id: "exiting.entering",
+    from: "exiting",
+    to: "entering",
+    trigger: { type: "event", name: "hover.enter" },
+    start: { type: "finish", targetPort: "default", maxWaitFrames: 47 },
     continuity: "exact-authored"
   }),
   Object.freeze({

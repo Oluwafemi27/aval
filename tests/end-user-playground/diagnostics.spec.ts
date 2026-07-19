@@ -1,10 +1,18 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import {
   assertBrowserDiagnosticReport,
   BROWSER_DIAGNOSTIC_LIMITS,
+  type BrowserDiagnosticEvidenceCheckpointArtifacts,
+  browserDiagnosticCertificationModeFromEnvironment,
+  browserDiagnosticEvidenceTargetFromEnvironment,
+  browserDiagnosticExpectedOutcomeFromEnvironment,
+  browserDiagnosticInteractionProfileFromEnvironment,
   captureBrowserDiagnosticArtifacts,
+  captureBrowserDiagnosticPlaybackSoak,
+  captureDeterministicUnsupportedBrowserEvidence,
   captureOperation,
+  finalizeBrowserDiagnosticEvidenceFromEnvironment,
   openWithDiagnostics,
   readReport
 } from "../support/browser-diagnostic-capture.js";
@@ -12,6 +20,13 @@ import {
 test("captures bounded query-only browser diagnostics", async ({
   page
 }, testInfo) => {
+  const certificationMode = browserDiagnosticCertificationModeFromEnvironment();
+  const expectedOutcome = browserDiagnosticExpectedOutcomeFromEnvironment();
+  const interactionProfile = browserDiagnosticInteractionProfileFromEnvironment();
+  const evidenceCheckpoints: BrowserDiagnosticEvidenceCheckpointArtifacts[] = [];
+  if (process.env.AVAL_BROWSER_EVIDENCE_RUN_ROOT !== undefined) {
+    testInfo.setTimeout(Math.max(testInfo.timeout, 150_000));
+  }
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("[data-aval-browser-diagnostics]"))
     .toHaveCount(0);
@@ -33,6 +48,14 @@ test("captures bounded query-only browser diagnostics", async ({
     "Copy JSON",
     "Clear"
   ]);
+  if (expectedOutcome === "deterministic-error") {
+    await captureDeterministicUnsupportedBrowserEvidence(page, testInfo, {
+      demoId: "end-user-playground",
+      playerSelector: "#favorite-motion",
+      artifactName: "end-user-playground"
+    });
+    return;
+  }
   const ready = await captureOperation(
     page,
     "playground-ready",
@@ -43,6 +66,19 @@ test("captures bounded query-only browser diagnostics", async ({
     ),
     { playerSelector: "#favorite-motion" }
   );
+  await captureBrowserDiagnosticArtifacts(
+    page,
+    testInfo,
+    "end-user-playground-ready",
+    {
+      evidence: browserDiagnosticEvidenceTargetFromEnvironment({
+        demoId: "end-user-playground",
+        checkpoint: "idle"
+      }),
+      advancingFrame: ready.outcome === "completed",
+      onEvidenceWritten: (artifacts) => evidenceCheckpoints.push(artifacts)
+    }
+  );
 
   let toggled = null;
   if (ready.outcome === "completed") {
@@ -50,7 +86,7 @@ test("captures bounded query-only browser diagnostics", async ({
       page,
       "toggle-favorite",
       async () => {
-        await page.locator("#toggle-state").click();
+        await toggleFavorite(page, interactionProfile);
         await page.waitForFunction(() =>
           (document.querySelector("#favorite-motion") as HTMLElement & {
             readonly visualState?: string | null;
@@ -75,8 +111,47 @@ test("captures bounded query-only browser diagnostics", async ({
   const report = await captureBrowserDiagnosticArtifacts(
     page,
     testInfo,
-    "end-user-playground-diagnostics"
+    "end-user-playground-interacted",
+    {
+      evidence: browserDiagnosticEvidenceTargetFromEnvironment({
+        demoId: "end-user-playground",
+        checkpoint: "engaged"
+      }),
+      advancingFrame: ready.outcome === "completed",
+      onEvidenceWritten: (artifacts) => evidenceCheckpoints.push(artifacts)
+    }
   );
+  if (ready.outcome === "completed") {
+    await toggleFavorite(page, interactionProfile);
+    await waitForFavoriteState(page, "idle", true);
+    if (interactionProfile === "desktop") {
+      const target = page.locator("#favorite-control");
+      await target.hover();
+      await waitForFavoriteState(page, "engaged", true);
+      await page.mouse.move(1, 1);
+      await waitForFavoriteState(page, "idle", true);
+      await target.focus();
+      await waitForFavoriteState(page, "engaged", true);
+      await target.evaluate((element) => (element as HTMLElement).blur());
+      await waitForFavoriteState(page, "idle", true);
+    }
+  }
+  const measuredRun = await captureBrowserDiagnosticPlaybackSoak(
+    page,
+    "#favorite-motion",
+    async () => {
+      await waitForFavoriteState(page, "idle", true);
+      await toggleFavorite(page, interactionProfile);
+      await waitForFavoriteState(page, "engaged", true);
+      await toggleFavorite(page, interactionProfile);
+      await waitForFavoriteState(page, "idle", true);
+    }
+  );
+  await finalizeBrowserDiagnosticEvidenceFromEnvironment({
+    demoId: "end-user-playground",
+    checkpoints: evidenceCheckpoints,
+    measuredRun
+  });
 
   expect(ready.outcome).toBe("completed");
   expect(toggled?.outcome).toBe("completed");
@@ -85,12 +160,16 @@ test("captures bounded query-only browser diagnostics", async ({
     error: "Synthetic diagnostic capture failure"
   });
   expect(timedOut.outcome).toBe("timeout");
-  expect(report.authoredSources.map(({ codec }) => codec)).toEqual([
-    "av01.0.00M.10.0.110.01.01.01.0",
-    "vp09.00.10.08.01.01.01.01.00",
-    "hvc1.1.6.L30.90",
-    "avc1.64000A"
-  ]);
+  expect(report.authoredSources.map(({ codec }) => codec)).toEqual(
+    certificationMode === "forced-h264"
+      ? ["avc1.42E00B"]
+      : [
+          "av01.0.00M.10.0.110.01.01.01.0",
+          "vp09.00.10.08.01.01.01.01.00",
+          "hvc1.1.6.L30.90",
+          "avc1.42E00B"
+        ]
+  );
   expect(report.checkpoints.map(({ label }) => label)).toEqual(
     expect.arrayContaining([
       "before:playground-ready",
@@ -101,6 +180,96 @@ test("captures bounded query-only browser diagnostics", async ({
       "timeout:synthetic-timeout"
     ])
   );
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      readonly avalBrowserDiagnostics?: {
+        attach(player: HTMLElement, context?: unknown): unknown;
+        checkpoint(label: string, player?: HTMLElement): unknown;
+      };
+    }).avalBrowserDiagnostics;
+    if (api === undefined) throw new Error("Browser diagnostics are unavailable");
+    const probe = document.createElement("div") as HTMLElement & {
+      getDiagnostics?: () => Readonly<Record<string, unknown>>;
+    };
+    probe.id = "overlay-failure-probe";
+    probe.getDiagnostics = () => ({
+      lastFailure: { code: "renderer-failure" },
+      runtime: {
+        selectedCodec: null,
+        decoderDiagnostics: [{
+          sourceIndex: 2,
+          unit: "body-01",
+          lane: 1,
+          logicalRunId: 9,
+          phase: "output-validation",
+          code: "invalid-output",
+          run: 7,
+          outputFailure: {
+            kind: "display-aspect",
+            validationLayer: "host-expectation",
+            field: "display-aspect"
+          },
+          sourceUrl: "https://overlay-secret.example/private.avl",
+          accessToken: "OVERLAY_TOKEN_SECRET",
+          stack: "OVERLAY_STACK_SECRET",
+          sourceBytes: "OVERLAY_SOURCE_BYTES_SECRET"
+        }],
+        rendererDiagnostics: [{
+          sourceIndex: 2,
+          phase: "native-upload",
+          glError: 0x0502,
+          contextLost: false,
+          sourceUrl: "https://renderer-secret.example/private.avl",
+          accessToken: "RENDERER_TOKEN_SECRET",
+          stack: "RENDERER_STACK_SECRET",
+          sourceBytes: "RENDERER_SOURCE_BYTES_SECRET"
+        }]
+      }
+    });
+    api.attach(probe, { role: "overlay-failure-probe" });
+    api.checkpoint("overlay:failure-summary", probe);
+  });
+  const overlayStatus = overlay.locator("output");
+  await expect(overlayStatus).toContainText(
+    "decoder[2] invalid-output@output-validation lane=1 run=7 " +
+    "logical=9 unit=body-01 " +
+    "mismatch=display-aspect/display-aspect/host-expectation"
+  );
+  await expect(overlayStatus).toContainText(
+    "renderer[2] phase=native-upload " +
+    "gl=INVALID_OPERATION(0x0502) context=available"
+  );
+  const safeOverlayStatus = await overlayStatus.textContent();
+  expect(safeOverlayStatus).not.toContain("https://");
+  expect(safeOverlayStatus).not.toContain("OVERLAY_TOKEN_SECRET");
+  expect(safeOverlayStatus).not.toContain("OVERLAY_STACK_SECRET");
+  expect(safeOverlayStatus).not.toContain("OVERLAY_SOURCE_BYTES_SECRET");
+  expect(safeOverlayStatus).not.toContain("RENDERER_TOKEN_SECRET");
+  expect(safeOverlayStatus).not.toContain("RENDERER_STACK_SECRET");
+  expect(safeOverlayStatus).not.toContain("RENDERER_SOURCE_BYTES_SECRET");
+  const overlayReport = await readReport(page);
+  const overlayRuntime = overlayReport.latest?.element.diagnostics?.runtime;
+  expect(overlayRuntime).toMatchObject({
+    decoderDiagnostics: [{
+      lane: 1,
+      run: 7,
+      logicalRunId: 9,
+      unit: "body-01",
+      outputFailure: {
+        kind: "display-aspect",
+        field: "display-aspect",
+        validationLayer: "host-expectation"
+      },
+      sourceBytes: "[redacted-sensitive]"
+    }],
+    rendererDiagnostics: [{
+      phase: "native-upload",
+      glError: 0x0502,
+      contextLost: false,
+      sourceBytes: "[redacted-sensitive]"
+    }]
+  });
 
   await page.evaluate(() => {
     const api = (window as Window & {
@@ -140,10 +309,19 @@ test("captures bounded query-only browser diagnostics", async ({
       token: "TOKEN_SECRET",
       secret: "SECRET_VALUE",
       apiKey: "API_KEY_SECRET",
-      credentials: "CREDENTIAL_SECRET"
+      credentials: "CREDENTIAL_SECRET",
+      sourceBytes: "SOURCE_BYTES_SECRET",
+      bytes: "RAW_BYTES_SECRET",
+      body: "BODY_SECRET",
+      payload: "PAYLOAD_SECRET",
+      sourceBuffer: new Uint8Array([83, 79, 85, 82, 67, 69])
     };
     const diagnostics = {
       stack: "SECRET_STACK",
+      uploadPath: "rgba-copy",
+      rendererByteAccounting: {
+        bytes: { expected: 7_372_800, actual: 7_372_800 }
+      },
       sourceUrl: "https://secret.example/source.avl",
       relativeReference: "assets/private.avl?token=RELATIVE_PATH_TOKEN",
       rootedReference: "/private.avl?token=ROOTED_PATH_TOKEN",
@@ -253,7 +431,16 @@ test("captures bounded query-only browser diagnostics", async ({
     token: "[redacted-sensitive]",
     secret: "[redacted-sensitive]",
     apiKey: "[redacted-sensitive]",
-    credentials: "[redacted-sensitive]"
+    credentials: "[redacted-sensitive]",
+    sourceBytes: "[redacted-sensitive]",
+    bytes: "[redacted-sensitive]",
+    body: "[redacted-sensitive]",
+    payload: "[redacted-sensitive]",
+    sourceBuffer: "[redacted-sensitive]"
+  });
+  expect(latestDiagnostics?.uploadPath).toBe("rgba-copy");
+  expect(latestDiagnostics?.rendererByteAccounting).toEqual({
+    bytes: { expected: 7_372_800, actual: 7_372_800 }
   });
   expect(latestDiagnostics?.relativeReference).toBe("[redacted-url]");
   expect(latestDiagnostics?.rootedReference).toBe("[redacted-url]");
@@ -302,9 +489,45 @@ test("captures bounded query-only browser diagnostics", async ({
     "ACCESS_TOKEN_QUERY_SECRET",
     "API_KEY_QUERY_SECRET",
     "CLIENT_SECRET_QUERY_SECRET",
-    "KEY_LEAK"
+    "KEY_LEAK",
+    "SOURCE_BYTES_SECRET",
+    "RAW_BYTES_SECRET",
+    "BODY_SECRET",
+    "PAYLOAD_SECRET"
   ]) {
     expect(serialized).not.toContain(secret);
+  }
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText(value: string) {
+          (window as Window & { __avalCopiedDiagnosticJson?: string })
+            .__avalCopiedDiagnosticJson = value;
+          return Promise.resolve();
+        }
+      }
+    });
+  });
+  await overlay.locator("button", { hasText: "Copy JSON" }).evaluate(
+    (button: HTMLButtonElement) => button.click()
+  );
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __avalCopiedDiagnosticJson?: string })
+      .__avalCopiedDiagnosticJson ?? null
+  )).not.toBeNull();
+  const copiedJson = await page.evaluate(() =>
+    (window as Window & { __avalCopiedDiagnosticJson?: string })
+      .__avalCopiedDiagnosticJson ?? ""
+  );
+  expect(copiedJson).toContain("[redacted-sensitive]");
+  for (const secret of [
+    "SOURCE_BYTES_SECRET",
+    "RAW_BYTES_SECRET",
+    "BODY_SECRET",
+    "PAYLOAD_SECRET"
+  ]) {
+    expect(copiedJson).not.toContain(secret);
   }
   expect(bounded.session.url).toBe("/?avalDiagnostics=1");
   expect(bounded.serializationBudgetExhausted).toBe(false);
@@ -340,6 +563,13 @@ test("captures bounded query-only browser diagnostics", async ({
   });
   const aggregate = await readReport(page);
   expect(aggregate.serializationBudgetExhausted).toBe(true);
+  expect(() => assertBrowserDiagnosticReport({
+    ...bounded,
+    session: {
+      ...bounded.session,
+      url: "/?avalDiagnostics=1&avalCertificationMode=full-ladder"
+    }
+  })).not.toThrow();
   expect(() => assertBrowserDiagnosticReport({
     ...bounded,
     session: {
@@ -437,3 +667,30 @@ test("bounds diagnostics while ingesting and traversing hostile values", async (
   );
   expect(report.checkpoints).toHaveLength(BROWSER_DIAGNOSTIC_LIMITS.checkpoints);
 });
+
+async function toggleFavorite(
+  page: Page,
+  profile: "desktop" | "touch" | "unsupported"
+): Promise<void> {
+  if (profile === "unsupported") {
+    throw new Error("Unsupported evidence cannot toggle the favorite demo");
+  }
+  const toggle = page.locator("#toggle-state");
+  if (profile === "touch") await toggle.tap();
+  else await toggle.click();
+}
+
+async function waitForFavoriteState(
+  page: Page,
+  state: "idle" | "engaged",
+  settled = false
+): Promise<void> {
+  await page.waitForFunction(({ expectedState, requireSettled }) => {
+    const player = document.querySelector("#favorite-motion") as HTMLElement & {
+      readonly visualState?: string | null;
+      readonly isTransitioning?: boolean;
+    } | null;
+    return player !== null && player.visualState === expectedState &&
+      (!requireSettled || player.isTransitioning === false);
+  }, { expectedState: state, requireSettled: settled });
+}

@@ -63,7 +63,7 @@ describe("element inputs", () => {
         }),
         source({
           src: "/bad-codec.avl",
-          type: 'application/vnd.aval; codecs="avc1.42E01E"'
+          type: 'application/vnd.aval; codecs="avc1.42C01E"'
         }),
         source({
           src: "/bad-sri.avl",
@@ -86,7 +86,9 @@ describe("element inputs", () => {
       ["hvc1.1.FFFFFFFF.H255.90", true], ["vp09.00.10.08", true],
       ["vp09.00.62.08.01.01.01.01.00", true], ["av01.0.00M.08", true],
       ["av01.0.31H.10.0.113.01.01.01.0", true],
-      ["avc1.42E01E", false], ["avc1.64000a", false],
+      ["avc1.42E00A", true], ["avc1.42E01E", true],
+      ["avc1.42E03E", true], ["avc1.42C01E", false],
+      ["avc1.64000a", false],
       ["hvc1.1.0.L93.B0", false], ["hvc1.1.100000000.L93.B0", false],
       ["hvc1.1.2.L0.90", false], ["hvc1.1.2.L1.D0", false],
       ["hvc1.1.2.L1.90.00", false], ["vp09.00.10.10", false],

@@ -42,7 +42,7 @@ const media = vi.hoisted(() => ({
 
 vi.mock("../src/asset.js", () => {
   const units = [
-    body("idle-body", 0, 16),
+    body("idle-body", 0, 24),
     { id: "idle-intro", kind: "one-shot", frameCount: 2, chunks: [span(1)] },
     body("hover-body", 2, 16),
     { id: "idle-hover", kind: "bridge", frameCount: 16, chunks: [span(3)] },
@@ -101,7 +101,7 @@ vi.mock("../src/asset.js", () => {
             type: "portal",
             sourcePort: "later",
             targetPort: "entry",
-            maxWaitFrames: 16
+            maxWaitFrames: 24
           },
           transition: { kind: "locked", unit: "idle-hover" },
           trigger: { type: "event", name: "hover" },
@@ -115,7 +115,7 @@ vi.mock("../src/asset.js", () => {
             type: "portal",
             sourcePort: "entry",
             targetPort: "entry",
-            maxWaitFrames: 16
+            maxWaitFrames: 24
           },
           transition: { kind: "locked", unit: "idle-other" },
           trigger: { type: "event", name: "other" },
@@ -129,7 +129,7 @@ vi.mock("../src/asset.js", () => {
             type: "portal",
             sourcePort: "later",
             targetPort: "entry",
-            maxWaitFrames: 16
+            maxWaitFrames: 24
           },
           transition: { kind: "locked", unit: "idle-later" },
           trigger: { type: "event", name: "later" },
@@ -143,7 +143,7 @@ vi.mock("../src/asset.js", () => {
             type: "portal",
             sourcePort: "last",
             targetPort: "entry",
-            maxWaitFrames: 16
+            maxWaitFrames: 24
           },
           transition: { kind: "locked", unit: "idle-last" },
           trigger: { type: "event", name: "last" },
@@ -1073,7 +1073,7 @@ describe("player multi-route prefetch", () => {
     await eventually(() => lastRun(300) !== undefined);
     const staleTransition = lastRun(300)!;
     const originalBodyRuns = media.runs.filter(({ label }) => label === 0).length;
-    await driveFrames(frames, () => originalBody.taken.includes(9), 20);
+    await driveFrames(frames, () => staleTransition.closed, 32);
     expect(originalBody.taken).toContain(8);
     expect(originalBody.taken).toContain(9);
     expect(staleTransition.ready).toBe(false);
@@ -1119,6 +1119,93 @@ describe("player multi-route prefetch", () => {
 
     await player.dispose();
     await expect(request).rejects.toBeInstanceOf(Error);
+  });
+
+  it("completes exactly 60 wraps across 1,440 content ticks", async () => {
+    vi.stubGlobal("Worker", class {});
+    vi.stubGlobal("VideoDecoder", class {});
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+    const events: string[] = [];
+    const player = await createPlayer({
+      canvas: new EventTarget() as HTMLCanvasElement,
+      platform: testPlatform(),
+      initialPresentation: { width: 16, height: 16, dpr: 1, fit: null },
+      baseUrl: "https://example.test/",
+      sources: [{ src: "motion.avl", codec: "avc1.640020", integrity: "" }],
+      credentials: "same-origin",
+      signal: new AbortController().signal,
+      preparationTimeoutMs: 5_000,
+      motion: "full",
+      reduced: false,
+      initialState: null,
+      initialBody: false,
+      visible: true,
+      decoderReady: () => true,
+      onResourceBytes: () => undefined,
+      onMetadata: () => undefined,
+      onReadiness: () => undefined,
+      onAnimationResourcesRetired: () => undefined,
+      onDraw: () => undefined,
+      onRestart: () => undefined,
+      onEvent: (type) => events.push(type),
+      onFailure: (code) => events.push(`failure:${code}`),
+      onPlaybackFailure: defaultPlaybackFailure
+    });
+    player.activate();
+    await player.prepare();
+    await eventually(() => lastRun(0) !== undefined);
+    const initialBody = lastRun(0)!;
+    await driveFrames(
+      frames,
+      () => media.operations.includes(`draw:${String(initialBody.id)}:0`),
+      12
+    );
+    const baseline = player.snapshot(false).playbackLifecycle;
+    const targetDraws = baseline.drawsCompleted + 1_440;
+
+    for (let attempt = 0; attempt < 1_600; attempt += 1) {
+      if (player.snapshot(false).playbackLifecycle.drawsCompleted === targetDraws) {
+        break;
+      }
+      await Promise.resolve();
+      const frame = frames.shift();
+      frame?.(performance.now() + 20_000 + attempt * 100);
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+    }
+
+    const snapshot = player.snapshot(true);
+    expect(snapshot.playbackLifecycle.drawsCompleted).toBe(targetDraws);
+    expect(snapshot.playbackLifecycle.loopCrossings - baseline.loopCrossings).toBe(60);
+    expect(snapshot.playbackLifecycle.candidateCommits).toBeGreaterThanOrEqual(60);
+    expect(snapshot.playbackLifecycle.logicalRunsCreated).toBeLessThanOrEqual(66);
+    expect(snapshot.playbackLifecycle.runsClosed).toBeLessThanOrEqual(
+      snapshot.playbackLifecycle.logicalRunsCreated
+    );
+    expect(new Set(media.runs.filter(({ label }) => label === 0).map(({ lane }) => lane)))
+      .toEqual(new Set([0, 1]));
+    expect(media.runs.filter(({ closed }) => !closed)).toHaveLength(1);
+    expect(snapshot.openFrames).toBe(0);
+    expect(snapshot.requestedState).toBe("idle");
+    expect(snapshot.visualState).toBe("idle");
+    expect(snapshot.transitioning).toBe(false);
+    expect(snapshot.decoderDiagnostics).toEqual([]);
+    expect(snapshot.rendererDiagnostics).toEqual([]);
+    expect(snapshot.trace).toHaveLength(512);
+    expect(snapshot.trace.slice(-24).map((record) =>
+      record.scheduler.displayedCursor?.localFrame
+    )).toEqual([
+      ...Array.from({ length: 23 }, (_unused, index) => index + 1),
+      0
+    ]);
+    expect(events).not.toContain("underflow");
+    expect(events.some((event) => event.startsWith("failure:"))).toBe(false);
+
+    await player.dispose();
   });
 
   it("prepares loop continuation before an unready final-frame portal wraps", async () => {
@@ -1172,7 +1259,7 @@ describe("player multi-route prefetch", () => {
     const blockedTarget = lastRun(900)!;
     const bodyRuns = media.runs.filter(({ label }) => label === 0).length;
 
-    await driveFrames(frames, () => originalBody.taken.includes(15), 24);
+    await driveFrames(frames, () => originalBody.taken.includes(23), 32);
     await driveFrames(
       frames,
       () => media.runs.filter(({ label }) => label === 0).length > bodyRuns,

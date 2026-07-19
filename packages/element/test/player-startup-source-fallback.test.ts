@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AvalPlaybackError } from "../src/errors.js";
+import type { PlayerRendererDiagnostic } from "../src/player-contract.js";
+import {
+  createRendererFailureDiagnostic,
+  RendererFailureError,
+  type RendererFailureDiagnostic
+} from "../src/renderer-diagnostics.js";
 
 type CodecFamily = "av1" | "vp9" | "h265" | "h264";
 type StartupOutcome =
@@ -8,21 +14,32 @@ type StartupOutcome =
   | "encoding-error"
   | "unsupported-config"
   | "transport-error"
+  | "probe-unsupported-config"
+  | "probe-not-supported"
+  | "probe-encoding-error"
+  | "probe-transport-error"
+  | "probe-arbitrary-error"
+  | "probe-supported-then-transport"
+  | "probe-unsupported-false"
   | "pending";
 
 const startup = vi.hoisted(() => ({
   outcomes: new Map<string, StartupOutcome>(),
+  probeOutcomes: new Map<string, readonly [StartupOutcome, StartupOutcome]>(),
   opens: [] as string[],
   disposals: [] as string[],
   operations: [] as string[],
   cleanupFailures: new Set<string>(),
+  rgbaCopyFailures: new Set<string>(),
   rendererFailures: new Set<string>(),
   resizeFailures: new Set<string>(),
   snapshotFailures: new Set<string>(),
+  mixedRuntimeTransportFailures: new Set<string>(),
+  mixedRendererTransportFailures: new Set<string>(),
   decoders: [] as Array<{
     codec: string;
     disposed: boolean;
-    fail: (reason?: Error) => void;
+    fail: (reason?: Error, phase?: string, code?: string) => void;
   }>
 }));
 
@@ -52,8 +69,9 @@ vi.mock("../src/decoder.js", () => ({
     readonly #control: {
       codec: string;
       disposed: boolean;
-      fail: (reason?: Error) => void;
+      fail: (reason?: Error, phase?: string, code?: string) => void;
     };
+    readonly #lane: 0 | 1;
     #rejectFailure!: (reason: unknown) => void;
     #failureSettled = false;
     #disposed = false;
@@ -64,6 +82,9 @@ vi.mock("../src/decoder.js", () => ({
 
     public constructor(config: Readonly<VideoDecoderConfig>) {
       this.#codec = codecFamily(config.codec);
+      this.#lane = startup.decoders.filter(({ codec }) =>
+        codec === this.#codec
+      ).length % 2 as 0 | 1;
       this.#failure = new Promise<never>((_resolve, reject) => {
         this.#rejectFailure = reject;
       });
@@ -71,7 +92,11 @@ vi.mock("../src/decoder.js", () => ({
       this.#control = {
         codec: this.#codec,
         disposed: false,
-        fail: (reason = invalidOutputError(this.#codec)) => this.#fail(reason)
+        fail: (
+          reason = invalidOutputError(this.#codec),
+          phase = "output-validation",
+          code = "invalid-output"
+        ) => this.#fail(reason, phase, code)
       };
       startup.decoders.push(this.#control);
     }
@@ -80,6 +105,50 @@ vi.mock("../src/decoder.js", () => ({
 
     public async supported(): Promise<boolean> {
       startup.operations.push(`probe:${this.#codec}`);
+      const outcome = startup.probeOutcomes.get(this.#codec)?.[this.#lane] ??
+        startup.outcomes.get(this.#codec) ?? "success";
+      if (outcome === "probe-supported-then-transport") {
+        const error = new Error(
+          `synthetic post-support transport failure for ${this.#codec}`
+        );
+        this.#fail(error, "frame-transfer", "transport");
+        return true;
+      }
+      if (outcome === "probe-unsupported-false") {
+        const error = new Error(
+          `synthetic unsupported boolean probe for ${this.#codec}`
+        );
+        this.#fail(error, "probe", "unsupported-config");
+        return false;
+      }
+      if (outcome === "probe-unsupported-config") {
+        const error = new Error(
+          `synthetic unsupported probe config for ${this.#codec}`
+        );
+        this.#fail(error, "probe", "unsupported-config");
+        throw error;
+      }
+      if (outcome === "probe-not-supported" ||
+        outcome === "probe-encoding-error") {
+        const error = new Error(`synthetic probe failure for ${this.#codec}`);
+        error.name = outcome === "probe-not-supported"
+          ? "NotSupportedError"
+          : "EncodingError";
+        this.#fail(error, "probe", "decoder-operation");
+        throw error;
+      }
+      if (outcome === "probe-transport-error") {
+        const error = new Error(
+          `synthetic probe transport failure for ${this.#codec}`
+        );
+        this.#fail(error, "probe", "transport");
+        throw error;
+      }
+      if (outcome === "probe-arbitrary-error") {
+        const error = new Error(`synthetic arbitrary probe failure for ${this.#codec}`);
+        this.#fail(error, "probe", "decoder-operation");
+        throw error;
+      }
       return true;
     }
 
@@ -103,7 +172,20 @@ vi.mock("../src/decoder.js", () => ({
           resolveRunReady();
         });
       } else if (outcome === "invalid-output") {
-        queueMicrotask(() => this.#fail(invalidOutputError(this.#codec)));
+        queueMicrotask(() => {
+          if (startup.mixedRuntimeTransportFailures.has(this.#codec)) {
+            const sibling = startup.decoders.find((candidate) =>
+              candidate.codec === this.#codec &&
+              candidate !== this.#control &&
+              !candidate.disposed
+            );
+            const transport = new Error(
+              `synthetic concurrent transport failure for ${this.#codec}`
+            );
+            sibling?.fail(transport, "frame-transfer", "transport");
+          }
+          this.#fail(invalidOutputError(this.#codec));
+        });
       } else if (outcome === "encoding-error") {
         const error = new Error(`synthetic decode failure for ${this.#codec}`);
         error.name = "EncodingError";
@@ -181,7 +263,17 @@ vi.mock("../src/decoder.js", () => ({
         run: this.#generation === 0 ? null : this.#generation,
         decodeOrdinal: this.#generation === 0 ? null : 0,
         exception: Object.freeze({ name: reason.name, message: reason.message }),
-        firstFrame: null
+        firstFrame: null,
+        lastGoodFrame: null,
+        outputFailure: code === "invalid-output"
+          ? Object.freeze({
+              kind: "unknown-output",
+              validationLayer: "host-expectation",
+              field: "timestamp",
+              expected: null,
+              actual: null
+            })
+          : null
       });
       if (!this.#runReadySettled) {
         this.#runReadySettled = true;
@@ -196,6 +288,7 @@ vi.mock("../src/renderer.js", () => ({
   Renderer: class {
     readonly #codec: string;
     #disposed = false;
+    #failure: Readonly<RendererFailureDiagnostic> | null = null;
 
     public constructor(
       _canvas: HTMLCanvasElement,
@@ -224,12 +317,26 @@ vi.mock("../src/renderer.js", () => ({
         pendingOperations: 0,
         sourceCopiesInFlight: 0,
         resourceCount: 4,
-        contextListenerCount: 2
+        contextListenerCount: 2,
+        failure: this.#failure
       };
     }
 
     public async draw(): Promise<void> {
       startup.operations.push(`draw:${this.#codec}`);
+      if (startup.rgbaCopyFailures.has(this.#codec)) {
+        if (startup.mixedRendererTransportFailures.has(this.#codec)) {
+          const transport = new Error(
+            `synthetic concurrent renderer transport failure for ${this.#codec}`
+          );
+          startup.decoders.find((candidate) =>
+            candidate.codec === this.#codec && !candidate.disposed
+          )?.fail(transport, "frame-transfer", "transport");
+        }
+        const error = rgbaCopyFailureError();
+        this.#failure = error.diagnostic;
+        throw error;
+      }
       if (startup.rendererFailures.has(this.#codec)) {
         throw new Error(`synthetic WebGL draw failure for ${this.#codec}`);
       }
@@ -252,17 +359,24 @@ vi.mock("../src/renderer.js", () => ({
   }
 }));
 
-import { createPlayer } from "../src/player.js";
+import {
+  createPlayer,
+  retryableRgbaCopyStartupFailure
+} from "../src/player.js";
 
 beforeEach(() => {
   startup.outcomes.clear();
+  startup.probeOutcomes.clear();
   startup.opens.length = 0;
   startup.disposals.length = 0;
   startup.operations.length = 0;
   startup.cleanupFailures.clear();
+  startup.rgbaCopyFailures.clear();
   startup.rendererFailures.clear();
   startup.resizeFailures.clear();
   startup.snapshotFailures.clear();
+  startup.mixedRuntimeTransportFailures.clear();
+  startup.mixedRendererTransportFailures.clear();
   startup.decoders.length = 0;
   vi.stubGlobal("Worker", class {});
   vi.stubGlobal("VideoDecoder", class {});
@@ -343,6 +457,154 @@ describe("player startup source fallback", () => {
     expect(startup.opens).toEqual(["av1", "vp9"]);
     expect(player.snapshot(false).selectedCodec).toBe(CODECS.vp9);
     expect(harness.publications.playbackFailures).toEqual([]);
+    await player.dispose();
+  });
+
+  it("advances when the decoder support echo rejects the candidate config", async () => {
+    startup.outcomes.set("av1", "probe-unsupported-config");
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    const player = requirePrepared(outcome);
+    if (outcome.status !== "fulfilled") throw outcome.error;
+    expect(startup.opens).toEqual(["av1", "vp9"]);
+    expect(startup.disposals).toEqual(["av1"]);
+    expect(player.snapshot(false).selectedCodec).toBe(CODECS.vp9);
+    const diagnostics = player.snapshot(false).decoderDiagnostics;
+    expect(diagnostics).toHaveLength(2);
+    expect(diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceIndex: 0,
+        codec: CODECS.av1,
+        phase: "probe",
+        code: "unsupported-config"
+      })
+    ]));
+    expect(outcome.result.report.candidates.map((candidate) => ({
+      rank: candidate.rank,
+      outcome: candidate.outcome,
+      code: candidate.failure?.code ?? null
+    }))).toEqual([
+      { rank: 0, outcome: "rejected", code: "unsupported-profile" },
+      { rank: 1, outcome: "selected", code: null }
+    ]);
+    const vp9Open = startup.operations.indexOf("asset-open:vp9");
+    expect(startup.operations.indexOf("decoder-dispose:av1")).toBeLessThan(vp9Open);
+    expect(startup.operations.indexOf("asset-dispose:av1")).toBeLessThan(vp9Open);
+    await player.dispose();
+  });
+
+  it.each([
+    ["NotSupportedError", "probe-not-supported"],
+    ["EncodingError", "probe-encoding-error"]
+  ] as const)("advances on a probe %s for the current candidate", async (
+    _name,
+    probeOutcome
+  ) => {
+    startup.outcomes.set("av1", probeOutcome);
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    const player = requirePrepared(outcome);
+    expect(startup.opens).toEqual(["av1", "vp9"]);
+    expect(player.snapshot(false).selectedCodec).toBe(CODECS.vp9);
+    expect(harness.publications.playbackFailures).toEqual([]);
+    await player.dispose();
+  });
+
+  it.each([
+    ["transport", "probe-transport-error"],
+    ["arbitrary", "probe-arbitrary-error"]
+  ] as const)("keeps a %s probe failure terminal", async (_name, probeOutcome) => {
+    startup.outcomes.set("av1", probeOutcome);
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    expect(outcome.status).toBe("rejected");
+    expect(startup.opens).toEqual(["av1"]);
+    expect(startup.disposals).toEqual(["av1"]);
+    expect(harness.publications.playbackFailures).toEqual([
+      "readiness-failure:prepare"
+    ]);
+  });
+
+  it.each([
+    [
+      "a false support result",
+      ["probe-supported-then-transport", "probe-unsupported-false"]
+    ],
+    [
+      "a rejected support probe",
+      ["probe-unsupported-config", "probe-transport-error"]
+    ]
+  ] as const)("keeps mixed-lane transport terminal after %s", async (
+    _name,
+    probeOutcomes
+  ) => {
+    startup.probeOutcomes.set("av1", probeOutcomes);
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    expect(outcome.status).toBe("rejected");
+    expect(startup.opens).toEqual(["av1"]);
+    expect(startup.disposals).toEqual(["av1"]);
+    expect(harness.publications.playbackFailures).toHaveLength(1);
+  });
+
+  it("keeps mixed runtime invalid-output and transport evidence terminal", async () => {
+    startup.outcomes.set("av1", "invalid-output");
+    startup.mixedRuntimeTransportFailures.add("av1");
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    expect(outcome.status).toBe("rejected");
+    expect(startup.opens).toEqual(["av1"]);
+    expect(startup.disposals).toEqual(["av1"]);
+    expect(harness.publications.playbackFailures).toHaveLength(1);
+  });
+
+  it("keeps retryable renderer evidence terminal when decoder transport also failed", async () => {
+    startup.rgbaCopyFailures.add("av1");
+    startup.mixedRendererTransportFailures.add("av1");
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    expect(outcome.status).toBe("rejected");
+    expect(startup.opens).toEqual(["av1"]);
+    expect(startup.disposals).toEqual(["av1"]);
+    expect(harness.publications.playbackFailures).toHaveLength(1);
+  });
+
+  it("falls through an unavailable AV1 RGBA copy path to VP9", async () => {
+    startup.rgbaCopyFailures.add("av1");
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    const player = requirePrepared(outcome);
+    if (outcome.status !== "fulfilled") throw outcome.error;
+    expect(startup.opens).toEqual(["av1", "vp9"]);
+    expect(startup.disposals).toEqual(["av1"]);
+    expect(player.snapshot(false).selectedCodec).toBe(CODECS.vp9);
+    expect(harness.publications.playbackFailures).toEqual([]);
+    expect(outcome.result.report.candidates.map((candidate) => ({
+      rank: candidate.rank,
+      outcome: candidate.outcome,
+      code: candidate.failure?.code ?? null
+    }))).toEqual([
+      { rank: 0, outcome: "rejected", code: "renderer-failure" },
+      { rank: 1, outcome: "selected", code: null }
+    ]);
+    const vp9Open = startup.operations.indexOf("asset-open:vp9");
+    expect(startup.operations.indexOf("decoder-dispose:av1")).toBeLessThan(vp9Open);
+    expect(startup.operations.indexOf("renderer-dispose:av1")).toBeLessThan(vp9Open);
+    expect(startup.operations.indexOf("asset-dispose:av1")).toBeLessThan(vp9Open);
     await player.dispose();
   });
 
@@ -488,6 +750,33 @@ describe("player startup source fallback", () => {
     await player.dispose();
   });
 
+  it("selects the first actually renderable codec across the complete ladder", async () => {
+    startup.rgbaCopyFailures.add("av1");
+    startup.outcomes.set("vp9", "invalid-output");
+    startup.rgbaCopyFailures.add("h265");
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    const player = requirePrepared(outcome);
+    if (outcome.status !== "fulfilled") throw outcome.error;
+    expect(startup.opens).toEqual(FAMILIES);
+    expect(startup.disposals).toEqual(["av1", "vp9", "h265"]);
+    expect(player.snapshot(false).selectedCodec).toBe(CODECS.h264);
+    expect(harness.publications.playbackFailures).toEqual([]);
+    expect(outcome.result.report.candidates.map((candidate) => ({
+      rank: candidate.rank,
+      outcome: candidate.outcome,
+      code: candidate.failure?.code ?? null
+    }))).toEqual([
+      { rank: 0, outcome: "rejected", code: "renderer-failure" },
+      { rank: 1, outcome: "rejected", code: "worker-decode-failure" },
+      { rank: 2, outcome: "rejected", code: "renderer-failure" },
+      { rank: 3, outcome: "selected", code: null }
+    ]);
+    await player.dispose();
+  });
+
   it("publishes one canonical terminal error after every candidate fails", async () => {
     for (const family of FAMILIES) {
       startup.outcomes.set(family, "invalid-output");
@@ -520,6 +809,23 @@ describe("player startup source fallback", () => {
     expect(harness.publications.playbackFailures).toEqual([
       "renderer-failure:prepare"
     ]);
+  });
+
+  it("keeps a post-qualification renderer failure terminal", async () => {
+    const harness = createHarness(FAMILIES);
+    const outcome = await prepareAttempt(harness.input);
+    const player = requirePrepared(outcome);
+    expect(startup.opens).toEqual(["av1"]);
+
+    startup.resizeFailures.add("av1");
+    player.resize(32, 32, 1, "contain");
+    await eventually(() => harness.publications.playbackFailures.length === 1);
+
+    expect(startup.opens).toEqual(["av1"]);
+    expect(harness.publications.playbackFailures).toEqual([
+      "renderer-failure:resize"
+    ]);
+    await player.dispose();
   });
 
   it("surfaces candidate resize failure before qualification can succeed", async () => {
@@ -615,6 +921,45 @@ describe("player startup source fallback", () => {
     ]);
     await player.dispose();
   });
+
+  it("admits only exact candidate-scoped RGBA-copy unavailability evidence", () => {
+    const candidate = Object.freeze({
+      sourceIndex: 0,
+      rendition: Object.freeze({ id: "main", codec: CODECS.av1 })
+    });
+    const retryable = rgbaCopyPlayerDiagnostic();
+    expect(retryableRgbaCopyStartupFailure({
+      cleanupFailureCount: 0,
+      rendererDiagnostics: [retryable]
+    }, candidate)).toBe(true);
+
+    const rejectedDiagnostics = [
+      rgbaCopyPlayerDiagnostic({ sourceIndex: 1 }),
+      rgbaCopyPlayerDiagnostic({ rendition: "other" }),
+      rgbaCopyPlayerDiagnostic({ codec: CODECS.vp9 }),
+      rgbaCopyPlayerDiagnostic({ phase: "draw" }),
+      rgbaCopyPlayerDiagnostic({ operation: "restore" }),
+      rgbaCopyPlayerDiagnostic({
+        exception: Object.freeze({
+          name: "EncodingError",
+          message: "arbitrary renderer failure"
+        })
+      }),
+      rgbaCopyPlayerDiagnostic({ glError: 1_282 }),
+      rgbaCopyPlayerDiagnostic({ contextLost: true }),
+      rgbaCopyPlayerDiagnostic({ uploadPath: "native" })
+    ];
+    for (const diagnostic of rejectedDiagnostics) {
+      expect(retryableRgbaCopyStartupFailure({
+        cleanupFailureCount: 0,
+        rendererDiagnostics: [diagnostic]
+      }, candidate)).toBe(false);
+    }
+    expect(retryableRgbaCopyStartupFailure({
+      cleanupFailureCount: 1,
+      rendererDiagnostics: [retryable]
+    }, candidate)).toBe(false);
+  });
 });
 
 const FAMILIES = Object.freeze([
@@ -628,7 +973,7 @@ const CODECS = Object.freeze({
   av1: "av01.0.05M.08",
   vp9: "vp09.00.10.08",
   h265: "hvc1.1.6.L93.B0",
-  h264: "avc1.640020"
+  h264: "avc1.42E020"
 } satisfies Readonly<Record<CodecFamily, string>>);
 
 const WIDTHS = Object.freeze({
@@ -831,6 +1176,66 @@ function invalidOutputError(codec: string): Error {
   const error = new Error(`synthetic invalid decoded frame for ${codec}`);
   error.name = "EncodingError";
   return error;
+}
+
+function rgbaCopyFailureError(): RendererFailureError {
+  return new RendererFailureError(baseRgbaCopyDiagnostic());
+}
+
+function rgbaCopyPlayerDiagnostic(
+  overrides: Partial<PlayerRendererDiagnostic> = {}
+): Readonly<PlayerRendererDiagnostic> {
+  return Object.freeze({
+    ...baseRgbaCopyDiagnostic(),
+    sourceIndex: 0,
+    rendition: "main",
+    codec: CODECS.av1,
+    ...overrides
+  });
+}
+
+function baseRgbaCopyDiagnostic(): Readonly<RendererFailureDiagnostic> {
+  return createRendererFailureDiagnostic({
+    phase: "rgba-copy",
+    operation: "runtime",
+    operationOrdinal: 2,
+    reason: new DOMException(
+      "VideoFrame RGBA export is unavailable",
+      "NotSupportedError"
+    ),
+    glError: null,
+    contextLost: false,
+    uploadPath: "rgba-copy",
+    textureOrdinal: null,
+    layout: {
+      codedWidth: 16,
+      codedHeight: 16,
+      storageWidth: 16,
+      storageHeight: 16,
+      logicalWidth: 16,
+      logicalHeight: 16
+    },
+    backing: { width: 16, height: 16 },
+    bytes: {
+      stagingBytes: 1_024,
+      residentBytes: 0,
+      textureBytes: 3_840,
+      backingBytes: 1_280,
+      runtimeBytes: 6_144,
+      maxTextureBytes: 16_000_000,
+      maxBackingBytes: 16_000_000,
+      maxRuntimeBytes: 16_000_000
+    },
+    limits: {
+      maxTextureSize: 8_192,
+      maxViewportWidth: 8_192,
+      maxViewportHeight: 8_192,
+      maxResidentTextures: 4_096
+    },
+    contextAttributes: null,
+    vendor: "Synthetic Vendor",
+    renderer: "Synthetic Renderer"
+  });
 }
 
 function codecFamily(codec: string): CodecFamily {

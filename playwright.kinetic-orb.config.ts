@@ -1,4 +1,4 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 // Keep the regression gate isolated from the interactive demo's default 4178.
 const port = process.env.AVL_KINETIC_ORB_PORT ?? "4194";
@@ -24,5 +24,27 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 30_000
   },
-  projects: [{ name: "chromium" }]
+  projects: [
+    {
+      name: "chromium",
+      testIgnore: "**/soak.spec.ts",
+      use: { ...devices["Desktop Chrome"] }
+    },
+    {
+      name: "firefox",
+      testIgnore: "**/soak.spec.ts",
+      use: { ...devices["Desktop Firefox"] }
+    },
+    {
+      name: "webkit",
+      testIgnore: "**/soak.spec.ts",
+      use: { ...devices["Desktop Safari"] }
+    },
+    {
+      name: "chromium-soak",
+      testMatch: "**/soak.spec.ts",
+      timeout: 95_000,
+      use: { ...devices["Desktop Chrome"] }
+    }
+  ]
 });

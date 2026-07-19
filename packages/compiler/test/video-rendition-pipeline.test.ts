@@ -96,6 +96,11 @@ describe("codec-typed rendition pipeline", () => {
         geometry: { codedWidth: WIDTH, codedHeight: HEIGHT }
       });
       expect(compiled.renditions[0]?.codec).toMatch(pattern);
+      if (codec === "h264") {
+        // This assertion is backed by a real libx264 encode when the encoder is
+        // installed, and proves preparation rewrote its C0 SPS to strict E0.
+        expect(compiled.renditions[0]?.codec).toBe("avc1.42E00B");
+      }
       const artifact = compileProjectEncoding({
         project,
         encoding,

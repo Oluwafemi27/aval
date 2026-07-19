@@ -1,4 +1,5 @@
 import type {
+  AvalPlaybackLifecycleCounters,
   AvalRuntimeTraceRecord,
   Binding,
   RuntimeFailureCode,
@@ -72,6 +73,7 @@ export interface PlayerSnapshot {
   readonly contextLossCount: number;
   readonly contextRecoveryCount: number;
   readonly cleanupFailureCount?: number;
+  readonly playbackLifecycle: Readonly<AvalPlaybackLifecycleCounters>;
   readonly decoderDiagnostics: readonly Readonly<PlayerDecoderDiagnostic>[];
   readonly rendererDiagnostics: readonly Readonly<PlayerRendererDiagnostic>[];
   readonly presentation: Readonly<{

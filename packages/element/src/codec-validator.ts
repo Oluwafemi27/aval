@@ -40,7 +40,7 @@ type Nal = {
 
 type Obu = { start: number; end: number; type: number };
 
-const H264_CODEC = /^avc1\.6400(?:0A|0B|0C|0D|14|15|16|1E|1F|20|28|29|2A|32|33|34|3C|3D|3E)$/;
+const H264_CODEC = /^avc1\.(?:42E0|6400)(?:0A|0B|0C|0D|14|15|16|1E|1F|20|28|29|2A|32|33|34|3C|3D|3E)$/;
 const H265_CODEC = /^hvc1\.1\.(0|[1-9A-F][0-9A-F]*)\.[LH](0|[1-9][0-9]*)\.((?:[0-9A-F]{2}\.){0,5}(?!00)[0-9A-F]{2})$/;
 const VP9_CODEC = /^vp09\.00\.(10|11|20|21|30|31|40|41|50|51|52|60|61|62)\.08(?:\.01\.01\.01\.01\.00)?$/;
 const AV1_CODEC = /^av01\.0\.(?:0[0-9]|[12][0-9]|3[01])[MH]\.(08|10)(?:\.0\.11[0-3]\.01\.01\.01\.0)?$/;
@@ -732,6 +732,7 @@ function sha256(bytes: Uint8Array, start: number, end: number): string {
 }
 
 type H264 = {
+  baseline: boolean;
   sps: number;
   level: number;
   frameBits: number;
@@ -785,7 +786,7 @@ function validateH264(
   previousFingerprint?: string
 ): string {
   const state: H264 = {
-    sps: 0, level: 0, frameBits: 0, pocType: 0, pocBits: 0,
+    baseline: false, sps: 0, level: 0, frameBits: 0, pocType: 0, pocBits: 0,
     deltaAlwaysZero: false, offsetNonReference: 0, offsetTopBottom: 0,
     cycle: [], maxReferences: 0, macroblocks: 0, maxReorder: 0,
     pps: 0, entropy: false, refs0: 0, refs1: 0, weighted: false,
@@ -828,6 +829,7 @@ function validateH264(
     need(
       picture.type === (index === 0 ? 2 : picture.type) &&
       (index === 0 ? picture.type === 2 : picture.type === 0 || picture.type === 1) &&
+      (!state.baseline || picture.type !== 1) &&
       aud === (picture.type === 2 ? 0 : picture.type === 0 ? 1 : 2) &&
       chunk.displayedFrames === 1
     );
@@ -862,14 +864,24 @@ function readH264Sps(
   profile: Readonly<CodecValidationProfile>
 ): void {
   const reader = new Bits(bytes, start, end, true);
-  need(reader.bits(8) === 100 && reader.bits(8) === 0);
+  const profileIdc = reader.bits(8);
+  const compatibility = reader.bits(8);
+  const baseline = profile.codec.startsWith("avc1.42E0");
+  need(
+    baseline
+      ? profileIdc === 66 && compatibility === 0xe0
+      : profileIdc === 100 && compatibility === 0
+  );
+  state.baseline = baseline;
   const level = reader.bits(8);
   const limits = H264_LEVELS.find((row) => row[0] === level);
   need(limits !== undefined && Number.parseInt(profile.codec.slice(-2), 16) === level);
   state.level = level;
   state.sps = reader.ue(31);
-  need(reader.ue(3) === 1 && reader.ue(6) === 0 && reader.ue(6) === 0 && !reader.bit());
-  if (reader.bit()) h264Scaling(reader, 8);
+  if (!baseline) {
+    need(reader.ue(3) === 1 && reader.ue(6) === 0 && reader.ue(6) === 0 && !reader.bit());
+    if (reader.bit()) h264Scaling(reader, 8);
+  }
   state.frameBits = reader.ue(12) + 4;
   state.pocType = reader.ue(2);
   state.cycle = [];
@@ -882,7 +894,11 @@ function readH264Sps(
     for (let index = 0; index < count; index += 1) state.cycle.push(reader.se());
   }
   state.maxReferences = reader.ue(16);
-  need(state.maxReferences > 0 && !reader.bit());
+  need(
+    state.maxReferences > 0 &&
+    (!baseline || state.maxReferences === 1) &&
+    !reader.bit()
+  );
   const widthMbs = reader.ue(8191) + 1;
   const heightMbs = reader.ue(8191) + 1;
   need(reader.bit());
@@ -904,6 +920,7 @@ function readH264Sps(
   reader.trailing();
   state.macroblocks = widthMbs * heightMbs;
   state.maxReorder = vui.reorder;
+  need(!baseline || state.maxReorder === 0);
   need(
     codedWidth === profile.codedWidth && codedHeight === profile.codedHeight &&
     left === 0 && top === 0 && codedWidth - right === profile.visibleWidth &&
@@ -1014,14 +1031,25 @@ function readH264Pps(bytes: Uint8Array, start: number, end: number, state: H264)
   state.refs1 = reader.ue(31);
   state.weighted = reader.bit();
   state.weightedBi = reader.bits(2);
-  need(state.weightedBi <= 2);
+  need(
+    state.weightedBi <= 2 &&
+    (!state.baseline || (
+      !state.entropy && state.refs0 === 0 && state.refs1 === 0 &&
+      !state.weighted && state.weightedBi === 0
+    ))
+  );
   state.initialQp = reader.se(-26, 25);
   need(reader.se(-26, 25) === 0);
   reader.se(-12, 12);
   state.deblocking = reader.bit();
-  need(state.deblocking && !reader.bit() && !reader.bit() && reader.more() && reader.bit());
-  if (reader.bit()) h264Scaling(reader, 8);
-  reader.se(-12, 12);
+  need(state.deblocking && !reader.bit() && !reader.bit());
+  if (state.baseline) {
+    need(!reader.more());
+  } else {
+    need(reader.more() && reader.bit());
+    if (reader.bit()) h264Scaling(reader, 8);
+    reader.se(-12, 12);
+  }
   reader.trailing();
 }
 

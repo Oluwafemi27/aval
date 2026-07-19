@@ -5,6 +5,7 @@ import type {
 } from "@pixel-point/aval-element";
 
 import type { RouteLedger } from "./route-ledger.js";
+import { FUNCTIONAL_SOURCE_TYPE } from "./functional-fixture.js";
 
 export const PUBLIC_EVENT_NAMES = Object.freeze([
   "requestedstatechange",
@@ -14,9 +15,6 @@ export const PUBLIC_EVENT_NAMES = Object.freeze([
   "underflow",
   "error"
 ] as const);
-
-const DEFAULT_SOURCE_TYPE =
-  'application/vnd.aval; codecs="avc1.64000A"';
 
 const consumerAlternates = new WeakMap<AvalElement, HTMLElement>();
 
@@ -33,7 +31,7 @@ export function createPublicMotionElement(
   element.motion = "full";
   const source = document.createElement("source");
   source.src = sourceUrl;
-  source.type = DEFAULT_SOURCE_TYPE;
+  source.type = FUNCTIONAL_SOURCE_TYPE;
   if (integrity !== undefined) source.setAttribute("integrity", integrity);
   const alternate = document.createElement("span");
   alternate.className = "certification-motion-unavailable";

@@ -442,9 +442,21 @@ test("ignores nonfatal diagnostics and persists fatal unsupported playback acros
   await openExample(page);
   const support = await supportSnapshot(page);
   const supported = CODECS.filter((codec) => support[codec] === "supported");
-  test.skip(supported.length < 2, "this browser exposes fewer than two codecs");
-  const failedCodec = supported[0]!;
-  const nextCodec = supported[1]!;
+  const playable: typeof supported = [];
+  for (const codec of supported) {
+    await codecTab(page, codec).click();
+    await codecPanel(page, codec).scrollIntoViewIfNeeded();
+    await page.evaluate(async (requested) => {
+      await window.grassRabbitCodecs.activate(requested);
+    }, codec);
+    const snapshot = await activePlayerSnapshot(page);
+    if (snapshot.readiness === "interactiveReady" && snapshot.lastFailure === null) {
+      playable.push(codec);
+    }
+  }
+  test.skip(playable.length < 2, "this browser exposes fewer than two playable codecs");
+  const failedCodec = playable[0]!;
+  const nextCodec = playable[1]!;
 
   await page.evaluate(async (codec) => {
     await window.grassRabbitCodecs.activate(codec);

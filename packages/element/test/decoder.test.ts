@@ -20,6 +20,53 @@ afterEach(() => {
 });
 
 describe("Decoder output certification", () => {
+  it("counts only acknowledged native and logical lifecycle successes", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+
+    const decoder = configuredDecoder();
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+
+    const first = oneFrameRun(decoder);
+    worker.emit({ t: "started", run: first.generation });
+    worker.emit({ t: "accepted", run: first.generation });
+    worker.emit({
+      t: "frame",
+      run: first.generation,
+      timestamp: 0,
+      frame: new VideoFrame(32, 34)
+    });
+    const frame = await first.take(0);
+    first.release(frame);
+    worker.emit({ t: "flushed", run: first.generation });
+    await first.complete();
+    first.close();
+
+    const second = oneFrameRun(decoder);
+    worker.emit({ t: "started", run: second.generation });
+    second.close();
+    worker.emit({ t: "closed", run: second.generation });
+
+    expect(decoder.snapshot().lifecycle).toEqual({
+      outputsAccepted: 1,
+      runsClosed: 2,
+      nativeDecoderCreates: 2,
+      nativeDecoderCloses: 2
+    });
+    expect(Object.isFrozen(decoder.snapshot().lifecycle)).toBe(true);
+    decoder.dispose();
+    expect(decoder.snapshot().lifecycle).toEqual({
+      outputsAccepted: 1,
+      runsClosed: 2,
+      nativeDecoderCreates: 2,
+      nativeDecoderCloses: 2
+    });
+  });
+
   it("admits runs only after configuration and acknowledged lane retirement", async () => {
     const Worker = fakeWorker();
     const VideoFrame = fakeVideoFrame();
@@ -546,7 +593,7 @@ describe("Decoder output certification", () => {
       frame: new VideoFrame(32, 34)
     });
 
-    expect(decoder.snapshot()).toEqual({
+    expect(decoder.snapshot()).toMatchObject({
       workerCount: 1,
       openFrames: 1,
       openFrameBytes: 4_352,
@@ -556,7 +603,7 @@ describe("Decoder output certification", () => {
     const frame = await run.take(0);
     expect(decoder.snapshot().openFrameBytes).toBe(4_352);
     run.release(frame);
-    expect(decoder.snapshot()).toEqual({
+    expect(decoder.snapshot()).toMatchObject({
       workerCount: 1,
       openFrames: 0,
       openFrameBytes: 0,
@@ -602,7 +649,7 @@ describe("Decoder output certification", () => {
     await expect(run.take(0)).rejects.toThrow(
       "AVAL decoded surfaces exceed their byte ceiling"
     );
-    expect(decoder.snapshot()).toEqual({
+    expect(decoder.snapshot()).toMatchObject({
       workerCount: 0,
       openFrames: 0,
       openFrameBytes: 0,
@@ -639,7 +686,7 @@ describe("Decoder output certification", () => {
         frame: new VideoFrame(128, 104, timestamp)
       });
     }
-    expect(decoder.snapshot()).toEqual({
+    expect(decoder.snapshot()).toMatchObject({
       workerCount: 1,
       openFrames: 6,
       openFrameBytes: 319_488,
@@ -677,7 +724,7 @@ describe("Decoder output certification", () => {
     await expect(run.take(0)).rejects.toThrow(
       "AVAL decoder returned an unsafe coded allocation"
     );
-    expect(decoder.snapshot()).toEqual({
+    expect(decoder.snapshot()).toMatchObject({
       workerCount: 0,
       openFrames: 0,
       openFrameBytes: 0,
@@ -716,7 +763,7 @@ describe("Decoder output certification", () => {
     await vi.advanceTimersByTimeAsync(1);
     await Promise.all(assertions);
     expect(vi.getTimerCount()).toBe(0);
-    expect(decoder.snapshot()).toEqual({
+    expect(decoder.snapshot()).toMatchObject({
       workerCount: 0,
       openFrames: 0,
       openFrameBytes: 0,
@@ -842,6 +889,58 @@ describe("Decoder output certification", () => {
     decoder.dispose();
   });
 
+  it("retains structured invalid-output evidence for a frame emitted after flush", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+
+    const decoder = configuredDecoder();
+    const failure = decoder.failure();
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+    const run = oneFrameRun(decoder);
+    worker.emit({ t: "started", run: run.generation });
+    worker.emit({ t: "accepted", run: run.generation });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 0,
+      frame: new VideoFrame(32, 34)
+    });
+    const accepted = await run.take(0);
+    run.release(accepted);
+    worker.emit({ t: "flushed", run: run.generation });
+    await run.complete();
+
+    const late = new VideoFrame(32, 34);
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 0,
+      frame: late
+    });
+
+    await expect(failure).rejects.toThrow("AVAL decoder emitted after flush");
+    expect((late as unknown as { closed: boolean }).closed).toBe(true);
+    expect(decoder.snapshot().diagnostic).toMatchObject({
+      phase: "output-validation",
+      code: "invalid-output",
+      run: run.generation,
+      decodeOrdinal: 0,
+      lastGoodFrame: { timestamp: 0 },
+      outputFailure: {
+        kind: "duplicate-output",
+        validationLayer: "host-expectation",
+        field: "ordinal",
+        expected: null,
+        actual: { timestamp: 0 }
+      }
+    });
+    decoder.dispose();
+  });
+
   it("treats a worker error as globally fatal after a local close", async () => {
     const Worker = fakeWorker();
     const VideoFrame = fakeVideoFrame();
@@ -869,7 +968,7 @@ describe("Decoder output certification", () => {
 
     await expect(failure).rejects.toThrow("AVAL decoder failed");
     expect(worker.terminated).toBe(true);
-    expect(decoder.snapshot()).toEqual({
+    expect(decoder.snapshot()).toMatchObject({
       workerCount: 0,
       openFrames: 0,
       openFrameBytes: 0,

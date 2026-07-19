@@ -28,6 +28,14 @@ export interface RendererLimits {
   readonly copyTimeoutMs?: number;
   readonly setTimeout?: (callback: () => void, delay: number) => number;
   readonly clearTimeout?: (handle: number) => void;
+  readonly createImageBitmap?: (
+    frame: VideoFrame,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    options: ImageBitmapOptions
+  ) => Promise<ImageBitmap>;
   readonly onContextChange?: (change: Readonly<RendererContextChange>) => void;
   readonly initialPresentation?: Readonly<{
     width: number;
@@ -41,6 +49,8 @@ export type RendererContextChange =
   | Readonly<{ state: "lost"; error: null }>
   | Readonly<{ state: "restored"; error: null }>
   | Readonly<{ state: "error"; error: RendererFailureError }>;
+
+export type RendererUploadMode = "native-probing" | "native" | "rgba-copy";
 
 export interface RendererSnapshot {
   readonly cssWidth: number;
@@ -57,6 +67,10 @@ export interface RendererSnapshot {
   readonly runtimeBytes: number;
   readonly pendingOperations: number;
   readonly sourceCopiesInFlight: number;
+  readonly uploadMode: RendererUploadMode;
+  readonly nativeProbeAttempts: number;
+  readonly probeReadbackBytes: number;
+  readonly nativeProbeInFlight: boolean;
   readonly resourceCount: number;
   readonly contextListenerCount: number;
   readonly failure: Readonly<RendererFailureDiagnostic> | null;
@@ -68,6 +82,11 @@ type State = "active" | "lost" | "error" | "disposed";
 const HARD_BYTES = Number.MAX_SAFE_INTEGER;
 const COPY_TIMEOUT = 5_000;
 const STREAMS = 3;
+const NATIVE_PROBE_EDGE = 8;
+const NATIVE_PROBE_PIXELS = NATIVE_PROBE_EDGE * NATIVE_PROBE_EDGE;
+const NATIVE_PROBE_BYTES = NATIVE_PROBE_PIXELS * 4;
+const NATIVE_PROBE_ACCOUNTED_BYTES = NATIVE_PROBE_BYTES * 2;
+const MAX_NATIVE_PROBE_ATTEMPTS = 3;
 const ID = /^[a-z][a-z0-9._-]{0,63}$/;
 
 export class Renderer {
@@ -83,6 +102,14 @@ export class Renderer {
   readonly #copyTimeoutMs: number;
   readonly #setTimeout: (callback: () => void, delay: number) => number;
   readonly #clearTimeout: (handle: number) => void;
+  readonly #createImageBitmap: ((
+    frame: VideoFrame,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    options: ImageBitmapOptions
+  ) => Promise<ImageBitmap>) | null;
   readonly #onContextChange:
     ((change: Readonly<RendererContextChange>) => void) | undefined;
   readonly #resident = new Map<string, WebGLTexture>();
@@ -98,6 +125,10 @@ export class Renderer {
   #pending = 0;
   // 0 = copyTo fallback, 1 = native upload needs probing, 2 = native proven.
   #native = 1;
+  #nativeProbeAttempts = 0;
+  #nativeProbeInFlight = false;
+  #nativeProbeReadback = new Uint8Array(0);
+  #referenceProbeReadback = new Uint8Array(0);
   #resizeQueued = false;
   #fit = "contain";
   #cssWidth = 0;
@@ -139,6 +170,8 @@ export class Renderer {
     this.#setTimeout = limits.setTimeout ?? ((callback, delay) =>
       globalThis.setTimeout(callback, delay) as unknown as number);
     this.#clearTimeout = limits.clearTimeout ?? ((handle) => globalThis.clearTimeout(handle));
+    this.#createImageBitmap = limits.createImageBitmap ??
+      defaultImageBitmapFactory();
     this.#onContextChange = limits.onContextChange;
     if (
       !Number.isSafeInteger(this.#copyTimeoutMs) ||
@@ -202,6 +235,7 @@ export class Renderer {
       this.#destroy();
       this.#state = "error";
       this.#staging = new Uint8Array(0);
+      this.#releaseNativeProbe();
       try {
         canvas.width = oldWidth;
         canvas.height = oldHeight;
@@ -328,64 +362,68 @@ export class Renderer {
           reason
         );
       }
-      const staging = await this.#copy(frame, rect, operationOrdinal);
-      if (this.#state === "disposed" || this.#state === "error") {
-        throw unavailable();
+      const source = await this.#materialize(frame, rect, operationOrdinal);
+      try {
+        if (this.#state === "disposed" || this.#state === "error") {
+          throw unavailable();
+        }
+        if (this.#state !== "active") throw unavailable();
+        const gl = this.#gl;
+        if (gl === null) throw unavailable();
+        let texture: WebGLTexture;
+        try { texture = this.#createTexture(gl); }
+        catch (reason) {
+          throw this.#failure(
+            "resident-texture-create",
+            "runtime",
+            operationOrdinal,
+            reason,
+            {
+              glError: capturedGlError(reason, gl),
+              contextLost: contextLost(gl),
+              uploadPath: "rgba-copy"
+            }
+          );
+        }
+        if (contextLost(gl)) {
+          throw this.#failure(
+            "resident-texture-create",
+            "runtime",
+            operationOrdinal,
+            new Error("WebGL context was lost during resident texture creation"),
+            { contextLost: true, uploadPath: "rgba-copy" }
+          );
+        }
+        try { this.#uploadSource(gl, texture, source); }
+        catch (reason) {
+          const glError = capturedGlError(reason, gl);
+          try { gl.deleteTexture(texture); } catch { /* preserve upload cause */ }
+          throw this.#failure(
+            "rgba-upload",
+            "runtime",
+            operationOrdinal,
+            reason,
+            {
+              glError,
+              contextLost: contextLost(gl),
+              uploadPath: "rgba-copy"
+            }
+          );
+        }
+        if (contextLost(gl)) {
+          try { gl.deleteTexture(texture); } catch { /* preserve context-loss cause */ }
+          throw this.#failure(
+            "rgba-upload",
+            "runtime",
+            operationOrdinal,
+            new Error("WebGL context was lost during resident RGBA upload"),
+            { contextLost: true, uploadPath: "rgba-copy" }
+          );
+        }
+        this.#resident.set(key, texture);
+      } finally {
+        releaseSource(source);
       }
-      if (this.#state !== "active") throw unavailable();
-      const gl = this.#gl;
-      if (gl === null) throw unavailable();
-      let texture: WebGLTexture;
-      try { texture = this.#createTexture(gl); }
-      catch (reason) {
-        throw this.#failure(
-          "resident-texture-create",
-          "runtime",
-          operationOrdinal,
-          reason,
-          {
-            glError: capturedGlError(reason, gl),
-            contextLost: contextLost(gl),
-            uploadPath: "rgba-copy"
-          }
-        );
-      }
-      if (contextLost(gl)) {
-        throw this.#failure(
-          "resident-texture-create",
-          "runtime",
-          operationOrdinal,
-          new Error("WebGL context was lost during resident texture creation"),
-          { contextLost: true, uploadPath: "rgba-copy" }
-        );
-      }
-      try { this.#uploadPixels(gl, texture, staging); }
-      catch (reason) {
-        const glError = capturedGlError(reason, gl);
-        try { gl.deleteTexture(texture); } catch { /* preserve upload cause */ }
-        throw this.#failure(
-          "rgba-upload",
-          "runtime",
-          operationOrdinal,
-          reason,
-          {
-            glError,
-            contextLost: contextLost(gl),
-            uploadPath: "rgba-copy"
-          }
-        );
-      }
-      if (contextLost(gl)) {
-        try { gl.deleteTexture(texture); } catch { /* preserve context-loss cause */ }
-        throw this.#failure(
-          "rgba-upload",
-          "runtime",
-          operationOrdinal,
-          new Error("WebGL context was lost during resident RGBA upload"),
-          { contextLost: true, uploadPath: "rgba-copy" }
-        );
-      }
-      this.#resident.set(key, texture);
     }).finally(() => {
       this.#reserved.delete(key);
     });
@@ -451,11 +489,16 @@ export class Renderer {
       runtimeBytes: checkedSum([
         backingBytes,
         this.#staging.byteLength,
+        this.#probeReadbackBytes(),
         residentBytes,
         textureBytes
       ]),
       pendingOperations: this.#pending,
       sourceCopiesInFlight: this.#sourceCopiesInFlight,
+      uploadMode: nativeUploadMode(this.#native),
+      nativeProbeAttempts: this.#nativeProbeAttempts,
+      probeReadbackBytes: this.#probeReadbackBytes(),
+      nativeProbeInFlight: this.#nativeProbeInFlight,
       resourceCount: Number(this.#program !== null) +
         this.#streams.length +
         this.#resident.size,
@@ -474,6 +517,7 @@ export class Renderer {
     this.#reserved.clear();
     this.#last = null;
     this.#staging = new Uint8Array(0);
+    this.#releaseNativeProbe();
     try {
       this.#canvas.width = 0;
       this.#canvas.height = 0;
@@ -687,6 +731,10 @@ export class Renderer {
       this.#initializingTextureCount = 0;
       this.#nextStream = 0;
       this.#native = 1;
+      this.#nativeProbeAttempts = 0;
+      this.#nativeProbeInFlight = false;
+      this.#nativeProbeReadback = new Uint8Array(NATIVE_PROBE_BYTES);
+      this.#referenceProbeReadback = new Uint8Array(NATIVE_PROBE_BYTES);
     } catch (reason) {
       const error = reason instanceof RendererFailureError
         ? reason
@@ -745,10 +793,6 @@ export class Renderer {
           frame
         );
         nativeError = readGlError(gl);
-        if (nativeError === null && !contextLost(gl)) {
-          this.#native = 2;
-          return true;
-        }
       } catch (reason) {
         nativeReason = reason;
         nativeError = readGlError(gl);
@@ -768,12 +812,137 @@ export class Renderer {
           }
         );
       }
+      if (nativeReason === null && nativeError === null) {
+        if (this.#native === 2) return true;
+        return this.#qualifyNativeUpload(
+          gl,
+          texture,
+          frame,
+          rect,
+          operationOrdinal
+        );
+      }
+      this.#native = 0;
+    }
+    drainErrors(gl);
+    const source = await this.#materialize(frame, rect, operationOrdinal);
+    try {
+      if (this.#state !== "active" || this.#gl !== gl) return false;
+      this.#uploadRgbaFrame(gl, texture, source, operationOrdinal);
+      return true;
+    } finally {
+      releaseSource(source);
+    }
+  }
+
+  async #qualifyNativeUpload(
+    gl: WebGL2RenderingContext,
+    texture: WebGLTexture,
+    frame: VideoFrame,
+    rect: DOMRectReadOnly,
+    operationOrdinal: number
+  ): Promise<boolean> {
+    if (
+      this.#nativeProbeAttempts >= MAX_NATIVE_PROBE_ATTEMPTS ||
+      this.#canvas.width < NATIVE_PROBE_EDGE ||
+      this.#canvas.height < NATIVE_PROBE_EDGE ||
+      this.#probeReadbackBytes() !== NATIVE_PROBE_ACCOUNTED_BYTES
+    ) {
       this.#native = 0;
       drainErrors(gl);
+      const source = await this.#materialize(frame, rect, operationOrdinal);
+      try {
+        if (this.#state !== "active" || this.#gl !== gl) return false;
+        this.#uploadRgbaFrame(gl, texture, source, operationOrdinal);
+        return true;
+      } finally {
+        releaseSource(source);
+      }
     }
-    const pixels = await this.#copy(frame, rect, operationOrdinal);
-    if (this.#state !== "active" || this.#gl !== gl) return false;
-    try { this.#uploadPixels(gl, texture, pixels); }
+
+    this.#nativeProbeAttempts += 1;
+    this.#nativeProbeInFlight = true;
+    try {
+      // Resolve the CPU copy before touching the main framebuffer. Native and
+      // reference probe draws can then run back-to-back in one microtask, and
+      // the caller's full presentation draw never exposes unproven pixels.
+      const source = await this.#materialize(frame, rect, operationOrdinal);
+      try {
+        if (this.#state !== "active" || this.#gl !== gl) return false;
+
+        const nativeProbe = this.#readNativeProbe(
+          gl,
+          texture,
+          this.#nativeProbeReadback
+        );
+        if (nativeProbe.contextLost) {
+          throw this.#failure(
+            "native-upload",
+            "runtime",
+            operationOrdinal,
+            nativeProbe.reason,
+            {
+              glError: nativeProbe.glError,
+              contextLost: true,
+              uploadPath: "native"
+            }
+          );
+        }
+
+        drainErrors(gl);
+        this.#uploadRgbaFrame(gl, texture, source, operationOrdinal);
+        const referenceProbe = nativeProbe.ok
+          ? this.#readNativeProbe(gl, texture, this.#referenceProbeReadback)
+          : failedProbe(new Error("native probe readback was unavailable"));
+        if (referenceProbe.contextLost) {
+          throw this.#failure(
+            "draw",
+            "runtime",
+            operationOrdinal,
+            referenceProbe.reason,
+            {
+              glError: referenceProbe.glError,
+              contextLost: true,
+              uploadPath: "rgba-copy"
+            }
+          );
+        }
+
+        if (
+          !nativeProbe.ok ||
+          !referenceProbe.ok ||
+          !equivalentProbe(
+            this.#nativeProbeReadback,
+            this.#referenceProbeReadback
+          )
+        ) {
+          this.#native = 0;
+        } else if (informativeProbe(this.#referenceProbeReadback)) {
+          this.#native = 2;
+        } else if (this.#nativeProbeAttempts >= MAX_NATIVE_PROBE_ATTEMPTS) {
+          this.#native = 0;
+        }
+        return true;
+      } finally {
+        releaseSource(source);
+      }
+    } finally {
+      this.#nativeProbeInFlight = false;
+      if (this.#gl === gl && !contextLost(gl)) {
+        try {
+          gl.viewport(0, 0, this.#canvas.width, this.#canvas.height);
+        } catch { /* The following presentation draw retains exact evidence. */ }
+      }
+    }
+  }
+
+  #uploadRgbaFrame(
+    gl: WebGL2RenderingContext,
+    texture: WebGLTexture,
+    source: RgbaSource,
+    operationOrdinal: number
+  ): void {
+    try { this.#uploadSource(gl, texture, source); }
     catch (reason) {
       throw this.#failure(
         "rgba-upload",
@@ -796,13 +965,116 @@ export class Renderer {
         { contextLost: true, uploadPath: "rgba-copy" }
       );
     }
-    return true;
+  }
+
+  #readNativeProbe(
+    gl: WebGL2RenderingContext,
+    texture: WebGLTexture,
+    target: Uint8Array
+  ): NativeProbeResult {
+    drainErrors(gl);
+    try {
+      gl.viewport(0, 0, NATIVE_PROBE_EDGE, NATIVE_PROBE_EDGE);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(this.#program);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      let glError = readGlError(gl);
+      if (glError !== null || contextLost(gl)) {
+        return failedProbe(
+          new Error("WebGL native probe draw failed"),
+          glError,
+          contextLost(gl)
+        );
+      }
+      target.fill(0);
+      gl.readPixels(
+        0,
+        0,
+        NATIVE_PROBE_EDGE,
+        NATIVE_PROBE_EDGE,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        target
+      );
+      glError = readGlError(gl);
+      if (glError !== null || contextLost(gl)) {
+        return failedProbe(
+          new Error("WebGL native probe readback failed"),
+          glError,
+          contextLost(gl)
+        );
+      }
+      return Object.freeze({
+        ok: true,
+        reason: null,
+        glError: null,
+        contextLost: false
+      });
+    } catch (reason) {
+      return failedProbe(reason, readGlError(gl), contextLost(gl));
+    }
+  }
+
+  async #materialize(
+    frame: VideoFrame,
+    rect: DOMRectReadOnly,
+    operationOrdinal: number
+  ): Promise<RgbaSource> {
+    let copyReason: unknown;
+    try {
+      return Object.freeze({
+        kind: "pixels" as const,
+        pixels: await this.#copy(frame, rect)
+      });
+    } catch (reason) {
+      copyReason = reason;
+    }
+    if (
+      this.#state !== "active" ||
+      isNamedError(copyReason, "AbortError")
+    ) throw unavailable();
+    if (
+      this.#createImageBitmap === null ||
+      copyReason instanceof RgbaCopyContractError ||
+      isNamedError(copyReason, "TimeoutError")
+    ) {
+      throw this.#failure(
+        "rgba-copy",
+        "runtime",
+        operationOrdinal,
+        copyReason,
+        { uploadPath: "rgba-copy" }
+      );
+    }
+    let bitmap: ImageBitmap;
+    try {
+      bitmap = await this.#bitmap(frame);
+      if (
+        bitmap.width !== this.#layout.storageWidth ||
+        bitmap.height !== this.#layout.storageHeight
+      ) {
+        releaseBitmap(bitmap);
+        throw new RgbaCopyContractError(
+          "decoded frame ImageBitmap geometry is invalid"
+        );
+      }
+    } catch (reason) {
+      throw this.#failure(
+        "rgba-copy",
+        "runtime",
+        operationOrdinal,
+        reason,
+        { uploadPath: "rgba-copy" }
+      );
+    }
+    return Object.freeze({ kind: "bitmap" as const, bitmap });
   }
 
   async #copy(
     frame: VideoFrame,
-    rect: DOMRectReadOnly,
-    operationOrdinal: number
+    rect: DOMRectReadOnly
   ): Promise<Uint8Array> {
     const staging = this.#staging;
     if (staging.byteLength !== this.#storageBytesPerFrame) throw unavailable();
@@ -816,13 +1088,7 @@ export class Renderer {
         layout: [{ offset: 0, stride }]
       });
     } catch (reason) {
-      throw this.#failure(
-        "rgba-copy",
-        "runtime",
-        operationOrdinal,
-        reason,
-        { uploadPath: "rgba-copy" }
-      );
+      throw reason;
     }
     this.#sourceCopiesInFlight += 1;
     void raw.then(
@@ -838,13 +1104,7 @@ export class Renderer {
         this.#clearTimeout
       );
     } catch (reason) {
-      throw this.#failure(
-        "rgba-copy",
-        "runtime",
-        operationOrdinal,
-        reason,
-        { uploadPath: "rgba-copy" }
-      );
+      throw reason;
     }
     const plane = planes[0];
     if (
@@ -853,15 +1113,50 @@ export class Renderer {
       plane.offset !== 0 ||
       plane.stride !== stride
     ) {
-      throw this.#failure(
-        "rgba-copy",
-        "runtime",
-        operationOrdinal,
-        new Error("decoded frame copy layout is invalid"),
-        { uploadPath: "rgba-copy" }
-      );
+      throw new RgbaCopyContractError("decoded frame copy layout is invalid");
     }
     return staging;
+  }
+
+  async #bitmap(frame: VideoFrame): Promise<ImageBitmap> {
+    const factory = this.#createImageBitmap;
+    if (factory === null) throw new Error("ImageBitmap conversion is unavailable");
+    let raw: Promise<ImageBitmap>;
+    try {
+      raw = factory(
+        frame,
+        0,
+        0,
+        frame.displayWidth,
+        frame.displayHeight,
+        {
+          resizeWidth: this.#layout.storageWidth,
+          resizeHeight: this.#layout.storageHeight
+        }
+      );
+    } catch (reason) {
+      throw reason;
+    }
+    let abandoned = false;
+    this.#sourceCopiesInFlight += 1;
+    void raw.then(
+      (bitmap) => {
+        this.#sourceCopiesInFlight -= 1;
+        if (abandoned) releaseBitmap(bitmap);
+      },
+      () => { this.#sourceCopiesInFlight -= 1; }
+    );
+    try {
+      return await timed(
+        raw,
+        this.#copyTimeoutMs,
+        this.#setTimeout,
+        this.#clearTimeout
+      );
+    } catch (reason) {
+      abandoned = true;
+      throw reason;
+    }
   }
 
   #createTexture(gl: WebGL2RenderingContext): WebGLTexture {
@@ -923,6 +1218,31 @@ export class Renderer {
     const glError = readGlError(gl);
     if (glError !== null) {
       throw new RendererGlOperationError("WebGL RGBA upload failed", glError);
+    }
+  }
+
+  #uploadSource(
+    gl: WebGL2RenderingContext,
+    texture: WebGLTexture,
+    source: RgbaSource
+  ): void {
+    if (source.kind === "pixels") {
+      this.#uploadPixels(gl, texture, source.pixels);
+      return;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      source.bitmap
+    );
+    const glError = readGlError(gl);
+    if (glError !== null) {
+      throw new RendererGlOperationError("WebGL ImageBitmap upload failed", glError);
     }
   }
 
@@ -1012,7 +1332,6 @@ export class Renderer {
     this.#program = null;
     this.#streams = [];
     this.#nextStream = 0;
-    this.#native = 1;
     this.#maxTextureSize = 0;
     this.#maxViewportWidth = 0;
     this.#maxViewportHeight = 0;
@@ -1022,6 +1341,7 @@ export class Renderer {
     this.#rendererName = null;
     this.#last = null;
     this.#resident.clear();
+    this.#releaseNativeProbe();
     this.#notify(Object.freeze({ state: "lost", error: null }));
   }
 
@@ -1039,6 +1359,7 @@ export class Renderer {
     this.#reserved.clear();
     this.#last = null;
     this.#staging = new Uint8Array(0);
+    this.#releaseNativeProbe();
     this.#notify(Object.freeze({ state: "error", error: terminalError }));
   }
 
@@ -1134,6 +1455,7 @@ export class Renderer {
         backingBytes,
         runtimeBytes: checkedSum([
           this.#staging.byteLength,
+          this.#probeReadbackBytes(),
           residentBytes,
           textureBytes,
           backingBytes
@@ -1148,7 +1470,9 @@ export class Renderer {
         residentBytes: 0,
         textureBytes: 0,
         backingBytes: 0,
-        runtimeBytes: diagnosticScalar(this.#staging.byteLength),
+        runtimeBytes: diagnosticScalar(
+          this.#staging.byteLength + this.#probeReadbackBytes()
+        ),
         maxTextureBytes: this.#maxTextureBytes,
         maxBackingBytes: this.#maxBackingBytes,
         maxRuntimeBytes: this.#maxRuntimeBytes
@@ -1175,6 +1499,17 @@ export class Renderer {
     this.#nextStream = 0;
   }
 
+  #probeReadbackBytes(): number {
+    return this.#nativeProbeReadback.byteLength +
+      this.#referenceProbeReadback.byteLength;
+  }
+
+  #releaseNativeProbe(): void {
+    this.#nativeProbeInFlight = false;
+    this.#nativeProbeReadback = new Uint8Array(0);
+    this.#referenceProbeReadback = new Uint8Array(0);
+  }
+
   #backingBytes(width: number, height: number): number {
     return allocationBytes(rgbaBytes(width, height));
   }
@@ -1193,6 +1528,7 @@ export class Renderer {
     const runtimeBytes = checkedSum([
       textureBytes,
       this.#storageBytesPerFrame,
+      NATIVE_PROBE_ACCOUNTED_BYTES,
       backingBytes
     ]);
     if (
@@ -1376,6 +1712,99 @@ class RendererGlOperationError extends Error {
 
 class RendererArithmeticError extends RangeError {}
 
+class RgbaCopyContractError extends Error {}
+
+type RgbaSource =
+  | Readonly<{ kind: "pixels"; pixels: Uint8Array }>
+  | Readonly<{ kind: "bitmap"; bitmap: ImageBitmap }>;
+
+function defaultImageBitmapFactory(): ((
+  frame: VideoFrame,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+  options: ImageBitmapOptions
+) => Promise<ImageBitmap>) | null {
+  const factory = globalThis.createImageBitmap;
+  if (typeof factory !== "function") return null;
+  return (frame, sx, sy, sw, sh, options) =>
+    factory(frame, sx, sy, sw, sh, options);
+}
+
+function releaseSource(source: RgbaSource): void {
+  if (source.kind === "bitmap") releaseBitmap(source.bitmap);
+}
+
+function releaseBitmap(bitmap: ImageBitmap): void {
+  try { bitmap.close(); } catch { /* Browser-owned conversion cleanup is terminal-safe. */ }
+}
+
+interface NativeProbeResult {
+  readonly ok: boolean;
+  readonly reason: unknown;
+  readonly glError: number | null;
+  readonly contextLost: boolean;
+}
+
+function failedProbe(
+  reason: unknown,
+  glError: number | null = null,
+  lost = false
+): NativeProbeResult {
+  return Object.freeze({ ok: false, reason, glError, contextLost: lost });
+}
+
+function nativeUploadMode(value: number): RendererUploadMode {
+  if (value === 0) return "rgba-copy";
+  if (value === 2) return "native";
+  return "native-probing";
+}
+
+function informativeProbe(pixels: Uint8Array): boolean {
+  if (pixels.byteLength !== NATIVE_PROBE_BYTES) return false;
+  const minimum = [255, 255, 255, 255];
+  const maximum = [0, 0, 0, 0];
+  let visibleSignal = false;
+  for (let offset = 0; offset < pixels.byteLength; offset += 4) {
+    const red = pixels[offset] ?? 0;
+    const green = pixels[offset + 1] ?? 0;
+    const blue = pixels[offset + 2] ?? 0;
+    const alpha = pixels[offset + 3] ?? 0;
+    const channels = [red, green, blue, alpha];
+    for (let channel = 0; channel < channels.length; channel += 1) {
+      minimum[channel] = Math.min(minimum[channel] ?? 255, channels[channel] ?? 0);
+      maximum[channel] = Math.max(maximum[channel] ?? 0, channels[channel] ?? 0);
+    }
+    // Integer Rec. 709 luma is sufficient for the bounded false-positive
+    // discriminator and avoids float-dependent comparison at the threshold.
+    const luma = (54 * red + 183 * green + 19 * blue) >> 8;
+    if (alpha > 16 || luma > 16) visibleSignal = true;
+  }
+  return visibleSignal && maximum.some((value, channel) =>
+    value - (minimum[channel] ?? value) >= 16);
+}
+
+function equivalentProbe(native: Uint8Array, reference: Uint8Array): boolean {
+  if (
+    native.byteLength !== NATIVE_PROBE_BYTES ||
+    reference.byteLength !== NATIVE_PROBE_BYTES
+  ) return false;
+  for (let offset = 0; offset < reference.byteLength; offset += 4) {
+    const referenceAlpha = reference[offset + 3] ?? 0;
+    const nativeAlpha = native[offset + 3] ?? 0;
+    if (Math.abs(nativeAlpha - referenceAlpha) > 1) return false;
+    if (referenceAlpha === 0) continue;
+    for (let channel = 0; channel < 3; channel += 1) {
+      if (Math.abs(
+        (native[offset + channel] ?? 0) -
+        (reference[offset + channel] ?? 0)
+      ) > 3) return false;
+    }
+  }
+  return true;
+}
+
 function capturedGlError(
   reason: unknown,
   gl: WebGL2RenderingContext
@@ -1495,6 +1924,12 @@ function unavailable(): Error {
 function isAbortError(reason: unknown): boolean {
   if (typeof reason !== "object" || reason === null) return false;
   try { return (reason as Readonly<{ name?: unknown }>).name === "AbortError"; }
+  catch { return false; }
+}
+
+function isNamedError(reason: unknown, name: string): boolean {
+  if (typeof reason !== "object" || reason === null) return false;
+  try { return (reason as Readonly<{ name?: unknown }>).name === name; }
   catch { return false; }
 }
 

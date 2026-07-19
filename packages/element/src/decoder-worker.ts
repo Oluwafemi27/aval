@@ -468,7 +468,7 @@ function idleAfter(owner: OwnedRunState): WorkerState {
 }
 
 function retire(decoder: VideoDecoder): void {
-  try { decoder.close(); } catch { /* retired */ }
+  decoder.close();
 }
 
 function closeFrame(frame: VideoFrame): void {
