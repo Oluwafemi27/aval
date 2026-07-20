@@ -1,7 +1,9 @@
 import type {
   PackedAlphaWitnessV1
 } from "./asset.js";
-import type { RgbaFrameReference } from "./rgba-materializer.js";
+import type {
+  MaterializedRgbaFrameReference
+} from "./rgba-materializer.js";
 import type { RenderLayout } from "./renderer-geometry.js";
 
 export class DecodedOutputIncompatibleError extends Error {
@@ -16,13 +18,13 @@ export interface DecodedPackedAlphaQualificationInput {
   readonly localFrame: number;
   readonly layout: Readonly<RenderLayout>;
   readonly witness: Readonly<PackedAlphaWitnessV1>;
-  readonly source: Readonly<RgbaFrameReference>;
+  readonly source: Readonly<MaterializedRgbaFrameReference>;
 }
 
 /** Validates an already-identified packed-alpha frame before readiness. */
-export async function qualifyDecodedPackedAlphaOutput(
+export function qualifyDecodedPackedAlphaOutput(
   input: Readonly<DecodedPackedAlphaQualificationInput>
-): Promise<void> {
+): void {
   const alphaRect = input.layout.alphaRect;
   if (alphaRect === undefined) {
     throw new Error("packed-alpha output witness requires an alpha pane");
@@ -32,7 +34,7 @@ export async function qualifyDecodedPackedAlphaOutput(
     input.localFrame !== input.witness.frame
   ) throw new Error("decoded witness frame identity is invalid");
 
-  const source = await input.source.rgba();
+  const source = input.source.rgba;
   validateStorage(source, input.layout);
   const [alphaX, alphaY] = alphaRect;
   for (const sample of input.witness.samples) {

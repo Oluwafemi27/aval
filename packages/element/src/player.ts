@@ -80,7 +80,11 @@ import {
   unsupportedConfigCandidateOutcome,
   type RetryableCandidateRejection
 } from "./provisional-candidate-outcome.js";
-import { orchestrateProvisionalCandidates } from "./provisional-startup.js";
+import {
+  orchestrateProvisionalCandidates,
+  qualifyProvisionalOutput,
+  withProvisionalCandidateFrame
+} from "./provisional-startup.js";
 
 type State = Manifest["states"][number];
 
@@ -1136,6 +1140,8 @@ class PlayerImpl implements Player {
       return this.#result();
     }
     this.#preparationDeadline.signal.throwIfAborted();
+    await this.#qualifyOutput();
+    this.#preparationDeadline.signal.throwIfAborted();
     const plan = createReadinessPlan(
       this.#manifest,
       this.#rendition.id,
@@ -1167,6 +1173,38 @@ class PlayerImpl implements Player {
     this.#resetClock();
     this.#schedule();
     return this.#result();
+  }
+
+  async #qualifyOutput(): Promise<void> {
+    const decoders = this.#decoders;
+    const renderer = this.#renderer;
+    if (decoders === null || renderer === null) {
+      throw new Error("AVAL animation resources are unavailable");
+    }
+    const generation = this.#animationGeneration;
+    await qualifyProvisionalOutput({
+      manifest: this.#manifest,
+      renditionId: this.#rendition.id,
+      layout: renderLayout(this.#manifest, this.#rendition),
+      withDecodedFrame: async (unitId, localFrame, use) => {
+        const unit = this.#unit(unitId);
+        await this.#preloadRun(unit, this.#preparationDeadline.signal);
+        this.#assertAnimation(generation, renderer, decoders);
+        const candidate = this.#createLoadedRun(unit, "candidate");
+        await withProvisionalCandidateFrame({
+          candidate,
+          localFrame,
+          signal: this.#preparationDeadline.signal,
+          use: async (decoded) => {
+            this.#assertAnimation(generation, renderer, decoders);
+            await use(decoded);
+            this.#assertAnimation(generation, renderer, decoders);
+          }
+        });
+      },
+      inspectAndPrime: (frame, inspect) =>
+        renderer.inspectAndPrime(frame, inspect)
+    });
   }
 
   #recoverStatic(reason: StaticReason): Promise<PrepareResult> {

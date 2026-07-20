@@ -35,6 +35,7 @@ export interface CandidateHarnessState {
   readonly disposals: string[];
   readonly operations: string[];
   readonly cleanupFailures: ReadonlySet<string>;
+  readonly witnessFrames: ReadonlyMap<CodecFamily, number>;
 }
 
 export class SyntheticAsset {
@@ -53,35 +54,76 @@ export class SyntheticAsset {
     this.#state = state;
     this.#family = family;
     const unit = `${family}-body`;
+    const witnessFrame = state.witnessFrames.get(family);
+    const packed = witnessFrame !== undefined;
+    const frameCount = packed ? witnessFrame + 1 : 1;
+    const codedHeight = packed ? 40 : 16;
     this.manifest = {
+      formatVersion: "1.1",
+      generator: "player-startup-test",
       codec: family,
-      canvas: { width: 16, height: 16, fit: "contain", pixelAspect: [1, 1] },
+      bitstream: family === "av1"
+        ? "low-overhead"
+        : family === "vp9" ? "frame" : "annex-b",
+      layout: packed ? "packed-alpha" : "opaque",
+      canvas: {
+        width: 16,
+        height: 16,
+        fit: "contain",
+        pixelAspect: [1, 1],
+        colorSpace: "srgb"
+      },
       frameRate: { numerator: 30, denominator: 1 },
       renditions: [{
         id: "main",
         codec,
         bitDepth: 8,
         codedWidth: WIDTHS[family],
-        codedHeight: 16,
+        codedHeight,
         bitrate: { average: 1_000, peak: 1_000 },
-        alphaLayout: { type: "opaque", colorRect: [0, 0, 16, 16] }
+        ...(packed
+          ? {
+              alphaLayout: {
+                type: "stacked",
+                colorRect: [0, 0, 16, 16],
+                alphaRect: [0, 24, 16, 16]
+              },
+              outputQualification: {
+                kind: "packed-alpha-v1",
+                unit,
+                frame: witnessFrame,
+                samples: [{ x: 0, y: 0, expectedRange: [32, 64] }]
+              }
+            }
+          : { alphaLayout: { type: "opaque", colorRect: [0, 0, 16, 16] } })
       }],
       units: [{
         id: unit,
         kind: "body",
-        playback: "loop",
-        frameCount: 1,
+        playback: frameCount === 1 ? "finite" : "loop",
+        frameCount,
         ports: [{ id: "entry", entryFrame: 0, portalFrames: [0] }],
-        chunks: [{ rendition: "main", chunkStart: 0, chunkCount: 1 }]
+        chunks: [{
+          rendition: "main",
+          chunkStart: 0,
+          chunkCount: frameCount,
+          frameCount,
+          sha256: "0".repeat(64)
+        }]
       }],
       initialState: family,
       states: [{ id: family, bodyUnit: unit }],
       edges: [],
       bindings: [],
-      readiness: { policy: "all-routes", bootstrapUnits: [], immediateEdges: [] },
+      readiness: {
+        policy: "all-routes",
+        bootstrapUnits: [unit],
+        immediateEdges: []
+      },
       limits: {
+        maxCompiledBytes: 16_000_000,
         maxRuntimeBytes: 16_000_000,
-        decodedPixelBytes: 2_048,
+        decodedPixelBytes: 4_096,
         persistentCacheBytes: 0,
         runtimeWorkingSetBytes: 1_000_000
       }
@@ -90,18 +132,18 @@ export class SyntheticAsset {
       rendition: "main",
       unit,
       offset: 1_000,
-      length: 1,
+      length: frameCount,
       chunkStart: 0,
-      chunkCount: 1
+      chunkCount: frameCount
     }];
-    this.records = [{
-      offset: 1_000,
+    this.records = Array.from({ length: frameCount }, (_, index) => ({
+      offset: 1_000 + index,
       length: 1,
-      presentationTimestamp: 0,
+      presentationTimestamp: index,
       duration: 1,
-      randomAccess: true,
+      randomAccess: index === 0,
       displayedFrameCount: 1
-    }];
+    }));
   }
 
   public async unitBytes(): Promise<Uint8Array<ArrayBuffer>> {

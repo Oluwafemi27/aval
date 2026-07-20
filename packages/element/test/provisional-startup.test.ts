@@ -11,7 +11,8 @@ import { DecodedOutputIncompatibleError } from
 import {
   orchestrateProvisionalCandidates,
   qualifyProvisionalOutput,
-  UnsupportedPlaybackProfileError
+  UnsupportedPlaybackProfileError,
+  withProvisionalCandidateFrame
 } from
   "../src/provisional-startup.js";
 import {
@@ -154,13 +155,8 @@ describe("provisional decoded-output qualification", () => {
       inspectAndPrime: async (actual, inspect) => {
         expect(actual).toBe(frame);
         operations.push("prime");
-        await inspect(Object.freeze({
-          frame: source.frame,
-          rgba: async () => {
-            operations.push("rgba");
-            return source.rgba();
-          }
-        }));
+        operations.push("inspect");
+        inspect(source);
         operations.push("upload");
       }
     });
@@ -168,7 +164,7 @@ describe("provisional decoded-output qualification", () => {
     expect(operations).toEqual([
       "decode:bootstrap:2",
       "prime",
-      "rgba",
+      "inspect",
       "upload",
       "release-frame"
     ]);
@@ -227,7 +223,7 @@ describe("provisional decoded-output qualification", () => {
             await use(Object.freeze({ frame, unit, localFrame }));
           },
           inspectAndPrime: async (_actual, inspect) => {
-            await inspect(rgbaReference(frame, 96));
+            inspect(rgbaReference(frame, 96));
           }
         });
       },
@@ -275,11 +271,12 @@ describe("provisional decoded-output qualification", () => {
           }));
         },
         inspectAndPrime: async (_actual, inspect) => {
+          if (kind === "materializer") throw terminal;
           if (kind === "renderer") {
-            await inspect(rgbaReference(frame));
+            inspect(rgbaReference(frame));
             throw terminal;
           }
-          await inspect(rgbaReference(frame, 48, terminal));
+          inspect(rgbaReference(frame));
         }
       }),
       localFailure: () => undefined,
@@ -293,6 +290,119 @@ describe("provisional decoded-output qualification", () => {
     else await expect(attempt).rejects.toBe(terminal);
     expect(candidates).toBe(1);
   });
+});
+
+describe("provisional candidate frame lease", () => {
+  it("drains and releases every frame through a witness beyond the decoder ring", async () => {
+    const target = 17;
+    const operations: string[] = [];
+    let cancellations = 0;
+    let leased = 0;
+    let maximumLeased = 0;
+    const frames = Array.from({ length: target + 1 }, (_, index) =>
+      Object.freeze({ index }) as unknown as VideoFrame
+    );
+
+    await withProvisionalCandidateFrame({
+      candidate: {
+        unitId: "bootstrap",
+        run: {
+          frameCount: target + 1,
+          take: async (index) => {
+            if (leased >= 12) throw new Error("synthetic decoder credit exhausted");
+            leased += 1;
+            maximumLeased = Math.max(maximumLeased, leased);
+            operations.push(`take:${String(index)}`);
+            return frames[index]!;
+          },
+          release: (frame) => {
+            const index = (frame as unknown as Readonly<{ index: number }>).index;
+            operations.push(`release:${String(index)}`);
+            leased -= 1;
+          }
+        },
+        cancel: () => {
+          cancellations += 1;
+          operations.push("cancel");
+        }
+      },
+      localFrame: target,
+      signal: new AbortController().signal,
+      use: async (decoded) => {
+        operations.push(`use:${String(decoded.localFrame)}`);
+        expect(decoded.frame).toBe(frames[target]);
+      }
+    });
+
+    expect(operations).toEqual([
+      ...Array.from({ length: target }, (_, index) => [
+        `take:${String(index)}`,
+        `release:${String(index)}`
+      ]).flat(),
+      `take:${String(target)}`,
+      `use:${String(target)}`,
+      `release:${String(target)}`,
+      "cancel"
+    ]);
+    expect(maximumLeased).toBe(1);
+    expect(leased).toBe(0);
+    expect(cancellations).toBe(1);
+  });
+
+  it("cancels a candidate immediately when its qualification signal aborts", async () => {
+    const controller = new AbortController();
+    const reason = new DOMException("candidate replaced", "AbortError");
+    let rejectTake!: (reason: unknown) => void;
+    let cancellations = 0;
+    const candidate = {
+      unitId: "bootstrap",
+      run: {
+        frameCount: 18,
+        take: () => new Promise<VideoFrame>((_resolve, reject) => {
+          rejectTake = reject;
+        }),
+        release: vi.fn()
+      },
+      cancel: () => {
+        cancellations += 1;
+        rejectTake(reason);
+      }
+    };
+    const attempt = withProvisionalCandidateFrame({
+      candidate,
+      localFrame: 17,
+      signal: controller.signal,
+      use: vi.fn()
+    });
+    await Promise.resolve();
+
+    controller.abort(reason);
+
+    await expect(attempt).rejects.toBe(reason);
+    expect(cancellations).toBe(1);
+    expect(candidate.run.release).not.toHaveBeenCalled();
+  });
+
+  it.each([-1, Number.NaN, 18])(
+    "rejects invalid witness frame %s while retiring its candidate",
+    async (localFrame) => {
+      const take = vi.fn();
+      const cancel = vi.fn();
+
+      await expect(withProvisionalCandidateFrame({
+        candidate: {
+          unitId: "bootstrap",
+          run: { frameCount: 18, take, release: vi.fn() },
+          cancel
+        },
+        localFrame,
+        signal: new AbortController().signal,
+        use: vi.fn()
+      })).rejects.toThrow("provisional witness frame identity is invalid");
+      expect(take).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledTimes(1);
+    }
+  );
 });
 
 function decoderFailure(

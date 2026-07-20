@@ -19,7 +19,7 @@ vi.mock("../src/asset.js", () => {
     codedWidth: width,
     codedHeight: 16,
     bitrate: { average: 1_000, peak: 1_000 },
-    alphaLayout: { type: "opaque", colorRect: [0, 0, width, 16] }
+    alphaLayout: { type: "opaque", colorRect: [0, 0, 16, 16] }
   });
   const renditions = [
     rendition("high", "avc1.640028", 32),
@@ -27,28 +27,45 @@ vi.mock("../src/asset.js", () => {
   ];
   class Asset {
     public readonly manifest = {
+      formatVersion: "1.1",
+      generator: "player-selection-test",
       codec: "h264",
-      canvas: { width: 16, height: 16, fit: "contain", pixelAspect: [1, 1] },
+      bitstream: "annex-b",
+      layout: "opaque",
+      canvas: {
+        width: 16,
+        height: 16,
+        fit: "contain",
+        pixelAspect: [1, 1],
+        colorSpace: "srgb"
+      },
       frameRate: { numerator: 30, denominator: 1 },
       renditions,
       units: [{
         id: "idle-body",
         kind: "body",
         frameCount: 1,
-        playback: "loop",
+        playback: "finite",
         ports: [{ id: "entry", entryFrame: 0, portalFrames: [0] }],
         chunks: renditions.map(({ id }) => ({
           rendition: id,
           chunkStart: id === "high" ? 0 : 1,
-          chunkCount: 1
+          chunkCount: 1,
+          frameCount: 1,
+          sha256: "0".repeat(64)
         }))
       }],
       initialState: "idle",
       states: [{ id: "idle", bodyUnit: "idle-body" }],
       edges: [],
       bindings: [],
-      readiness: { bootstrapUnits: [], immediateEdges: [] },
+      readiness: {
+        policy: "all-routes",
+        bootstrapUnits: ["idle-body"],
+        immediateEdges: []
+      },
       limits: {
+        maxCompiledBytes: 16_000_000,
         maxRuntimeBytes: 16_000_000,
         decodedPixelBytes: 2_048,
         persistentCacheBytes: 0,

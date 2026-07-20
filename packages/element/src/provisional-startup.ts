@@ -10,7 +10,8 @@ import type {
 } from "./asset.js";
 import { qualifyDecodedPackedAlphaOutput } from
   "./decoded-output-qualifier.js";
-import type { RgbaFrameReference } from "./rgba-materializer.js";
+import type { DecoderPoolCandidate } from "./decoder-pool.js";
+import type { RendererFrameInspector } from "./renderer-contract.js";
 import type { RenderLayout } from "./renderer-geometry.js";
 
 export interface ProvisionalDecodedFrame {
@@ -30,7 +31,7 @@ export interface ProvisionalOutputQualificationInput {
   ) => Promise<void>;
   readonly inspectAndPrime: (
     frame: VideoFrame,
-    inspect: (source: Readonly<RgbaFrameReference>) => Promise<void>
+    inspect: RendererFrameInspector
   ) => Promise<void>;
 }
 
@@ -38,6 +39,70 @@ export class UnsupportedPlaybackProfileError extends Error {
   public constructor() {
     super("legacy packed-alpha output is outside the qualified playback profile");
     this.name = "NotSupportedError";
+  }
+}
+
+type ProvisionalFrameCandidate = Readonly<
+  Pick<DecoderPoolCandidate, "unitId" | "cancel"> & {
+    readonly run: Readonly<Pick<
+      DecoderPoolCandidate["run"],
+      "frameCount" | "take" | "release"
+    >>;
+  }
+>;
+
+export interface ProvisionalCandidateFrameInput {
+  readonly candidate: ProvisionalFrameCandidate;
+  readonly localFrame: number;
+  readonly signal: AbortSignal;
+  readonly use: (
+    decoded: Readonly<ProvisionalDecodedFrame>
+  ) => Promise<void>;
+}
+
+/** Drains one discardable decoder run through an exact witnessed frame. */
+export async function withProvisionalCandidateFrame(
+  input: Readonly<ProvisionalCandidateFrameInput>
+): Promise<void> {
+  let cancelled = false;
+  const cancel = (): void => {
+    if (cancelled) return;
+    cancelled = true;
+    input.candidate.cancel();
+  };
+  try {
+    if (
+      typeof input.candidate.unitId !== "string" ||
+      input.candidate.unitId.length === 0 ||
+      !Number.isSafeInteger(input.candidate.run.frameCount) ||
+      input.candidate.run.frameCount < 1 ||
+      !Number.isSafeInteger(input.localFrame) || input.localFrame < 0 ||
+      input.localFrame >= input.candidate.run.frameCount
+    ) throw new RangeError("provisional witness frame identity is invalid");
+    input.signal.throwIfAborted();
+    input.signal.addEventListener("abort", cancel, { once: true });
+    try {
+      for (let index = 0; index <= input.localFrame; index += 1) {
+        input.signal.throwIfAborted();
+        const frame = await input.candidate.run.take(index);
+        try {
+          input.signal.throwIfAborted();
+          if (index === input.localFrame) {
+            await input.use(Object.freeze({
+              frame,
+              unit: input.candidate.unitId,
+              localFrame: index
+            }));
+          }
+        } finally {
+          input.candidate.run.release(frame);
+        }
+      }
+    } finally {
+      input.signal.removeEventListener("abort", cancel);
+    }
+  } finally {
+    cancel();
   }
 }
 
@@ -52,7 +117,7 @@ export async function qualifyProvisionalOutput(
     witness.frame,
     async (decoded) => input.inspectAndPrime(
       decoded.frame,
-      async (source) => qualifyDecodedPackedAlphaOutput({
+      (source) => qualifyDecodedPackedAlphaOutput({
         unit: decoded.unit,
         localFrame: decoded.localFrame,
         layout: input.layout,

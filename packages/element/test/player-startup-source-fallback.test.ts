@@ -45,6 +45,11 @@ const startup = vi.hoisted(() => ({
   disposals: [] as string[],
   operations: [] as string[],
   cleanupFailures: new Set<string>(),
+  witnessFrames: new Map<CodecFamily, number>(),
+  semanticMismatches: new Set<string>(),
+  identityFailures: new Set<string>(),
+  storageFailures: new Set<string>(),
+  pendingQualificationTakes: new Map<string, number>(),
   rgbaCopyFailures: new Set<string>(),
   rendererFailures: new Set<string>(),
   resizeFailures: new Set<string>(),
@@ -186,6 +191,8 @@ vi.mock("../src/decoder.js", async () => {
     public createRun(samples: readonly Readonly<{
       displayedFrames: number;
     }>[]) {
+      this.#rejectRunReady = null;
+      this.#runReadySettled = false;
       const generation = ++this.#generation;
       const outcome = startup.outcomes.get(this.#codec) ?? "success";
       startup.operations.push(`run:${this.#codec}`);
@@ -246,19 +253,54 @@ vi.mock("../src/decoder.js", async () => {
         ));
       }
       let closed = false;
+      let rejectPendingTake: ((reason: unknown) => void) | null = null;
       return {
         generation,
-        frameCount: samples[0]?.displayedFrames ?? 1,
+        frameCount: samples.reduce((total, sample) =>
+          total + sample.displayedFrames, 0),
         openFrames: 0,
         outstanding: 0,
         get closed() { return closed; },
-        ready: () => readiness,
-        take: async (index: number) => ({ codec: this.#codec, index }),
-        release: () => undefined,
+        ready: (minimum?: number) => {
+          startup.operations.push(
+            `ready:${this.#codec}:${minimum === undefined ? "default" : String(minimum)}`
+          );
+          return readiness;
+        },
+        take: async (index: number) => {
+          await readiness;
+          startup.operations.push(`take:${this.#codec}:${String(index)}`);
+          startup.operations.push(
+            `lane-take:${this.#codec}:${String(this.#lane)}:${String(index)}`
+          );
+          if (
+            this.#lane === 1 &&
+            startup.pendingQualificationTakes.get(this.#codec) === index
+          ) {
+            return new Promise((_resolve, reject) => {
+              rejectPendingTake = reject;
+            });
+          }
+          return { codec: this.#codec, index };
+        },
+        release: (frame: Readonly<{ index: number }>) => {
+          startup.operations.push(
+            `release:${this.#codec}:${String(frame.index)}`
+          );
+          startup.operations.push(
+            `lane-release:${this.#codec}:${String(this.#lane)}:${String(frame.index)}`
+          );
+        },
         complete: async () => undefined,
         close: () => {
           if (closed) return;
           closed = true;
+          startup.operations.push(
+            `run-close:${this.#codec}:${String(this.#lane)}`
+          );
+          rejectPendingTake?.(
+            new DOMException("synthetic decoder run closed", "AbortError")
+          );
           if (!this.#runReadySettled) {
             this.#runReadySettled = true;
             this.#rejectRunReady?.(
@@ -418,6 +460,43 @@ vi.mock("../src/renderer.js", () => ({
       }
     }
 
+    public async inspectAndPrime(
+      frame: VideoFrame,
+      inspect: (source: Readonly<{
+        frame: VideoFrame;
+        rgba: Readonly<{
+          width: number;
+          height: number;
+          stride: number;
+          pixels: Uint8Array;
+        }>;
+      }>) => void
+    ): Promise<void> {
+      const index = (frame as unknown as Readonly<{ index: number }>).index;
+      startup.operations.push(`inspect:${this.#codec}:${String(index)}`);
+      if (startup.rendererFailures.has(this.#codec)) {
+        throw new Error(`synthetic WebGL inspection failure for ${this.#codec}`);
+      }
+      if (startup.identityFailures.has(this.#codec)) {
+        throw new Error("renderer inspection frame identity mismatch");
+      }
+      if (startup.rgbaCopyFailures.has(this.#codec)) {
+        const error = rgbaCopyFailureError();
+        this.#failure = error.diagnostic;
+        throw error;
+      }
+      const width = startup.storageFailures.has(this.#codec) ? 15 : 16;
+      const height = 40;
+      const stride = width * 4;
+      const pixels = new Uint8Array(stride * height);
+      pixels[24 * stride] = startup.semanticMismatches.has(this.#codec) ? 96 : 48;
+      inspect(Object.freeze({
+        frame,
+        rgba: Object.freeze({ width, height, stride, pixels })
+      }));
+      startup.operations.push(`prime:${this.#codec}:${String(index)}`);
+    }
+
     public async store(): Promise<void> {}
     public async drawStored(): Promise<void> {}
     public resize(): void {
@@ -456,6 +535,13 @@ function failLiveDecoder(family: CodecFamily): void {
   control.fail();
 }
 
+function requireWitnesses(
+  families: readonly CodecFamily[],
+  frame = 17
+): void {
+  for (const family of families) startup.witnessFrames.set(family, frame);
+}
+
 beforeEach(() => {
   startup.outcomes.clear();
   startup.probeOutcomes.clear();
@@ -464,6 +550,11 @@ beforeEach(() => {
   startup.disposals.length = 0;
   startup.operations.length = 0;
   startup.cleanupFailures.clear();
+  startup.witnessFrames.clear();
+  startup.semanticMismatches.clear();
+  startup.identityFailures.clear();
+  startup.storageFailures.clear();
+  startup.pendingQualificationTakes.clear();
   startup.rgbaCopyFailures.clear();
   startup.rendererFailures.clear();
   startup.resizeFailures.clear();
@@ -483,6 +574,149 @@ afterEach(() => {
 });
 
 describe("player startup source fallback", () => {
+  it("memoizes high-index qualification across onCandidate prepare reentry", async () => {
+    requireWitnesses(["av1"]);
+    const harness = createHarness(["av1"]);
+    let reentrantPreparation: Promise<unknown> | null = null;
+    const onCandidate = vi.fn((
+      candidate: Awaited<ReturnType<typeof createPlayer>>
+    ) => {
+      reentrantPreparation = candidate.prepare();
+      return Promise.resolve();
+    });
+
+    const player = await createPlayer({ ...harness.input, onCandidate });
+    const reentrant = reentrantPreparation;
+    if (reentrant === null) throw new Error("onCandidate did not reenter prepare");
+    const [reentrantResult, winnerResult] = await Promise.all([
+      reentrant,
+      player.prepare()
+    ]);
+
+    expect(onCandidate).toHaveBeenCalledTimes(1);
+    expect(reentrantResult).toBe(winnerResult);
+    expect(winnerResult).toMatchObject({ mode: "animated" });
+    expect(startup.operations.filter((operation) =>
+      operation.startsWith("inspect:av1:")
+    )).toEqual(["inspect:av1:17"]);
+    expect(startup.operations.filter((operation) =>
+      operation.startsWith("lane-take:av1:1:") ||
+      operation.startsWith("lane-release:av1:1:") ||
+      operation === "inspect:av1:17" || operation === "prime:av1:17"
+    )).toEqual([
+      ...Array.from({ length: 17 }, (_, index) => [
+        `lane-take:av1:1:${String(index)}`,
+        `lane-release:av1:1:${String(index)}`
+      ]).flat(),
+      "lane-take:av1:1:17",
+      "inspect:av1:17",
+      "prime:av1:17",
+      "lane-release:av1:1:17"
+    ]);
+    expect(startup.operations.some((operation) =>
+      /^ready:av1:\d+$/.test(operation)
+    )).toBe(false);
+    expect(player.snapshot(false).playbackLifecycle.candidateCommits).toBe(0);
+    await player.dispose();
+  });
+
+  it("uses H264 only after witnessed AV1, VP9, and HEVC mismatches", async () => {
+    requireWitnesses(FAMILIES, 2);
+    for (const family of FAMILIES.slice(0, 3)) {
+      startup.semanticMismatches.add(family);
+    }
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    const player = requirePrepared(outcome);
+    expect(startup.opens).toEqual(FAMILIES);
+    expect(startup.disposals).toEqual(FAMILIES.slice(0, 3));
+    expect(startup.operations.filter((operation) =>
+      operation.startsWith("inspect:")
+    )).toEqual(FAMILIES.map((family) => `inspect:${family}:2`));
+    expect(player.snapshot(false).selectedCodec).toBe(CODECS.h264);
+    expect(harness.publications.playbackFailures).toEqual([]);
+    await player.dispose();
+  });
+
+  it("publishes one typed terminal failure when every witnessed output mismatches", async () => {
+    requireWitnesses(FAMILIES, 2);
+    for (const family of FAMILIES) startup.semanticMismatches.add(family);
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status !== "rejected") throw new Error("expected startup rejection");
+    expect(outcome.error).toBe(harness.terminal);
+    expect(startup.opens).toEqual(FAMILIES);
+    expect(startup.disposals).toEqual(FAMILIES);
+    expect(harness.publications.playbackFailures).toEqual([
+      "worker-decode-failure:prepare"
+    ]);
+  });
+
+  it.each([
+    ["RGBA materializer", "rgba", "renderer-failure:prepare"],
+    ["renderer", "renderer", "renderer-failure:prepare"],
+    ["frame identity", "identity", "renderer-failure:prepare"],
+    ["RGBA storage", "storage", "worker-decode-failure:prepare"],
+    ["decoder transport", "transport", "worker-decode-failure:prepare"]
+  ] as const)("keeps a %s qualification failure terminal", async (
+    _label,
+    failure,
+    publicFailure
+  ) => {
+    requireWitnesses(["av1"], 2);
+    if (failure === "rgba") startup.rgbaCopyFailures.add("av1");
+    else if (failure === "renderer") startup.rendererFailures.add("av1");
+    else if (failure === "identity") startup.identityFailures.add("av1");
+    else if (failure === "storage") startup.storageFailures.add("av1");
+    else startup.outcomes.set("av1", "transport-error");
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    expect(outcome.status).toBe("rejected");
+    expect(startup.opens).toEqual(["av1"]);
+    expect(startup.disposals).toEqual(["av1"]);
+    expect(harness.publications.playbackFailures).toEqual([publicFailure]);
+  });
+
+  it("does not decode or inspect a qualification frame for valid opaque output", async () => {
+    const harness = createHarness(["av1"]);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    const player = requirePrepared(outcome);
+    expect(startup.operations.some((operation) =>
+      operation.startsWith("inspect:") || operation.startsWith("lane-take:av1:1:")
+    )).toBe(false);
+    expect(player.snapshot(false).selectedCodec).toBe(CODECS.av1);
+    await player.dispose();
+  });
+
+  it("cancels a high-index qualification candidate on abort without trying VP9", async () => {
+    requireWitnesses(["av1"], 17);
+    startup.pendingQualificationTakes.set("av1", 13);
+    const controller = new AbortController();
+    const harness = createHarness(FAMILIES, controller);
+    const attempt = prepareAttempt(harness.input);
+    await eventually(() => startup.operations.includes("lane-take:av1:1:13"));
+    const reason = new DOMException("source generation replaced", "AbortError");
+
+    controller.abort(reason);
+    const outcome = await attempt;
+
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status !== "rejected") throw new Error("expected startup rejection");
+    expect(outcome.error).toBe(reason);
+    expect(startup.opens).toEqual(["av1"]);
+    expect(startup.operations).toContain("run-close:av1:1");
+    expect(harness.publications.playbackFailures).toEqual([]);
+  });
+
   it("falls through a positive AV1 probe with invalid output to VP9", async () => {
     startup.outcomes.set("av1", "invalid-output");
     const harness = createHarness(["av1", "vp9", "h265", "h264"]);

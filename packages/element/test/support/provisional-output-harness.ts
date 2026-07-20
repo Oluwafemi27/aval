@@ -5,7 +5,7 @@ import type {
 } from "../../src/asset.js";
 import type {
   MaterializedRgbaFrame,
-  RgbaFrameReference
+  MaterializedRgbaFrameReference
 } from "../../src/rgba-materializer.js";
 import {
   deriveRenderLayout,
@@ -83,9 +83,8 @@ export function legacyPackedManifest(): Readonly<LegacyManifest> {
 
 export function rgbaReference(
   frame: VideoFrame,
-  red = WITNESS_RED,
-  failure?: unknown
-): Readonly<RgbaFrameReference> {
+  red = WITNESS_RED
+): Readonly<MaterializedRgbaFrameReference> {
   const pixels = new Uint8Array(
     witnessLayout.storageWidth * witnessLayout.storageHeight * 4
   );
@@ -98,12 +97,7 @@ export function rgbaReference(
     stride: witnessLayout.storageWidth * 4,
     pixels
   }) satisfies Readonly<MaterializedRgbaFrame>;
-  return Object.freeze({
-    frame,
-    rgba: () => failure === undefined
-      ? Promise.resolve(materialized)
-      : Promise.reject(failure)
-  });
+  return Object.freeze({ frame, rgba: materialized });
 }
 
 function manifestBase() {

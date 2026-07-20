@@ -44,15 +44,15 @@ const media = vi.hoisted(() => ({
 vi.mock("../src/asset.js", () => {
   const units = [
     body("idle-body", 0, 24),
-    { id: "idle-intro", kind: "one-shot", frameCount: 2, chunks: [span(1)] },
+    { id: "idle-intro", kind: "one-shot", frameCount: 2, chunks: [span(1, 2)] },
     body("hover-body", 2, 16),
-    { id: "idle-hover", kind: "bridge", frameCount: 16, chunks: [span(3)] },
+    { id: "idle-hover", kind: "bridge", frameCount: 16, chunks: [span(3, 16)] },
     body("other-body", 4, 16),
-    { id: "idle-other", kind: "bridge", frameCount: 16, chunks: [span(5)] },
+    { id: "idle-other", kind: "bridge", frameCount: 16, chunks: [span(5, 16)] },
     body("later-body", 6, 16),
-    { id: "idle-later", kind: "bridge", frameCount: 16, chunks: [span(7)] },
+    { id: "idle-later", kind: "bridge", frameCount: 16, chunks: [span(7, 16)] },
     body("last-body", 8, 16),
-    { id: "idle-last", kind: "bridge", frameCount: 16, chunks: [span(9)] }
+    { id: "idle-last", kind: "bridge", frameCount: 16, chunks: [span(9, 16)] }
   ];
   const records = units.map((unit, index) => ({
     offset: 1_000 + index,
@@ -72,8 +72,18 @@ vi.mock("../src/asset.js", () => {
   }));
   class Asset {
     public readonly manifest = {
+      formatVersion: "1.1",
+      generator: "player-prefetch-test",
       codec: "h264",
-      canvas: { width: 16, height: 16, fit: "contain", pixelAspect: [1, 1] },
+      bitstream: "annex-b",
+      layout: "opaque",
+      canvas: {
+        width: 16,
+        height: 16,
+        fit: "contain",
+        pixelAspect: [1, 1],
+        colorSpace: "srgb"
+      },
       frameRate: { numerator: 30, denominator: 1 },
       renditions: [{
         id: "main",
@@ -152,8 +162,18 @@ vi.mock("../src/asset.js", () => {
         }
       ],
       bindings: [],
-      readiness: { policy: "all-routes", bootstrapUnits: [], immediateEdges: [] },
+      readiness: {
+        policy: "all-routes",
+        bootstrapUnits: units.map(({ id }) => id),
+        immediateEdges: [
+          "idle-hover-edge",
+          "idle-last-edge",
+          "idle-later-edge",
+          "idle-other-edge"
+        ]
+      },
       limits: {
+        maxCompiledBytes: 16_000_000,
         maxRuntimeBytes: 16_000_000,
         decodedPixelBytes: 2_048,
         persistentCacheBytes: 0,
@@ -194,8 +214,14 @@ vi.mock("../src/asset.js", () => {
   }
   return { Asset: class { public static async open() { return new Asset(); } } };
 
-  function span(chunkStart: number) {
-    return { rendition: "main", chunkStart, chunkCount: 1 };
+  function span(chunkStart: number, frameCount: number) {
+    return {
+      rendition: "main",
+      chunkStart,
+      chunkCount: 1,
+      frameCount,
+      sha256: "0".repeat(64)
+    };
   }
   function body(id: string, chunkStart = 0, frameCount = 2) {
     return {
@@ -208,7 +234,7 @@ vi.mock("../src/asset.js", () => {
         { id: "later", entryFrame: 0, portalFrames: [8] },
         { id: "last", entryFrame: 0, portalFrames: [frameCount - 1] }
       ],
-      chunks: [span(chunkStart)]
+      chunks: [span(chunkStart, frameCount)]
     };
   }
 });
