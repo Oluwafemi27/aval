@@ -14,6 +14,19 @@ import {
   type DecoderWorkerEvent
 } from "../src/decoder-protocol.js";
 
+const BT709_LIMITED_COLOR = Object.freeze({
+  fullRange: false,
+  matrix: "bt709",
+  primaries: "bt709",
+  transfer: "bt709"
+} as const);
+const ANDROID_BT709_COLOR = Object.freeze({
+  fullRange: false,
+  matrix: "bt709",
+  primaries: "bt709",
+  transfer: "smpte170m"
+} as const);
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -230,7 +243,7 @@ describe("Decoder output certification", () => {
     });
     vi.stubGlobal("Worker", Worker);
     vi.stubGlobal("VideoFrame", VideoFrame);
-    const decoder = configuredDecoder();
+    const decoder = strictBt709Decoder("avc1.640020");
     const worker = Worker.latest();
     worker.emit({ t: "configured", supported: true });
     await decoder.supported();
@@ -246,6 +259,83 @@ describe("Decoder output certification", () => {
 
     const frame = await run.take(0);
     run.release(frame);
+    decoder.dispose();
+  });
+
+  it.each([
+    ["AV1", "av01.0.01M.08.0.110.01.01.01.0"],
+    ["VP9", "vp09.00.21.08.01.01.01.01.00"]
+  ] as const)(
+    "accepts the captured Android %s BT.709 transfer tuple",
+    async (_label, codec) => {
+      const Worker = fakeWorker();
+      const VideoFrame = fakeVideoFrame(ANDROID_BT709_COLOR);
+      vi.stubGlobal("Worker", Worker);
+      vi.stubGlobal("VideoFrame", VideoFrame);
+      const decoder = strictBt709Decoder(codec);
+      const worker = Worker.latest();
+      worker.emit({ t: "configured", supported: true });
+      await decoder.supported();
+      const run = oneFrameRun(decoder);
+      worker.emit({ t: "started", run: run.generation });
+      worker.emit({ t: "accepted", run: run.generation });
+      worker.emit({
+        t: "frame",
+        run: run.generation,
+        timestamp: 0,
+        frame: new VideoFrame(32, 34)
+      });
+
+      const frame = await run.take(0);
+      expect(decoder.snapshot().diagnostic).toBeNull();
+      run.release(frame);
+      decoder.dispose();
+    }
+  );
+
+  it("retains frozen raw color tuples for a true matrix mismatch", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame({
+      ...BT709_LIMITED_COLOR,
+      matrix: "smpte170m"
+    });
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+    const decoder = strictBt709Decoder("av01.0.01M.08.0.110.01.01.01.0");
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+    const run = oneFrameRun(decoder);
+    worker.emit({ t: "started", run: run.generation });
+    worker.emit({ t: "accepted", run: run.generation });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 0,
+      frame: new VideoFrame(32, 34)
+    });
+
+    await expect(run.take(0)).rejects.toThrow(
+      "AVAL decoder returned an invalid frame"
+    );
+    const diagnostic = decoder.snapshot().diagnostic;
+    expect(diagnostic?.outputFailure).toMatchObject({
+      kind: "color-space",
+      validationLayer: "host-expectation",
+      field: "color-space",
+      expected: {
+        colorSpace: ["bt709", "bt709", "bt709", false]
+      },
+      actual: {
+        colorSpace: ["bt709", "bt709", "smpte170m", false]
+      }
+    });
+    const expectedColor = diagnostic?.outputFailure?.expected?.colorSpace;
+    const actualColor = diagnostic?.outputFailure?.actual?.colorSpace;
+    expect(Object.isFrozen(diagnostic)).toBe(true);
+    expect(Object.isFrozen(diagnostic?.outputFailure)).toBe(true);
+    expect(Object.isFrozen(expectedColor)).toBe(true);
+    expect(Object.isFrozen(actualColor)).toBe(true);
     decoder.dispose();
   });
 
@@ -1234,6 +1324,27 @@ function configuredDecoder(limits: Readonly<DecoderLimits> = {}): Decoder {
     displayAspectWidth: 2,
     displayAspectHeight: 2
   }, undefined, limits);
+}
+
+function strictBt709Decoder(
+  codec: string,
+  limits: Readonly<DecoderLimits> = {}
+): Decoder {
+  return new Decoder({
+    codec,
+    codedWidth: 16,
+    codedHeight: 16,
+    displayAspectWidth: 2,
+    displayAspectHeight: 2,
+    colorSpace: BT709_LIMITED_COLOR
+  }, {
+    codedWidth: 16,
+    codedHeight: 16,
+    displayWidth: 2,
+    displayHeight: 2,
+    visibleRect: { x: 0, y: 0, width: 2, height: 2 },
+    colorSpace: BT709_LIMITED_COLOR
+  }, limits);
 }
 
 function oneFrameRun(decoder: Decoder) {

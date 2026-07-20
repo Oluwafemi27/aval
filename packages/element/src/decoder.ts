@@ -6,6 +6,10 @@ import {
   type DecoderRunEvent
 } from "./decoder-protocol.js";
 import { ELEMENT_DECODER_CAPACITY } from "./decoder-capacity.js";
+import {
+  classifyDecoderColor,
+  type DecoderColorTuple
+} from "./decoder-color.js";
 import { sameAspectRatio } from "./media-geometry.js";
 import {
   captureDecoderFrameMetadata,
@@ -82,6 +86,12 @@ export interface DecoderSnapshot {
 
 const PROGRESS_MS = 2_000;
 const MAX_BYTES = Number.MAX_SAFE_INTEGER;
+const DEFAULT_DECODER_COLOR: Readonly<DecoderColorTuple> = Object.freeze([
+  "bt709",
+  "bt709",
+  "bt709",
+  false
+]);
 
 type DecoderLane =
   | Readonly<{ phase: "idle"; generationFloor: number }>
@@ -1389,7 +1399,9 @@ function validateFrame(
     rect.y > metadata.codedHeight - rect.height) {
     throw new DecoderFrameValidationError("visible-rect", "visible-rect");
   }
-  if (!matchesColor(frame.colorSpace, expected.colorSpace)) {
+  const expectedColor = decoderExpectedColorTuple(expected.colorSpace);
+  const actualColor = decoderColorTuple(frame.colorSpace);
+  if (classifyDecoderColor(expectedColor, actualColor).kind === "incompatible") {
     throw new DecoderFrameValidationError("color-space", "color-space");
   }
   try {
@@ -1466,29 +1478,24 @@ function decodedFrameBytes(width: number, height: number): number {
   return pixels * 4;
 }
 
-function matchesColor(
-  actual: VideoColorSpace,
-  expected: DecoderOutputExpectation["colorSpace"]
-): boolean {
-  const compatible = actual.fullRange !== true &&
-    (actual.matrix === null || actual.matrix === "bt709") &&
-    (actual.primaries === null || actual.primaries === "bt709") &&
-    (actual.transfer === null || actual.transfer === "bt709");
-  const browserNormalized =
-    (actual.fullRange === false || actual.fullRange === true) &&
-    actual.matrix === "bt709" &&
-    actual.primaries === "bt709" &&
-    actual.transfer === "iec61966-2-1";
-  if (expected === null) return compatible || browserNormalized;
-  if (browserNormalized) return expected.fullRange === false &&
-    expected.matrix === "bt709" &&
-    expected.primaries === "bt709" &&
-    expected.transfer === "bt709";
-  return compatible &&
-    actual.fullRange === expected.fullRange &&
-    actual.matrix === expected.matrix &&
-    actual.primaries === expected.primaries &&
-    actual.transfer === expected.transfer;
+function decoderExpectedColorTuple(
+  colorSpace: DecoderOutputExpectation["colorSpace"]
+): Readonly<DecoderColorTuple> {
+  return colorSpace === null ? DEFAULT_DECODER_COLOR : decoderColorTuple(colorSpace);
+}
+
+function decoderColorTuple(colorSpace: Readonly<{
+  readonly fullRange: boolean | null;
+  readonly matrix: VideoMatrixCoefficients | null;
+  readonly primaries: VideoColorPrimaries | null;
+  readonly transfer: VideoTransferCharacteristics | null;
+}>): DecoderColorTuple {
+  return [
+    colorSpace.primaries,
+    colorSpace.transfer,
+    colorSpace.matrix,
+    colorSpace.fullRange
+  ];
 }
 
 function defaultExpectation(
