@@ -213,6 +213,7 @@ export class Decoder {
       id,
       runtimeSamples,
       this.#expectation,
+      this.#VideoFrame,
       (message, transfer) => {
         if (this.#disposed || this.#error !== undefined) throw abortError();
         this.#post(message, transfer);
@@ -697,6 +698,7 @@ export class DecodeRun {
   readonly #id: number;
   readonly #samples: readonly Readonly<DecodeSample>[];
   readonly #expectation: DecoderOutputExpectation;
+  readonly #VideoFrame: typeof globalThis.VideoFrame;
   readonly #post: (message: DecoderCommand, transfer?: Transferable[]) => void;
   readonly #credit: () => number;
   readonly #creditChanged: () => void;
@@ -743,6 +745,7 @@ export class DecodeRun {
     id: number,
     samples: readonly Readonly<DecodeSample>[],
     expectation: Readonly<DecoderOutputExpectation>,
+    VideoFrameConstructor: typeof globalThis.VideoFrame,
     post: (message: DecoderCommand, transfer?: Transferable[]) => void,
     credit: () => number,
     creditChanged: () => void,
@@ -760,6 +763,7 @@ export class DecodeRun {
     this.#id = id;
     this.#samples = Object.freeze(samples.map((sample) => Object.freeze({ ...sample })));
     this.#expectation = expectation;
+    this.#VideoFrame = VideoFrameConstructor;
     this.#post = post;
     this.#credit = credit;
     this.#creditChanged = creditChanged;
@@ -897,7 +901,7 @@ export class DecodeRun {
         inspection.outputFailure
       );
     }
-    const frameMetadata = inspection.metadata;
+    let frameMetadata = inspection.metadata;
     const expected = this.#outputs.get(event.timestamp);
     if (expected === undefined) {
       this.#failOperation(
@@ -946,16 +950,33 @@ export class DecodeRun {
         )
       );
     }
+    let outputFrame = event.frame;
+    if (
+      expected.duration > 0 &&
+      (frameMetadata.duration === null || frameMetadata.duration === 0)
+    ) {
+      const repaired = repairMissingFrameDuration(
+        event.frame,
+        event.timestamp,
+        expected.duration,
+        this.#VideoFrame
+      );
+      if (repaired !== null) {
+        outputFrame = repaired.frame;
+        frameMetadata = repaired.metadata;
+      }
+    }
     let frameBytes: number;
     try {
       frameBytes = validateFrame(
-        event.frame,
+        outputFrame,
         event.timestamp,
         expected.duration,
         this.#expectation,
         frameMetadata
       );
     } catch (reason) {
+      if (outputFrame !== event.frame) outputFrame.close();
       const validation = reason instanceof DecoderFrameValidationError
         ? reason
         : new DecoderFrameValidationError(
@@ -981,6 +1002,7 @@ export class DecodeRun {
     try {
       this.#claimBytes(frameBytes);
     } catch (reason) {
+      if (outputFrame !== event.frame) outputFrame.close();
       this.#failOperation(
         asError(reason, "AVAL decoder could not retain an output frame"),
         "decode",
@@ -990,8 +1012,8 @@ export class DecodeRun {
     }
     try {
       this.#seen.add(event.timestamp);
-      this.#frames.set(expected.index, event.frame);
-      this.#frameBytes.set(event.frame, frameBytes);
+      this.#frames.set(expected.index, outputFrame);
+      this.#frameBytes.set(outputFrame, frameBytes);
       this.#openBytes += frameBytes;
       this.#received += 1;
       this.#firstFrame ??= frameMetadata;
@@ -999,7 +1021,8 @@ export class DecodeRun {
     } catch (error) {
       this.#seen.delete(event.timestamp);
       this.#frames.delete(expected.index);
-      this.#frameBytes.delete(event.frame);
+      this.#frameBytes.delete(outputFrame);
+      if (outputFrame !== event.frame) outputFrame.close();
       this.#releaseBytes(frameBytes);
       throw error;
     }
@@ -1301,6 +1324,39 @@ class DecoderFrameValidationError extends Error {
   ) {
     super(reason.message);
     this.name = "DecoderFrameValidationError";
+  }
+}
+
+function repairMissingFrameDuration(
+  frame: VideoFrame,
+  timestamp: number,
+  duration: number,
+  VideoFrameConstructor: typeof globalThis.VideoFrame
+): Readonly<{
+  frame: VideoFrame;
+  metadata: Readonly<DecoderFrameMetadata>;
+}> | null {
+  // WebCodecs says decoded duration is copied from its EncodedVideoChunk, but
+  // Safari HEVC can intermittently elide it. Re-wrap only missing metadata;
+  // every non-zero mismatch still reaches strict validation unchanged.
+  let repaired: VideoFrame | null = null;
+  try {
+    repaired = new VideoFrameConstructor(frame, { duration });
+    if (repaired === frame) return null;
+    const inspection = inspectDecoderFrameMetadata(repaired);
+    if (
+      inspection.metadata === null ||
+      inspection.metadata.timestamp !== timestamp ||
+      inspection.metadata.duration !== duration
+    ) {
+      repaired.close();
+      return null;
+    }
+    frame.close();
+    return Object.freeze({ frame: repaired, metadata: inspection.metadata });
+  } catch {
+    if (repaired !== null && repaired !== frame) repaired.close();
+    return null;
   }
 }
 

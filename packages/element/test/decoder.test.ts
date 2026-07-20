@@ -20,7 +20,63 @@ afterEach(() => {
 });
 
 describe("Decoder output certification", () => {
-  it("converts AVAL frame ticks to WebCodecs microseconds without weakening output validation", async () => {
+  it.each([0, null])(
+    "repairs Safari's missing %s duration after converting AVAL frame ticks",
+    async (missingDuration) => {
+      const Worker = fakeWorker();
+      const VideoFrame = fakeVideoFrame();
+      vi.stubGlobal("Worker", Worker);
+      vi.stubGlobal("VideoFrame", VideoFrame);
+
+      const decoder = configuredDecoder({
+        sampleFrameRate: { numerator: 30, denominator: 1 }
+      });
+      const worker = Worker.latest();
+      worker.emit({ t: "configured", supported: true });
+      await decoder.supported();
+
+      const run = decoder.createRun([{
+        data: new Uint8Array([1]).buffer,
+        timestamp: 7,
+        duration: 1,
+        key: true,
+        displayedFrames: 1
+      }]);
+      worker.emit({ t: "started", run: run.generation });
+
+      expect(worker.posted).toContainEqual({
+        t: "decode",
+        run: run.generation,
+        chunks: [{
+          data: expect.any(ArrayBuffer),
+          timestamp: 233_333,
+          duration: 33_334,
+          key: true
+        }]
+      });
+
+      worker.emit({ t: "accepted", run: run.generation });
+      const frame = new VideoFrame(32, 34, 233_333);
+      Object.defineProperty(frame, "duration", { value: missingDuration });
+      worker.emit({
+        t: "frame",
+        run: run.generation,
+        timestamp: 233_333,
+        frame
+      });
+
+      const repaired = await run.take(0);
+      expect(repaired).not.toBe(frame);
+      expect(repaired.timestamp).toBe(233_333);
+      expect(repaired.duration).toBe(33_334);
+      expect((frame as unknown as { closed: boolean }).closed).toBe(true);
+      expect(decoder.snapshot().diagnostic).toBeNull();
+      run.release(repaired);
+      decoder.dispose();
+    }
+  );
+
+  it("still rejects a wrong positive duration after tick conversion", async () => {
     const Worker = fakeWorker();
     const VideoFrame = fakeVideoFrame();
     vi.stubGlobal("Worker", Worker);
@@ -41,21 +97,9 @@ describe("Decoder output certification", () => {
       displayedFrames: 1
     }]);
     worker.emit({ t: "started", run: run.generation });
-
-    expect(worker.posted).toContainEqual({
-      t: "decode",
-      run: run.generation,
-      chunks: [{
-        data: expect.any(ArrayBuffer),
-        timestamp: 233_333,
-        duration: 33_334,
-        key: true
-      }]
-    });
-
     worker.emit({ t: "accepted", run: run.generation });
     const frame = new VideoFrame(32, 34, 233_333);
-    Object.defineProperty(frame, "duration", { value: 0 });
+    Object.defineProperty(frame, "duration", { value: 33_333 });
     worker.emit({
       t: "frame",
       run: run.generation,
@@ -70,7 +114,7 @@ describe("Decoder output certification", () => {
       kind: "timing",
       field: "duration",
       expected: { timestamp: 233_333, duration: 33_334 },
-      actual: { timestamp: 233_333, duration: 0 }
+      actual: { timestamp: 233_333, duration: 33_333 }
     });
     decoder.dispose();
   });
@@ -1287,23 +1331,47 @@ function fakeVideoFrame(colorSpace: Readonly<VideoColorSpaceInit> = {
 } {
   const normalizedColorSpace = Object.freeze({ ...colorSpace });
   return class StubVideoFrame {
-    public readonly duration = 1;
-    public readonly displayWidth = 2;
-    public readonly displayHeight = 2;
-    public readonly visibleRect = {
-      x: 0,
-      y: 0,
-      width: 2,
-      height: 2
-    };
-    public readonly colorSpace = normalizedColorSpace;
+    public readonly codedWidth: number;
+    public readonly codedHeight: number;
+    public readonly timestamp: number;
+    public readonly duration: number;
+    public readonly displayWidth: number;
+    public readonly displayHeight: number;
+    public readonly visibleRect: Readonly<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>;
+    public readonly colorSpace: Readonly<VideoColorSpaceInit>;
     public closed = false;
 
     public constructor(
-      public readonly codedWidth: number,
-      public readonly codedHeight: number,
-      public readonly timestamp = 0
-    ) {}
+      codedWidthOrSource: number | VideoFrame,
+      codedHeightOrInit: number | VideoFrameInit,
+      timestamp = 0
+    ) {
+      if (typeof codedWidthOrSource === "number") {
+        this.codedWidth = codedWidthOrSource;
+        this.codedHeight = codedHeightOrInit as number;
+        this.timestamp = timestamp;
+        this.duration = 1;
+        this.displayWidth = 2;
+        this.displayHeight = 2;
+        this.visibleRect = Object.freeze({ x: 0, y: 0, width: 2, height: 2 });
+        this.colorSpace = normalizedColorSpace;
+        return;
+      }
+      const init = codedHeightOrInit as VideoFrameInit;
+      this.codedWidth = codedWidthOrSource.codedWidth;
+      this.codedHeight = codedWidthOrSource.codedHeight;
+      this.timestamp = init.timestamp ?? codedWidthOrSource.timestamp;
+      this.duration = init.duration ?? codedWidthOrSource.duration ?? 0;
+      this.displayWidth = codedWidthOrSource.displayWidth;
+      this.displayHeight = codedWidthOrSource.displayHeight;
+      this.visibleRect = Object.freeze({ ...codedWidthOrSource.visibleRect! });
+      this.colorSpace = normalizedColorSpace;
+    }
 
     public close(): void { this.closed = true; }
   } as unknown as {
