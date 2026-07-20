@@ -366,7 +366,6 @@ const PRODUCTION_FORWARDED_KEYS = [
   "alpha",
   "antialias",
   "depth",
-  "desynchronized",
   "premultipliedAlpha",
   "preserveDrawingBuffer",
   "stencil"
@@ -433,7 +432,7 @@ function assertRendererReport(
   expect(report.environment.devicePixelRatio).toEqual(expect.any(Number));
   expect(report.modes.map((entry) => entry.mode)).toEqual([
     "production",
-    "without-desynchronized",
+    "legacy-desynchronized",
     "browser-defaults"
   ]);
 
@@ -458,7 +457,7 @@ function assertRendererReport(
       alpha: true,
       antialias: false,
       depth: false,
-      desynchronized: true,
+      desynchronized: null,
       premultipliedAlpha: true,
       preserveDrawingBuffer: false,
       stencil: false
@@ -469,13 +468,13 @@ function assertRendererReport(
         result.context.forwardedAttributes ?? {},
         PRODUCTION_FORWARDED_KEYS
       );
-      expect(result.context.forwardedAttributes)
-        .toHaveProperty("desynchronized", true);
     } else if (index === 1) {
       expectExactKeys(
         result.context.forwardedAttributes ?? {},
-        PRODUCTION_FORWARDED_KEYS.filter((key) => key !== "desynchronized")
+        [...PRODUCTION_FORWARDED_KEYS, "desynchronized"]
       );
+      expect(result.context.forwardedAttributes)
+        .toHaveProperty("desynchronized", true);
     } else {
       expect(result.context.forwardedAttributes).toBeNull();
     }

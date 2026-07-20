@@ -15,6 +15,25 @@ import {
 } from "./renderer-webgl-test-support.js";
 
 describe("WebGl2RendererBackend", () => {
+  it("omits the low-latency hint from transparent presentation", () => {
+    const fixture = webglCanvas();
+    const backend = new WebGl2RendererBackend(
+      fixture.canvas,
+      layout(),
+      () => undefined
+    );
+
+    expect(fixture.gl.contextRequestAttributes).toEqual({
+      alpha: true,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: false
+    });
+    backend.dispose();
+  });
+
   it("keeps packed-alpha streaming on deterministic RGBA uploads", async () => {
     const fixture = webglCanvas();
     const backend = new WebGl2RendererBackend(

@@ -442,9 +442,11 @@ export class WebGl2RendererBackend implements RendererBackend {
     const native = initialNativeUploadState(this.#layout);
     let gl: WebGL2RenderingContext | null;
     try {
+      // Keep presentation in normal DOM composition. Android Chromium may
+      // route desynchronized WebGL through an opaque low-latency surface.
       gl = this.#canvas.getContext("webgl2", {
         alpha: true, antialias: false, depth: false, stencil: false,
-        desynchronized: true, premultipliedAlpha: true,
+        premultipliedAlpha: true,
         preserveDrawingBuffer: false
       });
     } catch (reason) {

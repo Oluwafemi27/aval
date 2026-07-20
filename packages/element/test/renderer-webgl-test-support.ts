@@ -121,8 +121,13 @@ export function webglCanvas(width = 48, height = 104): Readonly<{
       listeners.set(type, listener);
     },
     removeEventListener(type: string) { listeners.delete(type); },
-    getContext() {
+    getContext(
+      _contextId?: string,
+      attributes?: WebGLContextAttributes
+    ) {
       gl.contextRequestCount += 1;
+      gl.contextRequestAttributes = attributes === undefined
+        ? null : Object.freeze({ ...attributes });
       return gl as unknown as WebGL2RenderingContext;
     }
   } as unknown as HTMLCanvasElement;
@@ -188,6 +193,7 @@ export class TestGl {
   public rgbaUploadError = 0;
   public contextLost = false;
   public contextRequestCount = 0;
+  public contextRequestAttributes: Readonly<WebGLContextAttributes> | null = null;
   #bound: WebGLTexture | null = null;
   #lastUploadKind: "native" | "rgba-copy" = "rgba-copy";
   #viewportWidth = 0;

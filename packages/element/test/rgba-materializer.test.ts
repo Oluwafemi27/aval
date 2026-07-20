@@ -131,7 +131,6 @@ describe("RgbaMaterializer", () => {
     expect(fixture.context.readCalls).toEqual([[0, 0, 2, 1]]);
     expect(fixture.contextRequest).toEqual({
       alpha: true,
-      desynchronized: true,
       willReadFrequently: true
     });
     expect(materializer.snapshot()).toEqual({

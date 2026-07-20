@@ -3,7 +3,7 @@ import { RendererFailureError } from "./modules/element/renderer-diagnostics.js"
 
 const MODES = Object.freeze([
   "production",
-  "without-desynchronized",
+  "legacy-desynchronized",
   "browser-defaults"
 ]);
 const CASES = Object.freeze({
@@ -42,7 +42,6 @@ const PRODUCTION_ATTRIBUTES = Object.freeze({
   antialias: false,
   depth: false,
   stencil: false,
-  desynchronized: true,
   premultipliedAlpha: true,
   preserveDrawingBuffer: false
 });
@@ -200,9 +199,9 @@ function forwardedForMode(mode, attributes) {
     : PRODUCTION_ATTRIBUTES;
   const forwarded = {};
   for (const [key, value] of Object.entries(source)) {
-    if (mode === "without-desynchronized" && key === "desynchronized") continue;
     forwarded[key] = value;
   }
+  if (mode === "legacy-desynchronized") forwarded.desynchronized = true;
   return Object.freeze(forwarded);
 }
 

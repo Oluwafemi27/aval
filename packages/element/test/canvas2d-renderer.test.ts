@@ -12,6 +12,21 @@ import {
 import { RendererFailureError } from "../src/renderer-diagnostics.js";
 
 describe("Canvas2dRenderer packed-alpha presentation", () => {
+  it("omits the low-latency hint from transparent output", () => {
+    const fixture = canvasFixture();
+    const renderer = new Canvas2dRenderer(
+      htmlCanvas(fixture.output),
+      packedLayout(),
+      { createCanvas: fixture.createCanvas }
+    );
+
+    expect(fixture.output.contextRequest).toEqual({
+      alpha: true,
+      willReadFrequently: false
+    });
+    renderer.dispose();
+  });
+
   it("materializes straight RGBA into three bounded stream slots", async () => {
     const fixture = canvasFixture();
     const renderer = new Canvas2dRenderer(htmlCanvas(fixture.output), packedLayout(), {
@@ -46,6 +61,13 @@ describe("Canvas2dRenderer packed-alpha presentation", () => {
     const output = fixture.output.context;
     expect(output.draws.map(({ composite }) => composite))
       .toEqual(["source-over", "destination-in"]);
+    expect(fixture.surfaces.length).toBeGreaterThan(0);
+    for (const surface of fixture.surfaces) {
+      expect(surface.contextRequest).toEqual({
+        alpha: true,
+        willReadFrequently: false
+      });
+    }
   });
 
   it("keeps resident identities independent and redraws after resize", async () => {
@@ -776,6 +798,7 @@ function canvasFixture(width = 4, height = 12): Readonly<{
 
 class TestCanvas {
   public readonly context = new TestContext(this);
+  public contextRequest: unknown = null;
   public readonly initialWidth: number;
   public readonly initialHeight: number;
   public width: number;
@@ -791,7 +814,11 @@ class TestCanvas {
 
   public get listenerCount(): number { return this.#listeners.size; }
 
-  public getContext(type: string): CanvasRenderingContext2D | null {
+  public getContext(
+    type: string,
+    options?: unknown
+  ): CanvasRenderingContext2D | null {
+    if (type === "2d") this.contextRequest = options;
     return type === "2d" ? this.context as unknown as CanvasRenderingContext2D : null;
   }
 

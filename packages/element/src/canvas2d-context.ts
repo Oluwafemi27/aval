@@ -2,9 +2,9 @@ export function canvas2dContext(
   canvas: HTMLCanvasElement,
   willReadFrequently: boolean
 ): CanvasRenderingContext2D | null {
+  // Avoid Android low-latency surfaces; normal composition/readback is required.
   return canvas.getContext("2d", {
     alpha: true,
-    desynchronized: true,
     willReadFrequently
   });
 }
