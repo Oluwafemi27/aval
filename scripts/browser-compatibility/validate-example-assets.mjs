@@ -61,7 +61,8 @@ const BUNDLE_CONTRACTS = Object.freeze([
     layout: "opaque",
     reentryMaxWaitFrames: 47,
     dynamicPage: "examples/grass-rabbit-codecs/index.html",
-    controller: "examples/grass-rabbit-codecs/codec-demo-controller.js"
+    controller: "examples/grass-rabbit-codecs/codec-demo-controller.js",
+    codecModel: "examples/grass-rabbit-codecs/codec-demo-model.js"
   }),
   Object.freeze({
     id: "kinetic-orb",
@@ -421,7 +422,7 @@ async function validateStaticSourceMarkup(root, bundle) {
 }
 
 async function validateDynamicCodecChooser(root, bundle) {
-  const { contract } = bundle;
+  const { contract, report } = bundle;
   const page = await readFile(path.join(root, contract.dynamicPage), "utf8");
   expectEqual(
     extractSourceElements(page, contract.dynamicPage).length,
@@ -430,14 +431,40 @@ async function validateDynamicCodecChooser(root, bundle) {
   );
 
   const controller = await readFile(path.join(root, contract.controller), "utf8");
+  const model = await import(pathToFileURL(path.join(root, contract.codecModel)).href);
+  expectDeepEqual(
+    model.CODECS,
+    report.assets.map(({ codec }) => codec),
+    `${contract.id} automatic codec order`
+  );
   const creations = controller.match(
     /document\.createElement\(\s*["']source["']\s*\)/gu
   ) ?? [];
   expectEqual(creations.length, 1, `${contract.id} dynamic source creation count`);
   expectMatch(
     controller,
-    /const\s+asset\s*=\s*requireMapValue\(\s*report\.assets\s*,\s*codec\s*\)\s*;\s*const\s+player\s*=\s*createPlayer\(\s*codec\s*,\s*asset\s*\)/u,
-    `${contract.id} selected report asset lookup`
+    /const\s+AUTOMATIC_ACTIVATION\s*=\s*Object\.freeze\(/u,
+    `${contract.id} automatic activation declaration`
+  );
+  expectMatch(
+    controller,
+    /sourceCodecs\s*:\s*CODECS\s*[,}]/u,
+    `${contract.id} exact automatic source ladder`
+  );
+  expectMatch(
+    controller,
+    /const\s+player\s*=\s*createPlayer\(\s*activation\.sourceCodecs\s*\)\s*;/u,
+    `${contract.id} activation source attachment`
+  );
+  expectMatch(
+    controller,
+    /for\s*\(\s*const\s+codec\s+of\s+codecs\s*\)/u,
+    `${contract.id} ordered source loop`
+  );
+  expectMatch(
+    controller,
+    /const\s+asset\s*=\s*requireMapValue\(\s*report\.assets\s*,\s*codec\s*\)\s*;/u,
+    `${contract.id} report asset lookup`
   );
   expectMatch(
     controller,

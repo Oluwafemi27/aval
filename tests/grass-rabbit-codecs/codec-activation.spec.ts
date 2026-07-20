@@ -3,7 +3,9 @@ import { expect, test } from "@playwright/test";
 import {
   CODECS,
   CODEC_LABELS,
+  CODEC_PATTERNS,
   SUPPORT_MESSAGES,
+  activePlayerSources,
   activePlayerSnapshot,
   captureBrowserFailures,
   codecPanel,
@@ -19,6 +21,144 @@ import {
   selectedCodec,
   supportSnapshot
 } from "./support/browser-harness.js";
+
+function codecFamily(
+  value: string | null
+): (typeof CODECS)[number] | undefined {
+  if (value === null) return undefined;
+  return CODECS.find((codec) => CODEC_PATTERNS[codec].test(value));
+}
+
+test("keeps the automatic codec ladder intact while explicit tabs stay standalone", async ({
+  page
+}) => {
+  const failures = captureBrowserFailures(page);
+  await openExample(page);
+
+  const support = await supportSnapshot(page);
+  const automatic = await activePlayerSources(page);
+  expect(automatic).toEqual(CODECS);
+
+  const runtimeCodec = (await activePlayerSnapshot(page)).selectedCodec;
+  const runtimeFamily = CODECS.find(
+    (codec) => runtimeCodec !== null && CODEC_PATTERNS[codec].test(runtimeCodec)
+  );
+  expect(runtimeFamily).toBeDefined();
+  expect(await selectedCodec(page)).toBe(runtimeFamily);
+
+  const explicitCodec = CODECS.find((codec) => support[codec] === "supported");
+  expect(explicitCodec).toBeDefined();
+  await page.evaluate(async (codec) => {
+    await window.grassRabbitCodecs.activate(codec);
+  }, explicitCodec!);
+  expect(await activePlayerSources(page)).toEqual([explicitCodec]);
+  expectNoBrowserFailures(failures);
+});
+
+test("does not filter the automatic ladder by preflight state", async ({
+  page
+}) => {
+  const failures = captureBrowserFailures(page);
+  await page.goto(
+    "/?simulateUnsupported=av1&simulateUnsupported=vp9" +
+      "&simulateUnsupported=h265&simulateUnsupported=h264",
+    { waitUntil: "domcontentloaded" }
+  );
+  await page.evaluate(() => window.grassRabbitCodecs.ready);
+
+  expect(await supportSnapshot(page)).toEqual({
+    av1: "unsupported",
+    vp9: "unsupported",
+    h265: "unsupported",
+    h264: "unsupported"
+  });
+  expect(await activePlayerSources(page)).toEqual(CODECS);
+  const runtime = await activePlayerSnapshot(page);
+  expect(runtime).toMatchObject({
+    readiness: "interactiveReady",
+    lastFailure: null
+  });
+  const selectedFamily = codecFamily(runtime.selectedCodec);
+  expect(selectedFamily).toBeDefined();
+  expect(await selectedCodec(page)).toBe(selectedFamily);
+  await expectActiveCodecPlayer(page, selectedFamily!);
+  expectNoBrowserFailures(failures);
+});
+
+test("keeps automatic terminal exhaustion separate from probe support", async ({
+  page
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "one pinned engine is sufficient for the missing-window-codec fixture"
+  );
+  const failures = captureBrowserFailures(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis, "VideoDecoder", {
+      configurable: true,
+      value: undefined
+    });
+    Object.defineProperty(globalThis, "VideoFrame", {
+      configurable: true,
+      value: undefined
+    });
+  });
+
+  await page.goto("/?avalDiagnostics=1", { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => window.grassRabbitCodecs.ready);
+  const outcome = await page.evaluate(() => {
+    const diagnostics = (window as Window & {
+      readonly avalBrowserDiagnostics?: { report(): unknown };
+    }).avalBrowserDiagnostics;
+    if (diagnostics === undefined) {
+      throw new Error("browser diagnostics are unavailable");
+    }
+    const report = diagnostics.report() as Readonly<{
+      authoredSources: readonly Readonly<{ codec: string | null }>[];
+      checkpoints: readonly Readonly<{
+        event: Readonly<{ detail: unknown }> | null;
+      }>[];
+    }>;
+    const fatalCodes = report.checkpoints.flatMap(({ event }) => {
+      const detail = event?.detail;
+      if (typeof detail !== "object" || detail === null) return [];
+      if (Reflect.get(detail, "fatal") !== true) return [];
+      const failure = Reflect.get(detail, "failure");
+      if (typeof failure !== "object" || failure === null) return [];
+      const code = Reflect.get(failure, "code");
+      return typeof code === "string" ? [code] : [];
+    });
+    const stage = document.querySelector<HTMLElement>(
+      '#codec-panel-av1 [data-player-stage]'
+    );
+    const message = document.querySelector<HTMLElement>(
+      '#codec-panel-av1 [data-player-message]'
+    );
+    const tab = document.querySelector<HTMLElement>("#codec-tab-av1");
+    return {
+      activePlayer: window.grassRabbitCodecs.activePlayer !== null,
+      authoredCodecs: report.authoredSources.map(({ codec }) => codec),
+      fatalCodes,
+      message: message?.textContent?.trim() ?? null,
+      runtimeError: stage?.dataset.runtimeError ?? null,
+      stageState: stage?.dataset.state ?? null,
+      support: window.grassRabbitCodecs.supportSnapshot(),
+      tabSupport: tab?.dataset.support ?? null
+    };
+  });
+
+  expect(outcome.authoredCodecs.map(codecFamily)).toEqual(CODECS);
+  expect(outcome.fatalCodes).toContain("unsupported-profile");
+  expect(outcome.activePlayer).toBe(false);
+  expect(outcome.support.av1).toBe("supported");
+  expect(outcome.tabSupport).toBe("supported");
+  expect(outcome.runtimeError).toBe("true");
+  expect(outcome.stageState).toBe("error");
+  expect(outcome.message).toBe(
+    "This codec could not be played in your browser."
+  );
+  expectNoBrowserFailures(failures);
+});
 
 test("ready waits for the final pre-setup codec activation", async ({ page }) => {
   test.setTimeout(60_000);
@@ -247,6 +387,7 @@ test("keeps nonfatal static policy pending without claiming rendered playback", 
   });
   releaseReport();
   await page.evaluate(() => window.grassRabbitCodecs.ready);
+  await page.evaluate(() => window.grassRabbitCodecs.activate("h264"));
 
   expect(await supportSnapshot(page)).toMatchObject({ h264: "supported" });
   await expectSelectedPanel(page, "h264");
@@ -279,6 +420,7 @@ test("reflects live interactive and static policy transitions", async ({ page })
     "/?simulateUnsupported=av1&simulateUnsupported=vp9&simulateUnsupported=h265"
   );
   await page.evaluate(() => window.grassRabbitCodecs.ready);
+  await page.evaluate(() => window.grassRabbitCodecs.activate("h264"));
 
   const panel = codecPanel(page, "h264");
   const player = panel.locator("aval-player");
@@ -363,6 +505,9 @@ test("settles the active panel when playback becomes ready after a caller timeou
     });
     return release;
   });
+  await page.evaluate(() => {
+    void window.grassRabbitCodecs.activate("h264").catch(() => undefined);
+  });
   releaseReport();
 
   const readyOutcome = await page.evaluate(async () => {
@@ -413,6 +558,7 @@ test("ignores retained nonfatal diagnostics after successful preparation", async
   }));
   releaseReport();
   await page.evaluate(() => window.grassRabbitCodecs.ready);
+  await page.evaluate(() => window.grassRabbitCodecs.activate("h264"));
 
   expect(await supportSnapshot(page)).toMatchObject({ h264: "supported" });
   await expectSelectedPanel(page, "h264");

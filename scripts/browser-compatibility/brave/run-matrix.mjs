@@ -1235,7 +1235,7 @@ function assertBraveReportProof(report, slot) {
   }
 }
 
-function assertAuthoredSources(report, demoId, mode, policy) {
+export function assertAuthoredSources(report, demoId, mode, policy) {
   const activePlayerId = report?.latest?.playerId;
   if (typeof activePlayerId !== "string") {
     throw new Error(`brave-run-active-player-missing:${demoId}:${mode}`);
@@ -1252,16 +1252,9 @@ function assertAuthoredSources(report, demoId, mode, policy) {
   }
   const expected = policy.requirements.authoredCodecsByMode[mode];
   const demo = policy.requirements.demos.find(({ id }) => id === demoId);
-  if (demo?.sourceContract === "codec-controller" && mode === "full-ladder") {
-    if (observed.length !== 1 || !expected.includes(observed[0])) {
-      throw new Error(`brave-run-codec-controller-source-mismatch:${JSON.stringify(observed)}`);
-    }
-  } else {
-    const exactExpected = demo?.sourceContract === "h264-only" ? ["h264"] : expected;
-    if (JSON.stringify(observed) === JSON.stringify(exactExpected)) return observed;
-    throw new Error(`brave-run-authored-sources-mismatch:${demoId}:${mode}:${JSON.stringify(observed)}`);
-  }
-  return observed;
+  const exactExpected = demo?.sourceContract === "h264-only" ? ["h264"] : expected;
+  if (JSON.stringify(observed) === JSON.stringify(exactExpected)) return observed;
+  throw new Error(`brave-run-authored-sources-mismatch:${demoId}:${mode}:${JSON.stringify(observed)}`);
 }
 
 export function assertCodecSelection(report, demoId, mode, policy) {
@@ -1287,15 +1280,6 @@ export function assertCodecSelection(report, demoId, mode, policy) {
   if (mode === "forced-h264" || demo.sourceContract === "h264-only") {
     if (selectedCodec !== "h264") {
       throw new Error(`brave-run-forced-h264-not-selected:${demoId}:${selectedCodec}`);
-    }
-    return Object.freeze({ selectedCodec, selectedSourceIndex: sources[0].index, skipped: [] });
-  }
-  if (demo.sourceContract === "codec-controller") {
-    if (sourceFamilies.length !== 1 || sourceFamilies[0] !== selectedCodec) {
-      throw new Error(`brave-run-codec-controller-selection-mismatch:${demoId}:${selectedCodec}`);
-    }
-    if (selectedCodec === "h264") {
-      throw new Error(`brave-run-codec-controller-modern-codec-required:${demoId}`);
     }
     return Object.freeze({ selectedCodec, selectedSourceIndex: sources[0].index, skipped: [] });
   }

@@ -317,20 +317,11 @@ export function assertSessionMatchesPolicy(session, manifest, policySlot) {
 }
 
 export function expectedCodecsForCase(policy, demo, evidenceCase) {
-  if (evidenceCase.mode === "forced-h264" || demo.sourceContract === "h264-only") {
-    return Object.freeze(["h264"]);
-  }
+  if (demo.sourceContract === "h264-only") return Object.freeze(["h264"]);
   if (demo.sourceContract === "multi-source") {
-    return Object.freeze([...policy.requirements.authoredCodecsByMode["full-ladder"]]);
-  }
-  if (demo.sourceContract === "codec-controller") {
-    if (evidenceCase.expectedAuthoredCodecs.length !== 1 ||
-        !policy.requirements.authoredCodecsByMode["full-ladder"]
-          .slice(0, -1)
-          .includes(evidenceCase.expectedAuthoredCodecs[0])) {
-      fail("evidence-codec-controller-selection-invalid", evidenceCase.id);
-    }
-    return Object.freeze([evidenceCase.expectedAuthoredCodecs[0]]);
+    return Object.freeze([
+      ...policy.requirements.authoredCodecsByMode[evidenceCase.mode]
+    ]);
   }
   fail("evidence-demo-source-contract-invalid", demo.id);
 }

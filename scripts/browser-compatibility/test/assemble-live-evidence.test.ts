@@ -359,11 +359,9 @@ async function writeCaseArtifacts({
   const playback = slot.expectation === "playback";
   const states = playback ? demo.states : [null, null];
   const ids = playback ? demo.states : ["unsupported", "unsupported-soaked"];
-  const codecs = mode === "forced-h264"
+  const codecs = demo.sourceContract === "h264-only"
     ? ["h264"]
-    : demo.sourceContract === "codec-controller"
-      ? ["av1"]
-      : policy.requirements.authoredCodecsByMode["full-ladder"];
+    : policy.requirements.authoredCodecsByMode[mode];
   const selectedCodec = playback ? codecs[0] : null;
   const visualCheckpoints = [];
   const reportPaths = [];

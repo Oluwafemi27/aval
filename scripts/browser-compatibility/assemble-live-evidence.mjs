@@ -398,13 +398,7 @@ async function assembleCase({
     }
     checkpoints.push(checkpoint.manifestCheckpoint);
   }
-  const requiredCodecs = expectedCodecsForCase(
-    policy,
-    demo,
-    mode,
-    expectedAuthoredCodecs,
-    caseId
-  );
+  const requiredCodecs = expectedCodecsForCase(policy, demo, mode);
   if (!sameArray(requiredCodecs, expectedAuthoredCodecs)) {
     throw new Error(`live-assembly-authored-codecs-mismatch:${caseId}`);
   }
@@ -552,23 +546,12 @@ async function assembleCheckpoint({
   });
 }
 
-function expectedCodecsForCase(policy, demo, mode, observed, caseId) {
-  if (mode === "forced-h264" || demo.sourceContract === "h264-only") {
-    return Object.freeze(["h264"]);
-  }
+function expectedCodecsForCase(policy, demo, mode) {
+  if (demo.sourceContract === "h264-only") return Object.freeze(["h264"]);
   if (demo.sourceContract === "multi-source") {
     return Object.freeze([
-      ...policy.requirements.authoredCodecsByMode["full-ladder"]
+      ...policy.requirements.authoredCodecsByMode[mode]
     ]);
-  }
-  if (demo.sourceContract === "codec-controller") {
-    if (observed.length !== 1 ||
-        !policy.requirements.authoredCodecsByMode["full-ladder"]
-          .slice(0, -1)
-          .includes(observed[0])) {
-      throw new Error(`live-assembly-codec-controller-selection-invalid:${caseId}`);
-    }
-    return Object.freeze([...observed]);
   }
   throw new Error(`live-assembly-demo-source-contract-invalid:${demo.id}`);
 }

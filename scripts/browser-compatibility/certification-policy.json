@@ -10,7 +10,7 @@
     "demos": [
       { "id": "end-user-playground", "route": "/playground/", "playerSelector": "#favorite-motion", "interactionSelector": "#favorite-control", "sourceContract": "multi-source", "renditionId": "motion.1x", "states": ["idle", "engaged"] },
       { "id": "grass-rabbit", "route": "/rabbit/", "playerSelector": "#grass-rabbit", "interactionSelector": "#grass-rabbit", "sourceContract": "multi-source", "renditionId": "video.1x", "states": ["idle", "entering", "hover", "exiting"] },
-      { "id": "grass-rabbit-codecs", "route": "/codecs/", "playerSelector": "aval-player", "interactionSelector": "aval-player", "sourceContract": "codec-controller", "renditionId": "video.1x", "states": ["idle", "entering", "hover", "exiting"] },
+      { "id": "grass-rabbit-codecs", "route": "/codecs/", "playerSelector": "aval-player", "interactionSelector": "aval-player", "sourceContract": "multi-source", "renditionId": "video.1x", "states": ["idle", "entering", "hover", "exiting"] },
       { "id": "kinetic-orb", "route": "/orb/", "playerSelector": "#kinetic-orb", "interactionSelector": "#kinetic-orb", "sourceContract": "multi-source", "renditionId": "video.1x", "states": ["idle", "entering", "hover", "exiting"] }
     ],
     "playbackModes": ["forced-h264", "full-ladder"],

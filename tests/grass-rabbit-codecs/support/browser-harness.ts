@@ -408,6 +408,27 @@ export async function expectActiveCodecPlayer(
   }, codec)).toBe(true);
 }
 
+export async function activePlayerSources(page: Page): Promise<Codec[]> {
+  const codecStrings = await page.evaluate(() => {
+    const player = window.grassRabbitCodecs.activePlayer;
+    if (player === null) return [];
+    return [...player.querySelectorAll("source")].map((source) => {
+      const match = /^application\/vnd\.aval; codecs="([^"]+)"$/u.exec(
+        source.type
+      );
+      if (match === null) throw new Error("active player source type is invalid");
+      return match[1]!;
+    });
+  });
+  return codecStrings.map((codecString) => {
+    const codec = CODECS.find((candidate) =>
+      CODEC_PATTERNS[candidate].test(codecString)
+    );
+    if (codec === undefined) throw new Error("active player codec is unknown");
+    return codec;
+  });
+}
+
 export async function activePlayerSnapshot(page: Page): Promise<Readonly<{
   readiness: string | null;
   requestedState: string | null;

@@ -29,6 +29,7 @@ import {
 import {
   acquisitionEvidenceFilename,
   analyzePngWitness,
+  assertAuthoredSources,
   assertCodecSelection,
   assertRuntimeChromiumVersion,
   createBraveCaseEvidenceContract,
@@ -105,6 +106,9 @@ describe("rolling certification inventory", () => {
       "forced-h264": ["h264"],
       "full-ladder": ["av1", "vp9", "h265", "h264"]
     });
+    expect(policy.requirements.demos.map((demo: { sourceContract: string }) =>
+      demo.sourceContract
+    )).toEqual(["multi-source", "multi-source", "multi-source", "multi-source"]);
     expect(policy.requirements.soakSeconds).toBe(60);
     expect(new Set(policy.slots.map(({ id }: { id: string }) => id)).size)
       .toBe(policy.slots.length);
@@ -853,18 +857,18 @@ describe("certifying Brave evidence invariants", () => {
       "forced-h264",
       policy
     )).toThrowError("brave-run-forced-h264-not-selected");
-    const controllerH264 = codecSelectionReport(
+    const codecLabH264 = codecSelectionReport(
       "avc1.42E020",
       [],
       "video.1x"
     );
-    controllerH264.authoredSources = [controllerH264.authoredSources[3]];
-    expect(() => assertCodecSelection(
-      controllerH264,
+    codecLabH264.authoredSources = [codecLabH264.authoredSources[3]];
+    expect(() => assertAuthoredSources(
+      codecLabH264,
       "grass-rabbit-codecs",
       "full-ladder",
       policy
-    )).toThrowError("brave-run-codec-controller-modern-codec-required");
+    )).toThrowError("brave-run-authored-sources-mismatch");
   });
 
   it("rejects transparent or flat-black screenshots even when their PNG bytes differ", () => {
@@ -1044,9 +1048,8 @@ function codecSelectionReport(
 }
 
 function expectedTask7Codecs(policy: any, demo: any, mode: "forced-h264" | "full-ladder") {
-  if (mode === "forced-h264" || demo.sourceContract === "h264-only") return ["h264"];
-  if (demo.sourceContract === "codec-controller") return ["av1"];
-  return [...policy.requirements.authoredCodecsByMode["full-ladder"]];
+  if (demo.sourceContract === "h264-only") return ["h264"];
+  return [...policy.requirements.authoredCodecsByMode[mode]];
 }
 
 function rawTask7InteractionEvents(demo: any) {

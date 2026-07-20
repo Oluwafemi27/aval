@@ -147,7 +147,7 @@
               "route": "/codecs/",
               "playerSelector": "aval-player",
               "interactionSelector": "aval-player",
-              "sourceContract": "codec-controller",
+              "sourceContract": "multi-source",
               "renditionId": "video.1x",
               "states": ["idle", "entering", "hover", "exiting"]
             },
@@ -250,7 +250,7 @@
         "route": { "type": "string", "pattern": "^/[a-z0-9/-]*/$" },
         "playerSelector": { "type": "string", "minLength": 1, "maxLength": 128 },
         "interactionSelector": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "sourceContract": { "enum": ["multi-source", "codec-controller", "h264-only"] },
+        "sourceContract": { "enum": ["multi-source", "h264-only"] },
         "states": {
           "type": "array",
           "minItems": 2,

@@ -319,17 +319,14 @@ describe("immutable browser evidence validation", () => {
     ladder.selectedCodec = originalManifestSelectedCodec;
     await saveManifest();
 
-    const controller = fixture.manifest.slots[0].cases.find(({ id }: { id: string }) =>
+    const codecLab = fixture.manifest.slots[0].cases.find(({ id }: { id: string }) =>
       id === "grass-rabbit-codecs-full-ladder"
     );
-    const originalControllerCodecs = controller.expectedAuthoredCodecs;
-    const originalControllerSelectedCodec = controller.selectedCodec;
-    controller.expectedAuthoredCodecs = ["h264"];
-    controller.selectedCodec = "h264";
+    const originalCodecLabCodecs = codecLab.expectedAuthoredCodecs;
+    codecLab.expectedAuthoredCodecs = ["h264"];
     await saveManifest();
-    await expectFailure("evidence-codec-controller-selection-invalid");
-    controller.expectedAuthoredCodecs = originalControllerCodecs;
-    controller.selectedCodec = originalControllerSelectedCodec;
+    await expectFailure("evidence-authored-codecs-mismatch");
+    codecLab.expectedAuthoredCodecs = originalCodecLabCodecs;
     await saveManifest();
 
     const iosSlot = fixture.manifest.slots.find(({ slotId }: { slotId: string }) =>
@@ -852,9 +849,8 @@ function requiredEdges(demo: any) {
 }
 
 function expectedCodecs(policy: any, demo: any, mode: string) {
-  if (mode === "forced-h264" || demo.sourceContract === "h264-only") return ["h264"];
-  if (demo.sourceContract === "codec-controller") return ["av1"];
-  return [...policy.requirements.authoredCodecsByMode["full-ladder"]];
+  if (demo.sourceContract === "h264-only") return ["h264"];
+  return [...policy.requirements.authoredCodecsByMode[mode]];
 }
 
 function startupCodecDiagnostic(source: any, rendition: string, input: any) {

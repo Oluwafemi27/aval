@@ -1,5 +1,6 @@
 import {
   parseCompileBundleReport,
+  parseVideoCodecString,
   VIDEO_CODECS
 } from "@pixel-point/aval-format";
 
@@ -85,6 +86,16 @@ export function assertCodec(value) {
   if (!CODECS.includes(value)) {
     throw new TypeError("Codec must be one of av1, vp9, h265, or h264.");
   }
+}
+
+export function runtimeCodecFamily(value) {
+  const parsed = typeof value === "string"
+    ? parseVideoCodecString(value)
+    : undefined;
+  if (parsed === undefined || !CODECS.includes(parsed.family)) {
+    throw new TypeError("Prepared codec must identify an authored codec family.");
+  }
+  return parsed.family;
 }
 
 export function supportLabel(state) {
