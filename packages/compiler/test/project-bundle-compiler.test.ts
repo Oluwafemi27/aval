@@ -99,7 +99,7 @@ describe.skipIf(!HAS_VP9)("project codec bundle compiler", () => {
       assets: [{ codec: "vp9", path: join(outputPath, "vp9.avl") }]
     });
     expect(front.manifest).toMatchObject({
-      formatVersion: "1.0",
+      formatVersion: "1.1",
       codec: "vp9",
       bitstream: "frame",
       layout: "opaque",
@@ -139,7 +139,7 @@ describe.skipIf(!HAS_VP9)("project codec bundle compiler", () => {
       path: join(directOutput, "h264.avl")
     }]);
     expect(front.manifest).toMatchObject({
-      formatVersion: "1.0",
+      formatVersion: "1.1",
       codec: "h264",
       units: [{ id: "body.default", frameCount: 6 }]
     });
