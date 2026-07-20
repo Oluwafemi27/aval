@@ -126,30 +126,39 @@ describe("codec-neutral decoder worker", () => {
     }
   );
 
-  it.each([
-    ["Chromium", false],
-    ["WebKit", true]
-  ] as const)(
-    "accepts %s sRGB transfer normalization of limited BT.709",
-    (_browser, fullRange) => {
-      const frame = decodedFrame({
-        fullRange,
-        matrix: "bt709",
-        primaries: "bt709",
-        transfer: "iec61966-2-1"
-      });
+  it("accepts limited-range sRGB transfer normalization of BT.709", () => {
+    const frame = decodedFrame({
+      fullRange: false,
+      matrix: "bt709",
+      primaries: "bt709",
+      transfer: "iec61966-2-1"
+    });
 
-      expect(validateDecodedFrame(frame, {
-        ...expectedOutput(),
-        colorSpace: {
-          fullRange: false,
-          matrix: "bt709",
-          primaries: "bt709",
-          transfer: "bt709"
-        }
-      }, 0, 1_000)).toBe(16);
-    }
-  );
+    expect(validateDecodedFrame(frame, expectedOutput(), 0, 1_000)).toBe(16);
+  });
+
+  it("accepts Android's BT.709 transfer normalization as SMPTE-170M", () => {
+    const frame = decodedFrame({
+      fullRange: false,
+      matrix: "bt709",
+      primaries: "bt709",
+      transfer: "smpte170m"
+    });
+
+    expect(validateDecodedFrame(frame, expectedOutput(), 0, 1_000)).toBe(16);
+  });
+
+  it("rejects full-range sRGB metadata for limited BT.709", () => {
+    const frame = decodedFrame({
+      fullRange: true,
+      matrix: "bt709",
+      primaries: "bt709",
+      transfer: "iec61966-2-1"
+    });
+
+    expect(() => validateDecodedFrame(frame, expectedOutput(), 0, 1_000))
+      .toThrow(/color space/iu);
+  });
 
   it("rejects contradictory metadata with an sRGB transfer normalization", () => {
     const frame = decodedFrame({

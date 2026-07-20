@@ -1,4 +1,8 @@
 import {
+  classifyDecoderColor,
+  type DecoderColorTuple
+} from "@pixel-point/aval-format";
+import {
   isDecoderTerminalEvent,
   isDecoderWorkerEvent,
   type DecoderChunk,
@@ -6,10 +10,6 @@ import {
   type DecoderRunEvent
 } from "./decoder-protocol.js";
 import { ELEMENT_DECODER_CAPACITY } from "./decoder-capacity.js";
-import {
-  classifyDecoderColor,
-  type DecoderColorTuple
-} from "./decoder-color.js";
 import { sameAspectRatio } from "./media-geometry.js";
 import {
   captureDecoderFrameMetadata,
