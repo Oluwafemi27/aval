@@ -254,6 +254,7 @@ vi.mock("../src/decoder.js", () => ({
     public get available(): boolean { return true; }
     public async supported(): Promise<boolean> { return true; }
     public failure(): Promise<never> { return this.#failure; }
+    public terminalError(): Error | null { return null; }
     public createRun(samples: readonly { timestamp: number; displayedFrames: number }[]) {
       const generation = ++this.#runSequence;
       this.#activeRun = generation;
@@ -343,7 +344,15 @@ vi.mock("../src/renderer.js", () => ({
     public admit() { return { textureBytes: 3, runtimeBytes: 5 }; }
     public snapshot() {
       return {
-        backend: media.rendererBackend,
+        backendDetails: media.rendererBackend === "canvas2d"
+          ? Object.freeze({ kind: "canvas2d" as const })
+          : Object.freeze({
+              kind: "webgl2" as const,
+              uploadMode: "native-probing" as const,
+              nativeProbeAttempts: 0,
+              probeReadbackBytes: 0,
+              nativeProbeInFlight: false
+            }),
         cssWidth: 16,
         cssHeight: 16,
         backingWidth: 16,

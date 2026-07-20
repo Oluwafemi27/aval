@@ -157,6 +157,8 @@ vi.mock("../src/decoder.js", () => ({
       return new Promise<never>(() => undefined);
     }
 
+    public terminalError(): Error | null { return null; }
+
     public createRun(samples: readonly { displayedFrames: number }[]) {
       const generation = ++this.#run;
       const frameCount = samples.reduce(
@@ -220,6 +222,13 @@ vi.mock("../src/renderer.js", () => ({
     }
     public snapshot() {
       return {
+        backendDetails: Object.freeze({
+          kind: "webgl2" as const,
+          uploadMode: "native-probing" as const,
+          nativeProbeAttempts: 0,
+          probeReadbackBytes: 0,
+          nativeProbeInFlight: false
+        }),
         cssWidth: 0,
         cssHeight: 0,
         backingWidth: 1,
@@ -425,7 +434,7 @@ describe("player rendition selection", () => {
     await player.dispose();
   });
 
-  it("selects the lower rendition when the high plan cannot fit renderer resources", async () => {
+  it("keeps renderer resource admission failure terminal", async () => {
     selection.rejectHighResources = true;
     const Worker = fakeWorker([
       [true, true],
@@ -434,7 +443,9 @@ describe("player rendition selection", () => {
     vi.stubGlobal("Worker", Worker);
     vi.stubGlobal("VideoDecoder", class {});
     const controller = new AbortController();
-    const player = await createPlayer({
+    const terminal = playbackError("resource-rejection", "prepare", 7);
+    const failures: string[] = [];
+    const creation = createPlayer({
       canvas: new EventTarget() as HTMLCanvasElement,
       platform: testPlatform(),
       initialPresentation: { width: 16, height: 16, dpr: 1, fit: null },
@@ -457,19 +468,44 @@ describe("player rendition selection", () => {
       onRestart: () => undefined,
       onEvent: () => undefined,
       onFailure: () => undefined,
-      onPlaybackFailure: defaultPlaybackFailure
+      onPlaybackFailure: (code, operation) => {
+        failures.push(`${code}:${operation}`);
+        return terminal;
+      }
     });
-    player.activate();
 
-    expect(player.snapshot(false).selectedRendition).toBe("low");
+    await expect(creation).rejects.toBe(terminal);
+    expect(failures).toEqual(["resource-rejection:prepare"]);
     expect(selection.opens).toBe(1);
-    expect(Worker.instances()).toHaveLength(4);
-    expect(selection.rendererCreations).toBe(2);
+    expect(Worker.instances()).toHaveLength(2);
+    expect(selection.rendererCreations).toBe(1);
     expect(selection.presentations).toEqual([
-      [16, 16, 1, "contain"],
       [16, 16, 1, "contain"]
     ]);
-    await player.dispose();
+  });
+
+  it("rejects an invalid source codec before opening or probing", async () => {
+    const Worker = fakeWorker([[true, true]]);
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoDecoder", class {});
+    const terminal = playbackError("unsupported-profile", "prepare", 8);
+    const failures: string[] = [];
+
+    await expect(createPlayer({
+      ...selectionInput([
+        { src: "invalid.avl", codec: "definitely-not-h264", integrity: "" },
+        { src: "second.avl", codec: "avc1.640028", integrity: "" }
+      ]),
+      onPlaybackFailure: (code, operation) => {
+        failures.push(`${code}:${operation}`);
+        return terminal;
+      }
+    })).rejects.toBe(terminal);
+
+    expect(failures).toEqual(["unsupported-profile:prepare"]);
+    expect(selection.opens).toBe(0);
+    expect(Worker.instances()).toHaveLength(0);
+    expect(selection.rendererCreations).toBe(0);
   });
 
   it("raises one unsupported-profile failure before probing when WebCodecs is missing", async () => {
@@ -657,7 +693,7 @@ describe("player rendition selection", () => {
     await player.dispose();
   });
 
-  it("opens the next source only after all pure renderer admissions reject", async () => {
+  it("does not open another source after renderer admission rejects", async () => {
     selection.rejectResourceCreations = 2;
     const Worker = fakeWorker([
       [true, true],
@@ -666,14 +702,17 @@ describe("player rendition selection", () => {
     ]);
     vi.stubGlobal("Worker", Worker);
     vi.stubGlobal("VideoDecoder", class {});
-    const player = await createPlayer(selectionInput([
-      { src: "first.avl", codec: "avc1.640028", integrity: "" },
-      { src: "second.avl", codec: "avc1.640028", integrity: "" }
-    ]));
-    expect(selection.opens).toBe(2);
-    expect(player.snapshot(false).selectedRendition).toBe("high");
-    expect(Worker.instances()).toHaveLength(6);
-    await player.dispose();
+    const terminal = playbackError("resource-rejection", "prepare", 9);
+    await expect(createPlayer({
+      ...selectionInput([
+        { src: "first.avl", codec: "avc1.640028", integrity: "" },
+        { src: "second.avl", codec: "avc1.640028", integrity: "" }
+      ]),
+      onPlaybackFailure: () => terminal
+    })).rejects.toBe(terminal);
+    expect(selection.opens).toBe(1);
+    expect(Worker.instances()).toHaveLength(2);
+    expect(selection.rendererCreations).toBe(1);
   });
 });
 

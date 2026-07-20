@@ -3,8 +3,7 @@ import {
   RendererFailureError,
   type RendererDiagnosticOperation,
   type RendererDiagnosticPhase,
-  type RendererDiagnosticUploadPath,
-  type RendererFailureDiagnostic
+  type RendererDiagnosticUploadPath
 } from "./renderer-diagnostics.js";
 import {
   allocationBytes,
@@ -19,6 +18,10 @@ import {
   type RenderLayout,
   type RendererFit
 } from "./renderer-geometry.js";
+import type {
+  RendererContextChange,
+  RendererSnapshot
+} from "./renderer-contract.js";
 
 export interface Canvas2dRendererLimits {
   readonly maxTextureBytes?: number;
@@ -27,7 +30,7 @@ export interface Canvas2dRendererLimits {
   readonly copyTimeoutMs?: number;
   readonly setTimeout?: (callback: () => void, delay: number) => number;
   readonly clearTimeout?: (handle: number) => void;
-  readonly onContextChange?: (change: Readonly<Canvas2dContextChange>) => void;
+  readonly onContextChange?: (change: Readonly<RendererContextChange>) => void;
   readonly initialPresentation?: Readonly<{
     width: number;
     height: number;
@@ -36,36 +39,6 @@ export interface Canvas2dRendererLimits {
   }>;
   /** Internal deterministic surface factory; production uses ownerDocument. */
   readonly createCanvas?: (width: number, height: number) => HTMLCanvasElement;
-}
-
-export type Canvas2dContextChange =
-  | Readonly<{ state: "lost"; error: null }>
-  | Readonly<{ state: "restored"; error: null }>
-  | Readonly<{ state: "error"; error: RendererFailureError }>;
-
-export interface Canvas2dRendererSnapshot {
-  readonly backend: "canvas2d";
-  readonly cssWidth: number;
-  readonly cssHeight: number;
-  readonly backingWidth: number;
-  readonly backingHeight: number;
-  readonly effectiveDprX: number;
-  readonly effectiveDprY: number;
-  readonly contextLossCount: number;
-  readonly contextRecoveryCount: number;
-  readonly stagingBytes: number;
-  readonly residentBytes: number;
-  readonly textureBytes: 0;
-  readonly runtimeBytes: number;
-  readonly pendingOperations: number;
-  readonly sourceCopiesInFlight: number;
-  readonly uploadMode: "rgba-copy";
-  readonly nativeProbeAttempts: 0;
-  readonly probeReadbackBytes: 0;
-  readonly nativeProbeInFlight: false;
-  readonly resourceCount: number;
-  readonly contextListenerCount: number;
-  readonly failure: Readonly<RendererFailureDiagnostic> | null;
 }
 
 type State = "active" | "lost" | "error" | "disposed";
@@ -104,7 +77,7 @@ export class Canvas2dRenderer {
   readonly #clearTimeout: (handle: number) => void;
   readonly #createCanvas: (width: number, height: number) => HTMLCanvasElement;
   readonly #onContextChange:
-    ((change: Readonly<Canvas2dContextChange>) => void) | undefined;
+    ((change: Readonly<RendererContextChange>) => void) | undefined;
   readonly #lost: (event: Event) => void;
   readonly #restored: () => void;
   readonly #resident = new Map<string, CpuFrame>();
@@ -348,10 +321,10 @@ export class Canvas2dRenderer {
     );
   }
 
-  public snapshot(): Readonly<Canvas2dRendererSnapshot> {
+  public snapshot(): Readonly<RendererSnapshot> {
     if (this.#state === "disposed") {
       return Object.freeze({
-        backend: "canvas2d" as const,
+        backendDetails: Object.freeze({ kind: "canvas2d" as const }),
         cssWidth: this.#cssWidth,
         cssHeight: this.#cssHeight,
         backingWidth: this.#canvas.width,
@@ -366,10 +339,6 @@ export class Canvas2dRenderer {
         runtimeBytes: 0,
         pendingOperations: this.#pending,
         sourceCopiesInFlight: this.#sourceCopiesInFlight,
-        uploadMode: "rgba-copy" as const,
-        nativeProbeAttempts: 0 as const,
-        probeReadbackBytes: 0 as const,
-        nativeProbeInFlight: false as const,
         resourceCount: 0,
         contextListenerCount: 0,
         failure: this.#failureError?.diagnostic ?? null
@@ -385,7 +354,7 @@ export class Canvas2dRenderer {
     );
     const stagingBytes = this.#stagingBytes();
     return Object.freeze({
-      backend: "canvas2d" as const,
+      backendDetails: Object.freeze({ kind: "canvas2d" as const }),
       cssWidth: this.#cssWidth,
       cssHeight: this.#cssHeight,
       backingWidth: this.#canvas.width,
@@ -400,10 +369,6 @@ export class Canvas2dRenderer {
       runtimeBytes: checkedSum([stagingBytes, residentBytes, backingBytes]),
       pendingOperations: this.#pending,
       sourceCopiesInFlight: this.#sourceCopiesInFlight,
-      uploadMode: "rgba-copy" as const,
-      nativeProbeAttempts: 0 as const,
-      probeReadbackBytes: 0 as const,
-      nativeProbeInFlight: false as const,
       resourceCount: this.#resourceCount(),
       contextListenerCount: 2,
       failure: this.#failureError?.diagnostic ?? null
@@ -823,7 +788,7 @@ export class Canvas2dRenderer {
     this.#notify(Object.freeze({ state: "error", error }));
   }
 
-  #notify(change: Readonly<Canvas2dContextChange>): void {
+  #notify(change: Readonly<RendererContextChange>): void {
     queueMicrotask(() => {
       try { this.#onContextChange?.(change); } catch { /* Host callbacks are isolated. */ }
     });

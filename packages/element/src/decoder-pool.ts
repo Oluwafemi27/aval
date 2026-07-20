@@ -1,5 +1,6 @@
 import {
   Decoder,
+  DecoderLocalFailureError,
   type DecoderLimits,
   type DecoderOutputExpectation,
   type DecodeRun,
@@ -129,8 +130,26 @@ export class DecoderPool {
   }
 
   public async supported(): Promise<boolean> {
-    const support = await Promise.all(this.#lanes.map((lane) => lane.decoder.supported()));
-    return support.every(Boolean);
+    const support = await Promise.allSettled(
+      this.#lanes.map((lane) => lane.decoder.supported())
+    );
+    const failures = [
+      ...support.flatMap((result) => result.status === "rejected"
+        ? [result.reason]
+        : []),
+      ...this.#lanes.flatMap(({ decoder }) => {
+        const error = decoder.terminalError();
+        return error === null ? [] : [error];
+      })
+    ];
+    const terminal = failures.find((error) =>
+      !(error instanceof DecoderLocalFailureError &&
+        error.failure.kind === "unsupported-config")
+    );
+    if (terminal !== undefined) throw terminal;
+    return support.every((result) =>
+      result.status === "fulfilled" && result.value
+    );
   }
 
   /** Rejects when either required physical decoder lane becomes unusable. */

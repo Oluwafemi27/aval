@@ -22,12 +22,15 @@ describe("Canvas2dRenderer packed-alpha presentation", () => {
 
     const snapshot = renderer.snapshot();
     expect(snapshot).toMatchObject({
-      backend: "canvas2d",
+      backendDetails: { kind: "canvas2d" },
       backingWidth: 12,
       backingHeight: 8,
-      textureBytes: 0,
-      uploadMode: "rgba-copy"
+      textureBytes: 0
     });
+    expect(snapshot).not.toHaveProperty("uploadMode");
+    expect(snapshot).not.toHaveProperty("nativeProbeAttempts");
+    expect(snapshot).not.toHaveProperty("probeReadbackBytes");
+    expect(snapshot).not.toHaveProperty("nativeProbeInFlight");
     expect(snapshot.stagingBytes).toBe(4 * 12 * 4 + 3 * (3 * 2 * 4 * 2));
 
     const color = fixture.surface(3, 2, 0).context.lastImageData;

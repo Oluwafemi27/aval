@@ -5,8 +5,7 @@ import {
   type RendererDiagnosticContextAttributes,
   type RendererDiagnosticOperation,
   type RendererDiagnosticPhase,
-  type RendererDiagnosticUploadPath,
-  type RendererFailureDiagnostic
+  type RendererDiagnosticUploadPath
 } from "./renderer-diagnostics.js";
 import {
   allocationBytes,
@@ -25,8 +24,20 @@ import {
   selectRendererBackend,
   WebGlUnavailableError
 } from "./renderer-selection.js";
+import type {
+  RendererBackend,
+  RendererContextChange,
+  RendererSnapshot,
+  RendererUploadMode
+} from "./renderer-contract.js";
 
 export type { RenderLayout } from "./renderer-geometry.js";
+export type {
+  RendererBackendDetails,
+  RendererContextChange,
+  RendererSnapshot,
+  RendererUploadMode
+} from "./renderer-contract.js";
 
 export interface RendererLimits {
   readonly maxTextureBytes?: number;
@@ -53,38 +64,6 @@ export interface RendererLimits {
   }>;
 }
 
-export type RendererContextChange =
-  | Readonly<{ state: "lost"; error: null }>
-  | Readonly<{ state: "restored"; error: null }>
-  | Readonly<{ state: "error"; error: RendererFailureError }>;
-
-export type RendererUploadMode = "native-probing" | "native" | "rgba-copy";
-
-export interface RendererSnapshot {
-  readonly backend: "webgl2" | "canvas2d";
-  readonly cssWidth: number;
-  readonly cssHeight: number;
-  readonly backingWidth: number;
-  readonly backingHeight: number;
-  readonly effectiveDprX: number;
-  readonly effectiveDprY: number;
-  readonly contextLossCount: number;
-  readonly contextRecoveryCount: number;
-  readonly stagingBytes: number;
-  readonly residentBytes: number;
-  readonly textureBytes: number;
-  readonly runtimeBytes: number;
-  readonly pendingOperations: number;
-  readonly sourceCopiesInFlight: number;
-  readonly uploadMode: RendererUploadMode;
-  readonly nativeProbeAttempts: number;
-  readonly probeReadbackBytes: number;
-  readonly nativeProbeInFlight: boolean;
-  readonly resourceCount: number;
-  readonly contextListenerCount: number;
-  readonly failure: Readonly<RendererFailureDiagnostic> | null;
-}
-
 type State = "active" | "lost" | "error" | "disposed";
 // The manifest and caller own admission policy. Keep the renderer default at
 // the runtime's exact-arithmetic boundary instead of inventing a 64 MiB cap.
@@ -97,25 +76,6 @@ const NATIVE_PROBE_BYTES = NATIVE_PROBE_PIXELS * 4;
 const NATIVE_PROBE_ACCOUNTED_BYTES = NATIVE_PROBE_BYTES * 2;
 const MAX_NATIVE_PROBE_ATTEMPTS = 3;
 const ID = /^[a-z][a-z0-9._-]{0,63}$/;
-
-interface RendererBackend {
-  resize(
-    cssWidth: number,
-    cssHeight: number,
-    devicePixelRatio: number,
-    fit: string
-  ): void;
-  draw(frame: VideoFrame): Promise<void>;
-  store(group: string, index: number, frame: VideoFrame): Promise<void>;
-  drawStored(group: string, index: number): Promise<void>;
-  settled(): Promise<void>;
-  admit(residentCount: number): Readonly<{
-    textureBytes: number;
-    runtimeBytes: number;
-  }>;
-  snapshot(): Readonly<RendererSnapshot>;
-  dispose(): void;
-}
 
 export class Renderer implements RendererBackend {
   readonly #backend: RendererBackend;
@@ -556,7 +516,13 @@ class WebGl2Renderer {
       : 0;
     const residentBytes = 0;
     return Object.freeze({
-      backend: "webgl2" as const,
+      backendDetails: Object.freeze({
+        kind: "webgl2" as const,
+        uploadMode: nativeUploadMode(this.#native),
+        nativeProbeAttempts: this.#nativeProbeAttempts,
+        probeReadbackBytes: this.#probeReadbackBytes(),
+        nativeProbeInFlight: this.#nativeProbeInFlight
+      }),
       cssWidth: this.#cssWidth,
       cssHeight: this.#cssHeight,
       backingWidth: this.#canvas.width,
@@ -577,10 +543,6 @@ class WebGl2Renderer {
       ]),
       pendingOperations: this.#pending,
       sourceCopiesInFlight: this.#sourceCopiesInFlight,
-      uploadMode: nativeUploadMode(this.#native),
-      nativeProbeAttempts: this.#nativeProbeAttempts,
-      probeReadbackBytes: this.#probeReadbackBytes(),
-      nativeProbeInFlight: this.#nativeProbeInFlight,
       resourceCount: Number(this.#program !== null) +
         this.#streams.length +
         this.#resident.size,

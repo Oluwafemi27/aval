@@ -14,7 +14,10 @@ import {
   type MotionGraphResult,
   type MotionGraphSnapshot
 } from "@pixel-point/aval-graph";
-import { maximumDecodedRgbaBytes } from "@pixel-point/aval-format";
+import {
+  maximumDecodedRgbaBytes,
+  parseVideoCodecString
+} from "@pixel-point/aval-format";
 import {
   type DecodeRun,
   type DecodeSample
@@ -51,8 +54,7 @@ import type {
 import {
   Renderer,
   type RenderLayout,
-  type RendererContextChange,
-  type RendererSnapshot
+  type RendererContextChange
 } from "./renderer.js";
 import { deriveRenderLayout } from "./renderer-geometry.js";
 import {
@@ -73,6 +75,12 @@ import {
   retainPlaybackLifecycleCounters,
   saturatingIncrement
 } from "./playback-lifecycle.js";
+import {
+  retryableCandidateOutcome,
+  unsupportedConfigCandidateOutcome,
+  type RetryableCandidateRejection
+} from "./provisional-candidate-outcome.js";
+import { orchestrateProvisionalCandidates } from "./provisional-startup.js";
 
 type State = Manifest["states"][number];
 
@@ -136,6 +144,22 @@ const CANDIDATE_PREPARE_MS = 2_500;
 const CONTEXT_RESTORE_MS = 5_000;
 const MAX_RETAINED_DECODER_DIAGNOSTICS = 16;
 const MAX_RETAINED_RENDERER_DIAGNOSTICS = 16;
+const EMPTY_RENDERER_PRESENTATION: PlayerSnapshot["presentation"] = Object.freeze({
+  cssWidth: 0,
+  cssHeight: 0,
+  backingWidth: 0,
+  backingHeight: 0,
+  effectiveDprX: 0,
+  effectiveDprY: 0,
+  stagingBytes: 0,
+  residentBytes: 0,
+  textureBytes: 0,
+  runtimeBytes: 0,
+  pendingOperations: 0,
+  sourceCopiesInFlight: 0,
+  resourceCount: 0,
+  contextListenerCount: 0
+});
 type AdvanceOutcome = "progressed" | "waiting-route";
 
 const COLOR = Object.freeze({
@@ -160,69 +184,68 @@ export async function createPlayer(
     lastRejectionCode: "unsupported-profile"
   };
   try {
-    for (;;) {
-      const publications = new PublicationGate(
-        input,
-        provisionalPlaybackFailure
-      );
-      let candidate: ProvisionalPlayer;
-      try {
-        candidate = await selectPlayer(
-          publications.input,
-          deadline,
-          publications,
-          state
+    const candidate = await orchestrateProvisionalCandidates<ProvisionalPlayer>({
+      next: async () => {
+        const publications = new PublicationGate(
+          input,
+          provisionalPlaybackFailure
         );
-      } catch (error) {
-        publications.discard();
-        throw error;
-      }
-      try {
-        await input.onCandidate?.(candidate.player);
-        if (candidate.requiresQualification) {
-          await candidate.player.prepare();
-          deadline.complete();
-          candidate.player.adoptPreparationParent(deadline);
+        try {
+          return await selectPlayer(
+            publications.input,
+            deadline,
+            publications,
+            state
+          );
+        } catch (error) {
+          publications.discard();
+          throw error;
         }
-        publications.commit();
-        return candidate.player;
-      } catch (error) {
-        publications.discard();
+      },
+      qualify: async (current) => {
+        await input.onCandidate?.(current.player);
+        if (current.requiresQualification) {
+          await current.player.prepare();
+          deadline.complete();
+          current.player.adoptPreparationParent(deadline);
+        }
+      },
+      localFailure: (current) => current.player.provisionalFailure(),
+      retire: async (current) => {
+        current.publications.discard();
         let snapshot: Readonly<PlayerSnapshot> | null = null;
-        let snapshotFailure = false;
         let snapshotError: unknown;
         try {
-          snapshot = candidate.player.snapshot(false);
+          snapshot = current.player.snapshot(false);
           state.decoderDiagnostics = mergePlayerDecoderDiagnostics(
             state.decoderDiagnostics,
             snapshot.decoderDiagnostics
           );
-        } catch (caught) {
-          snapshotFailure = true;
-          snapshotError = caught;
+        } catch (error) {
+          snapshotError = error;
         }
-        let disposalFailure = false;
         let disposalError: unknown;
-        try { await candidate.player.dispose(); }
-        catch (caught) {
-          disposalFailure = true;
-          disposalError = caught;
-        }
-        if (disposalFailure) throw disposalError;
-        if (snapshotFailure || snapshot === null) throw snapshotError;
-        if (
-          deadline.timedOut || input.signal.aborted ||
-          !retryableStartupFailure(error, snapshot, candidate)
-        ) throw error;
-        const code = playbackErrorFailureCode(error) ?? "worker-decode-failure";
+        try { await current.player.dispose(); }
+        catch (error) { disposalError = error; }
+        if (disposalError !== undefined) throw disposalError;
+        if (snapshot === null) throw snapshotError;
+        return Object.freeze({
+          retryAllowed: (snapshot.cleanupFailureCount ?? 0) === 0
+        });
+      },
+      cancelled: () => deadline.timedOut || input.signal.aborted,
+      selected: (current) => current.publications.commit(),
+      rejected: (current, rejection) => {
+        const code = candidateRejectionFailureCode(rejection);
         state.lastRejectionCode = code;
         state.reports.push(candidateReport(
-          candidate.rendition.id,
-          candidate.rank,
+          current.rendition.id,
+          current.rank,
           code
         ));
       }
-    }
+    });
+    return candidate.player;
   } catch (error) {
     const timedOut = deadline.timedOut && !input.signal.aborted;
     deadline.dispose();
@@ -261,6 +284,8 @@ async function selectPlayer(
       reportResourceBytes(input, null);
       retained = null;
     }
+    const sourceCodec = parseVideoCodecString(source.codec);
+    if (sourceCodec === undefined) throw unsupportedProfileError();
     const asset = await Asset.open(
       source as Readonly<Source>,
       input.baseUrl,
@@ -270,7 +295,7 @@ async function selectPlayer(
     );
     reportResourceBytes(input, asset);
     retained = asset;
-    if (asset.manifest.codec !== sourceCodecFamily(source.codec) ||
+    if (asset.manifest.codec !== sourceCodec.family ||
       asset.manifest.renditions.length === 0) {
       retained = asset;
       unavailable = "no-video-rendition";
@@ -419,7 +444,7 @@ async function selectPlayer(
         clearTimeout: input.platform.clearTimeout,
         sampleFrameRate: asset.manifest.frameRate
       });
-      const disposeDecoders = (): readonly Readonly<DecoderPoolDiagnostic>[] => {
+      const disposeDecoders = (): void => {
         const diagnostics = decoders.snapshot().decoderDiagnostics;
         state.decoderDiagnostics = mergePlayerDecoderDiagnostics(
           state.decoderDiagnostics,
@@ -431,21 +456,19 @@ async function selectPlayer(
           )
         );
         decoders.dispose();
-        return diagnostics;
       };
       let supported = false;
       try { supported = await limit(decoders.supported(), deadline.signal); }
       catch (error) {
-        const diagnostics = disposeDecoders();
+        disposeDecoders();
         if (deadline.timedOut) {
           await asset.dispose();
           reportResourceBytes(input, null);
           throw preparationTimeout();
         }
-        if (
-          !deadline.signal.aborted &&
-          retryableDecoderSupportProbeFailure(diagnostics)
-        ) {
+        const outcome = retryableCandidateOutcome(error);
+        if (!deadline.signal.aborted &&
+          outcome?.rejection.stage === "probe") {
           unavailable = "codec-unsupported";
           state.lastRejectionCode = "unsupported-profile";
           state.reports.push(candidateReport(rendition.id, rank, unavailable));
@@ -456,18 +479,15 @@ async function selectPlayer(
         throw error;
       }
       if (!supported) {
-        const diagnostics = disposeDecoders();
-        if (!retryableDecoderSupportProbeFailure(diagnostics)) {
-          await asset.dispose();
-          reportResourceBytes(input, null);
-          throw provisionalPlaybackFailure(
-            "worker-decode-failure",
-            "prepare"
-          );
-        }
+        disposeDecoders();
+        const outcome = unsupportedConfigCandidateOutcome();
         unavailable = "codec-unsupported";
         state.lastRejectionCode = "unsupported-profile";
-        state.reports.push(candidateReport(rendition.id, rank, unavailable));
+        state.reports.push(candidateReport(
+          rendition.id,
+          rank,
+          candidateRejectionFailureCode(outcome.rejection)
+        ));
         continue;
       }
       let renderer: Renderer;
@@ -514,16 +534,9 @@ async function selectPlayer(
         disposeDecoders();
         renderer.dispose();
         rendererRef = null;
-        reportResourceBytes(input, asset);
-        if (!admissionFailure(error)) {
-          await asset.dispose();
-          reportResourceBytes(input, null);
-          throw error;
-        }
-        unavailable = "resource-budget";
-        state.lastRejectionCode = "resource-rejection";
-        state.reports.push(candidateReport(rendition.id, rank, unavailable));
-        continue;
+        await asset.dispose();
+        reportResourceBytes(input, null);
+        throw error;
       }
       const nextRenditionIndex = renditionIndex + 1;
       state.cursor = nextRenditionIndex < asset.manifest.renditions.length
@@ -565,9 +578,6 @@ async function selectPlayer(
   await retained.dispose();
   reportResourceBytes(input, null);
   if (rendition === undefined) throw new Error("Invalid AVAL asset");
-  if (unavailable === "resource-budget") {
-    throw new SelectionExhaustedError("resource-rejection");
-  }
   throw new SelectionExhaustedError(state.lastRejectionCode);
 }
 
@@ -603,6 +613,7 @@ class PlayerImpl implements Player {
   readonly #terminalSignal: Promise<never>;
   readonly #rejectTerminalSignal: (reason: unknown) => void;
   #preparation: Promise<PrepareResult> | null = null;
+  #provisionalFailure: unknown = undefined;
   #recovery: Promise<PrepareResult> | null = null;
   #terminalWork: Promise<AvalPlaybackError> | null = null;
   #graph: MotionGraphEngine | null = null;
@@ -776,6 +787,10 @@ class PlayerImpl implements Player {
       throw new Error("AVAL preparation parent ownership is invalid");
     }
     this.#preparationParent = parent;
+  }
+
+  public provisionalFailure(): unknown {
+    return this.#provisionalFailure;
   }
 
   public prepare(options: Readonly<{
@@ -980,42 +995,26 @@ class PlayerImpl implements Player {
     this.#captureDecoderLifecycle(decoders.playbackLifecycle);
     this.#captureDecoderDiagnostics(decoders.decoderDiagnostics);
     const renderer = this.#renderer ?? this.#retiredRenderer;
-    const rendererSnapshot: Readonly<RendererSnapshot> =
-      renderer?.snapshot() ?? Object.freeze({
-      backend: "webgl2",
-      cssWidth: 0,
-      cssHeight: 0,
-      backingWidth: 0,
-      backingHeight: 0,
-      effectiveDprX: 0,
-      effectiveDprY: 0,
-      contextLossCount: 0,
-      contextRecoveryCount: 0,
-      stagingBytes: 0,
-      residentBytes: 0,
-      textureBytes: 0,
-      runtimeBytes: 0,
-      pendingOperations: 0,
-      sourceCopiesInFlight: 0,
-      uploadMode: "native-probing",
-      nativeProbeAttempts: 0,
-      probeReadbackBytes: 0,
-      nativeProbeInFlight: false,
-      resourceCount: 0,
-      contextListenerCount: 0,
-      failure: null
-    });
-    this.#captureRendererDiagnostic(rendererSnapshot.failure);
-    const {
-      backend: _rendererBackend,
-      failure: _rendererFailure,
-      uploadMode: _uploadMode,
-      nativeProbeAttempts: _nativeProbeAttempts,
-      probeReadbackBytes: _probeReadbackBytes,
-      nativeProbeInFlight: _nativeProbeInFlight,
-      ...presentationValues
-    } = rendererSnapshot;
-    const presentation = Object.freeze(presentationValues);
+    let rendererBackend: PlayerSnapshot["rendererBackend"] = null;
+    let rendererContextLossCount = 0;
+    let rendererContextRecoveryCount = 0;
+    let presentation: PlayerSnapshot["presentation"] =
+      EMPTY_RENDERER_PRESENTATION;
+    if (renderer !== null) {
+      const rendererSnapshot = renderer.snapshot();
+      this.#captureRendererDiagnostic(rendererSnapshot.failure);
+      rendererContextLossCount = rendererSnapshot.contextLossCount;
+      rendererContextRecoveryCount = rendererSnapshot.contextRecoveryCount;
+      const {
+        backendDetails,
+        failure: _rendererFailure,
+        contextLossCount: _rendererContextLossCount,
+        contextRecoveryCount: _rendererContextRecoveryCount,
+        ...presentationValues
+      } = rendererSnapshot;
+      rendererBackend = backendDetails.kind;
+      presentation = Object.freeze(presentationValues);
+    }
     const graph = this.#graph?.snapshot();
     return Object.freeze({
       requestedState: graph?.requestedState ?? null,
@@ -1023,9 +1022,7 @@ class PlayerImpl implements Player {
       transitioning: graph?.isTransitioning ?? false,
       selectedRendition: this.#staticReason === null ? this.#rendition.id : null,
       selectedCodec: this.#staticReason === null ? this.#rendition.codec : null,
-      rendererBackend: renderer === null
-        ? null
-        : rendererSnapshot.backend,
+      rendererBackend,
       selectedBitDepth: this.#staticReason === null ? this.#rendition.bitDepth : null,
       transportMode: asset.mode,
       declaredFileBytes: asset.declaredFileBytes,
@@ -1037,10 +1034,10 @@ class PlayerImpl implements Player {
       interestedWaiters: asset.interestedWaiters,
       workerCount: decoders.workerCount,
       openFrames: decoders.openFrames,
-      contextLossCount: Math.max(this.#contextLosses, presentation.contextLossCount),
+      contextLossCount: Math.max(this.#contextLosses, rendererContextLossCount),
       contextRecoveryCount: Math.max(
         this.#contextRecoveries,
-        presentation.contextRecoveryCount
+        rendererContextRecoveryCount
       ),
       cleanupFailureCount: this.#cleanupFailureCount,
       playbackLifecycle: freezePlaybackLifecycleCounters({
@@ -1097,6 +1094,9 @@ class PlayerImpl implements Player {
       this.#preparationDeadline.complete();
       return result;
     } catch (error) {
+      if (this.#provisionalFailure === undefined) {
+        this.#provisionalFailure = error;
+      }
       if (this.#disposed || this.#input.signal.aborted) {
         throw playerAbortReason(this.#input.signal);
       }
@@ -2276,6 +2276,9 @@ class PlayerImpl implements Player {
       this.#animationResourceRetirement !== null ||
       this.#animationResourcesRetired
     )) return;
+    if (!this.#prepared && this.#provisionalFailure === undefined) {
+      this.#provisionalFailure = reason;
+    }
     if (reason instanceof RendererFailureError) {
       this.#captureRendererDiagnostic(reason.diagnostic);
     }
@@ -2449,12 +2452,6 @@ function reduced(policy: string, host: boolean): boolean {
   return policy === "reduce" || policy === "auto" && host;
 }
 
-function sourceCodecFamily(codec: string): Manifest["codec"] {
-  return codec.startsWith("av01.") ? "av1"
-    : codec.startsWith("vp09.") ? "vp9"
-      : codec.startsWith("hvc1.") ? "h265" : "h264";
-}
-
 function decodedSurfaceBytes(
   manifest: Readonly<Manifest>,
   rendition: Readonly<Rendition>
@@ -2549,9 +2546,8 @@ function candidateReport(
     reason === "decoder-queued") {
     return Object.freeze({ rendition, rank, outcome: "eligible" as const, failure: null });
   }
-  const code: RuntimeFailureCode = reason === "resource-budget"
-    ? "resource-rejection"
-    : reason === "codec-unsupported" || reason === "no-video-rendition"
+  const code: RuntimeFailureCode = reason === "codec-unsupported" ||
+    reason === "no-video-rendition"
       ? "unsupported-profile"
       : reason;
   return Object.freeze({
@@ -2568,8 +2564,7 @@ function candidateReport(
 
 type CandidateRejectionReason =
   | "codec-unsupported"
-  | "no-video-rendition"
-  | "resource-budget";
+  | "no-video-rendition";
 
 class SelectionExhaustedError extends Error {
   public readonly failureCode: RuntimeFailureCode;
@@ -2598,140 +2593,12 @@ function playbackErrorFailureCode(error: unknown): RuntimeFailureCode | null {
   return isRuntimeFailureCode(error.failure.code) ? error.failure.code : null;
 }
 
-function retryableStartupFailure(
-  error: unknown,
-  snapshot: Readonly<PlayerSnapshot>,
-  candidate: Readonly<Pick<
-    ProvisionalPlayer,
-    "sourceIndex" | "rendition"
-  >>
-): boolean {
-  if ((snapshot.cleanupFailureCount ?? 0) !== 0) return false;
-  const failureCode = playbackErrorFailureCode(error);
-  if (
-    failureCode !== "worker-decode-failure" &&
-    failureCode !== "renderer-failure"
-  ) return false;
-  const decoderDiagnostics = snapshot.decoderDiagnostics.filter((diagnostic) =>
-    candidateDiagnostic(diagnostic, candidate)
-  );
-  const rendererDiagnostics = snapshot.rendererDiagnostics.filter((diagnostic) =>
-    candidateDiagnostic(diagnostic, candidate)
-  );
-  return retryableStartupEvidence(
-    decoderDiagnostics,
-    rendererDiagnostics,
-    "qualification",
-    failureCode === "worker-decode-failure" ? "decoder" : "renderer"
-  );
-}
-
-function retryableDecoderSupportProbeFailure(
-  diagnostics: readonly Readonly<DecoderPoolDiagnostic>[]
-): boolean {
-  return retryableStartupEvidence(diagnostics, [], "probe", "decoder");
-}
-
-/** @internal Exact test seam for the one retryable renderer-qualification gap. */
-export function retryableRgbaCopyStartupFailure(
-  snapshot: Readonly<Pick<
-    PlayerSnapshot,
-    "cleanupFailureCount" | "rendererDiagnostics"
-  >>,
-  candidate: Readonly<{
-    readonly sourceIndex: number;
-    readonly rendition: Readonly<Pick<Rendition, "id" | "codec">>;
-  }>
-): boolean {
-  if ((snapshot.cleanupFailureCount ?? 0) !== 0) return false;
-  return retryableStartupEvidence(
-    [],
-    snapshot.rendererDiagnostics.filter((diagnostic) =>
-      candidateDiagnostic(diagnostic, candidate)
-    ),
-    "qualification",
-    "renderer"
-  );
-}
-
-type StartupEvidenceStage = "probe" | "qualification";
-type StartupEvidenceRequirement = "decoder" | "renderer";
-
-/**
- * Candidate fallback is safe only when every observed diagnostic has an exact,
- * narrowly retryable shape and the failing subsystem supplied such evidence.
- */
-function retryableStartupEvidence(
-  decoderDiagnostics: readonly Readonly<DecoderPoolDiagnostic>[],
-  rendererDiagnostics: readonly Readonly<RendererFailureDiagnostic>[],
-  stage: StartupEvidenceStage,
-  required: StartupEvidenceRequirement
-): boolean {
-  let requiredEvidence = false;
-  for (const diagnostic of decoderDiagnostics) {
-    if (!retryableDecoderStartupDiagnostic(diagnostic, stage)) return false;
-    if (required === "decoder") requiredEvidence = true;
-  }
-  for (const diagnostic of rendererDiagnostics) {
-    if (stage !== "qualification" ||
-      !retryableRendererStartupDiagnostic(diagnostic)) return false;
-    if (required === "renderer") requiredEvidence = true;
-  }
-  return requiredEvidence;
-}
-
-function retryableDecoderStartupDiagnostic(
-  diagnostic: Readonly<DecoderPoolDiagnostic>,
-  stage: StartupEvidenceStage
-): boolean {
-  if (stage === "probe") {
-    if (diagnostic.phase !== "probe") return false;
-    if (diagnostic.code === "unsupported-config") return true;
-    return diagnostic.code === "decoder-operation" &&
-      retryableDecoderException(diagnostic.exception?.name);
-  }
-  const qualificationPhase = diagnostic.phase === "configure" ||
-    diagnostic.phase === "decode" || diagnostic.phase === "flush" ||
-    diagnostic.phase === "output-validation";
-  if (!qualificationPhase) return false;
-  if (diagnostic.code === "invalid-output") {
-    return diagnostic.phase === "output-validation" &&
-      diagnostic.outputFailure !== null;
-  }
-  if (diagnostic.code === "unsupported-config") return true;
-  return diagnostic.code === "decoder-operation" &&
-    retryableDecoderException(diagnostic.exception?.name);
-}
-
-function retryableRendererStartupDiagnostic(
-  diagnostic: Readonly<RendererFailureDiagnostic>
-): boolean {
-  return diagnostic.phase === "rgba-copy" &&
-    diagnostic.operation === "runtime" &&
-    diagnostic.exception?.name === "NotSupportedError" &&
-    diagnostic.glError === null &&
-    diagnostic.contextLost === false &&
-    diagnostic.uploadPath === "rgba-copy";
-}
-
-function retryableDecoderException(name: string | undefined): boolean {
-  return name === "EncodingError" || name === "NotSupportedError";
-}
-
-function candidateDiagnostic(
-  diagnostic: Readonly<{
-    readonly sourceIndex: number;
-    readonly rendition: string;
-    readonly codec: string;
-  }>,
-  candidate: Readonly<{
-    readonly sourceIndex: number;
-    readonly rendition: Readonly<Pick<Rendition, "id" | "codec">>;
-  }>
-): boolean {
-  return diagnostic.sourceIndex === candidate.sourceIndex &&
-    diagnostic.rendition === candidate.rendition.id &&
-    diagnostic.codec === candidate.rendition.codec;
+function candidateRejectionFailureCode(
+  rejection: Readonly<RetryableCandidateRejection>
+): RuntimeFailureCode {
+  return rejection.stage === "probe"
+    ? "unsupported-profile"
+    : "worker-decode-failure";
 }
 
 function isRuntimeFailureCode(value: unknown): value is RuntimeFailureCode {

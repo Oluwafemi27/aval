@@ -84,6 +84,25 @@ export interface DecoderSnapshot {
   readonly diagnostic: Readonly<DecoderFailureDiagnostic> | null;
 }
 
+export type DecoderLocalFailure =
+  | Readonly<{ kind: "unsupported-config" }>
+  | Readonly<{
+      kind: "operation-rejected";
+      phase: "configure" | "decode" | "flush";
+      errorName: "NotSupportedError" | "EncodingError";
+    }>
+  | Readonly<{ kind: "decoded-metadata-incompatible" }>;
+
+export class DecoderLocalFailureError extends Error {
+  public constructor(
+    public readonly failure: Readonly<DecoderLocalFailure>,
+    public readonly reason: Error
+  ) {
+    super(reason.message);
+    this.name = "DecoderLocalFailureError";
+  }
+}
+
 const PROGRESS_MS = 2_000;
 const MAX_BYTES = Number.MAX_SAFE_INTEGER;
 const DEFAULT_DECODER_COLOR: Readonly<DecoderColorTuple> = Object.freeze([
@@ -201,6 +220,11 @@ export class Decoder {
   /** Rejects exactly once if this physical lane becomes unusable. */
   public failure(): Promise<never> {
     return this.#failure.promise;
+  }
+
+  /** Exact terminal cause for aggregate decoder-pool support arbitration. */
+  public terminalError(): Error | null {
+    return this.#error ?? null;
   }
 
   public createRun(samples: readonly Readonly<DecodeSample>[]): DecodeRun {
@@ -643,16 +667,72 @@ export class Decoder {
     )
   ): void {
     if (this.#disposed || this.#error !== undefined) return;
-    this.#error = error;
+    const reported = decoderReportedError(error, diagnostic);
+    this.#error = reported;
     this.#diagnostic = diagnostic;
-    this.#failure.reject(error);
-    this.#support.reject(error);
+    this.#failure.reject(reported);
+    this.#support.reject(reported);
     const run = this.#run;
-    run?.fail(error);
+    run?.fail(reported);
     if (run !== null) this.#deleteRun(run);
     this.#lane = { phase: "terminal" };
     this.#worker.terminate();
   }
+}
+
+function decoderReportedError(
+  error: Error,
+  diagnostic: Readonly<DecoderFailureDiagnostic>
+): Error {
+  if (error instanceof DecoderLocalFailureError) return error;
+  const failure = decoderLocalFailure(diagnostic);
+  return failure === null ? error : new DecoderLocalFailureError(failure, error);
+}
+
+function decoderLocalFailure(
+  diagnostic: Readonly<DecoderFailureDiagnostic>
+): Readonly<DecoderLocalFailure> | null {
+  if (diagnostic.phase === "probe") {
+    if (diagnostic.code === "unsupported-config" ||
+      diagnostic.code === "decoder-operation" &&
+      retryableDecoderErrorName(diagnostic.exception?.name)) {
+      return Object.freeze({ kind: "unsupported-config" });
+    }
+    return null;
+  }
+  if (
+    diagnostic.phase === "output-validation" &&
+    diagnostic.code === "invalid-output" &&
+    diagnostic.outputFailure !== null
+  ) {
+    return Object.freeze({ kind: "decoded-metadata-incompatible" });
+  }
+  if (
+    (diagnostic.phase === "configure" ||
+      diagnostic.phase === "decode" ||
+      diagnostic.phase === "flush") &&
+    (diagnostic.code === "decoder-operation" ||
+      diagnostic.phase === "configure" &&
+      diagnostic.code === "unsupported-config")
+  ) {
+    const errorName = diagnostic.code === "unsupported-config"
+      ? "NotSupportedError"
+      : diagnostic.exception?.name;
+    if (retryableDecoderErrorName(errorName)) {
+      return Object.freeze({
+        kind: "operation-rejected",
+        phase: diagnostic.phase,
+        errorName
+      });
+    }
+  }
+  return null;
+}
+
+function retryableDecoderErrorName(
+  value: string | undefined
+): value is "NotSupportedError" | "EncodingError" {
+  return value === "NotSupportedError" || value === "EncodingError";
 }
 
 function validateSampleFrameRate(

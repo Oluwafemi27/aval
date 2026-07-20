@@ -1,18 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AvalPlaybackError } from "../src/errors.js";
-import type { PlayerRendererDiagnostic } from "../src/player-contract.js";
+import type { RendererFailureDiagnostic } from "../src/renderer-diagnostics.js";
 import {
-  createRendererFailureDiagnostic,
-  RendererFailureError,
-  type RendererFailureDiagnostic
-} from "../src/renderer-diagnostics.js";
+  CODECS,
+  FAMILIES,
+  SyntheticAsset,
+  codecFamily,
+  createCandidateHarness,
+  eventually,
+  familyForWidth,
+  invalidOutputError,
+  prepareCandidateAttempt,
+  requirePrepared,
+  rgbaCopyFailureError,
+  type CodecFamily
+} from "./support/provisional-startup-harness.js";
+import { installSafariZeroDurationDecoder } from
+  "./support/safari-zero-duration-decoder.js";
 
-type CodecFamily = "av1" | "vp9" | "h265" | "h264";
 type StartupOutcome =
   | "success"
   | "invalid-output"
   | "encoding-error"
   | "unsupported-config"
+  | "configure-not-supported"
+  | "decode-not-supported"
+  | "decode-encoding-rejected"
+  | "flush-not-supported"
+  | "flush-encoding-rejected"
   | "transport-error"
   | "probe-unsupported-config"
   | "probe-not-supported"
@@ -50,7 +64,7 @@ vi.mock("../src/asset.js", () => ({
       const family = codecFamily(source.codec);
       startup.opens.push(family);
       startup.operations.push(`asset-open:${family}`);
-      return new SyntheticAsset(family, source.codec);
+      return new SyntheticAsset(startup, family, source.codec);
     }
   }
 }));
@@ -67,6 +81,7 @@ vi.mock("../src/decoder.js", async () => {
     "../src/decoder.js"
   );
   return {
+    DecoderLocalFailureError: actual.DecoderLocalFailureError,
     Decoder: class SyntheticDecoder {
     public encodedBytes = 0;
     readonly #codec: string;
@@ -79,6 +94,7 @@ vi.mock("../src/decoder.js", async () => {
     readonly #lane: 0 | 1;
     #rejectFailure!: (reason: unknown) => void;
     #failureSettled = false;
+    #terminalError: Error | null = null;
     #disposed = false;
     #generation = 0;
     #diagnostic: Readonly<Record<string, unknown>> | null = null;
@@ -141,8 +157,7 @@ vi.mock("../src/decoder.js", async () => {
         const error = new Error(
           `synthetic unsupported probe config for ${this.#codec}`
         );
-        this.#fail(error, "probe", "unsupported-config");
-        throw error;
+        throw this.#fail(error, "probe", "unsupported-config");
       }
       if (outcome === "probe-not-supported" ||
         outcome === "probe-encoding-error") {
@@ -150,25 +165,23 @@ vi.mock("../src/decoder.js", async () => {
         error.name = outcome === "probe-not-supported"
           ? "NotSupportedError"
           : "EncodingError";
-        this.#fail(error, "probe", "decoder-operation");
-        throw error;
+        throw this.#fail(error, "probe", "decoder-operation");
       }
       if (outcome === "probe-transport-error") {
         const error = new Error(
           `synthetic probe transport failure for ${this.#codec}`
         );
-        this.#fail(error, "probe", "transport");
-        throw error;
+        throw this.#fail(error, "probe", "transport");
       }
       if (outcome === "probe-arbitrary-error") {
         const error = new Error(`synthetic arbitrary probe failure for ${this.#codec}`);
-        this.#fail(error, "probe", "decoder-operation");
-        throw error;
+        throw this.#fail(error, "probe", "decoder-operation");
       }
       return true;
     }
 
     public failure(): Promise<never> { return this.#failure; }
+    public terminalError(): Error | null { return this.#terminalError; }
 
     public createRun(samples: readonly Readonly<{
       displayedFrames: number;
@@ -206,6 +219,21 @@ vi.mock("../src/decoder.js", async () => {
         const error = new Error(`synthetic decode failure for ${this.#codec}`);
         error.name = "EncodingError";
         queueMicrotask(() => this.#fail(error, "decode", "decoder-operation"));
+      } else if (
+        outcome === "configure-not-supported" ||
+        outcome === "decode-not-supported" ||
+        outcome === "decode-encoding-rejected" ||
+        outcome === "flush-not-supported" ||
+        outcome === "flush-encoding-rejected"
+      ) {
+        const phase = outcome.startsWith("configure")
+          ? "configure"
+          : outcome.startsWith("flush") ? "flush" : "decode";
+        const error = new Error(`synthetic ${outcome} for ${this.#codec}`);
+        error.name = outcome.endsWith("not-supported")
+          ? "NotSupportedError"
+          : "EncodingError";
+        queueMicrotask(() => this.#fail(error, phase, "decoder-operation"));
       } else if (outcome === "unsupported-config") {
         const error = new Error(`synthetic unsupported config for ${this.#codec}`);
         error.name = "NotSupportedError";
@@ -270,8 +298,8 @@ vi.mock("../src/decoder.js", async () => {
       reason: Error,
       phase = "output-validation",
       code = "invalid-output"
-    ): void {
-      if (this.#failureSettled || this.#disposed) return;
+    ): Error {
+      if (this.#failureSettled || this.#disposed) return reason;
       this.#failureSettled = true;
       this.#diagnostic = Object.freeze({
         phase,
@@ -291,11 +319,35 @@ vi.mock("../src/decoder.js", async () => {
             })
           : null
       });
+      const localFailure = phase === "probe" && (
+        code === "unsupported-config" ||
+        code === "decoder-operation" &&
+        (reason.name === "NotSupportedError" || reason.name === "EncodingError")
+      )
+        ? Object.freeze({ kind: "unsupported-config" } as const)
+        : phase === "output-validation" && code === "invalid-output"
+          ? Object.freeze({ kind: "decoded-metadata-incompatible" } as const)
+          : (phase === "configure" || phase === "decode" || phase === "flush") &&
+            (reason.name === "NotSupportedError" || reason.name === "EncodingError" ||
+              phase === "configure" && code === "unsupported-config")
+            ? Object.freeze({
+                kind: "operation-rejected" as const,
+                phase,
+                errorName: code === "unsupported-config"
+                  ? "NotSupportedError" as const
+                  : reason.name as "NotSupportedError" | "EncodingError"
+              })
+            : null;
+      const reported = localFailure === null
+        ? reason
+        : new actual.DecoderLocalFailureError(localFailure, reason);
+      this.#terminalError = reported;
       if (!this.#runReadySettled) {
         this.#runReadySettled = true;
-        this.#rejectRunReady?.(reason);
+        this.#rejectRunReady?.(reported);
       }
-      this.#rejectFailure(reason);
+      this.#rejectFailure(reported);
+      return reported;
     }
     }
   };
@@ -319,6 +371,13 @@ vi.mock("../src/renderer.js", () => ({
 
     public snapshot() {
       return {
+        backendDetails: Object.freeze({
+          kind: "webgl2" as const,
+          uploadMode: "native-probing" as const,
+          nativeProbeAttempts: 0,
+          probeReadbackBytes: 0,
+          nativeProbeInFlight: false
+        }),
         cssWidth: 16,
         cssHeight: 16,
         backingWidth: 16,
@@ -376,10 +435,26 @@ vi.mock("../src/renderer.js", () => ({
   }
 }));
 
-import {
-  createPlayer,
-  retryableRgbaCopyStartupFailure
-} from "../src/player.js";
+import { createPlayer } from "../src/player.js";
+
+function createHarness(
+  families: readonly CodecFamily[],
+  controller = new AbortController()
+) {
+  return createCandidateHarness(createPlayer, startup, families, controller);
+}
+
+function prepareAttempt(input: Parameters<typeof createPlayer>[0]) {
+  return prepareCandidateAttempt(createPlayer, input);
+}
+
+function failLiveDecoder(family: CodecFamily): void {
+  const control = startup.decoders.find((candidate) =>
+    candidate.codec === family && !candidate.disposed
+  );
+  if (control === undefined) throw new Error(`no live ${family} decoder`);
+  control.fail();
+}
 
 beforeEach(() => {
   startup.outcomes.clear();
@@ -497,6 +572,25 @@ describe("player startup source fallback", () => {
 
   it("advances on retained unsupported-config evidence", async () => {
     startup.outcomes.set("av1", "unsupported-config");
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    const player = requirePrepared(outcome);
+    expect(startup.opens).toEqual(["av1", "vp9"]);
+    expect(player.snapshot(false).selectedCodec).toBe(CODECS.vp9);
+    expect(harness.publications.playbackFailures).toEqual([]);
+    await player.dispose();
+  });
+
+  it.each([
+    ["configure NotSupportedError", "configure-not-supported"],
+    ["decode NotSupportedError", "decode-not-supported"],
+    ["decode EncodingError", "decode-encoding-rejected"],
+    ["flush NotSupportedError", "flush-not-supported"],
+    ["flush EncodingError", "flush-encoding-rejected"]
+  ] as const)("advances on the closed %s variant", async (_label, failure) => {
+    startup.outcomes.set("av1", failure);
     const harness = createHarness(FAMILIES);
 
     const outcome = await prepareAttempt(harness.input);
@@ -629,31 +723,18 @@ describe("player startup source fallback", () => {
     expect(harness.publications.playbackFailures).toHaveLength(1);
   });
 
-  it("falls through an unavailable AV1 RGBA copy path to VP9", async () => {
+  it("keeps an unavailable AV1 RGBA materializer path terminal", async () => {
     startup.rgbaCopyFailures.add("av1");
     const harness = createHarness(FAMILIES);
 
     const outcome = await prepareAttempt(harness.input);
 
-    const player = requirePrepared(outcome);
-    if (outcome.status !== "fulfilled") throw outcome.error;
-    expect(startup.opens).toEqual(["av1", "vp9"]);
+    expect(outcome.status).toBe("rejected");
+    expect(startup.opens).toEqual(["av1"]);
     expect(startup.disposals).toEqual(["av1"]);
-    expect(player.snapshot(false).selectedCodec).toBe(CODECS.vp9);
-    expect(harness.publications.playbackFailures).toEqual([]);
-    expect(outcome.result.report.candidates.map((candidate) => ({
-      rank: candidate.rank,
-      outcome: candidate.outcome,
-      code: candidate.failure?.code ?? null
-    }))).toEqual([
-      { rank: 0, outcome: "rejected", code: "renderer-failure" },
-      { rank: 1, outcome: "selected", code: null }
+    expect(harness.publications.playbackFailures).toEqual([
+      "renderer-failure:prepare"
     ]);
-    const vp9Open = startup.operations.indexOf("asset-open:vp9");
-    expect(startup.operations.indexOf("decoder-dispose:av1")).toBeLessThan(vp9Open);
-    expect(startup.operations.indexOf("renderer-dispose:av1")).toBeLessThan(vp9Open);
-    expect(startup.operations.indexOf("asset-dispose:av1")).toBeLessThan(vp9Open);
-    await player.dispose();
   });
 
   it("qualifies without publishing or scheduling until publication", async () => {
@@ -798,32 +879,32 @@ describe("player startup source fallback", () => {
     await player.dispose();
   });
 
-  it("selects the first actually renderable codec across the complete ladder", async () => {
-    startup.rgbaCopyFailures.add("av1");
-    startup.outcomes.set("vp9", "invalid-output");
-    startup.rgbaCopyFailures.add("h265");
-    const harness = createHarness(FAMILIES);
+  it.each([
+    ["av1", []],
+    ["vp9", ["av1"]],
+    ["h265", ["av1", "vp9"]],
+    ["h264", ["av1", "vp9", "h265"]]
+  ] as const)(
+    "never touches a candidate after the %s winner",
+    async (winner, rejected) => {
+      for (const family of rejected) startup.outcomes.set(family, "invalid-output");
+      const harness = createHarness(FAMILIES);
 
-    const outcome = await prepareAttempt(harness.input);
+      const outcome = await prepareAttempt(harness.input);
 
-    const player = requirePrepared(outcome);
-    if (outcome.status !== "fulfilled") throw outcome.error;
-    expect(startup.opens).toEqual(FAMILIES);
-    expect(startup.disposals).toEqual(["av1", "vp9", "h265"]);
-    expect(player.snapshot(false).selectedCodec).toBe(CODECS.h264);
-    expect(harness.publications.playbackFailures).toEqual([]);
-    expect(outcome.result.report.candidates.map((candidate) => ({
-      rank: candidate.rank,
-      outcome: candidate.outcome,
-      code: candidate.failure?.code ?? null
-    }))).toEqual([
-      { rank: 0, outcome: "rejected", code: "renderer-failure" },
-      { rank: 1, outcome: "rejected", code: "worker-decode-failure" },
-      { rank: 2, outcome: "rejected", code: "renderer-failure" },
-      { rank: 3, outcome: "selected", code: null }
-    ]);
-    await player.dispose();
-  });
+      const player = requirePrepared(outcome);
+      const winnerIndex = FAMILIES.indexOf(winner);
+      const touched = FAMILIES.slice(0, winnerIndex + 1);
+      expect(startup.opens).toEqual(touched);
+      expect(player.snapshot(false).selectedCodec).toBe(CODECS[winner]);
+      for (const family of FAMILIES.slice(winnerIndex + 1)) {
+        expect(startup.operations.some((operation) =>
+          operation.endsWith(`:${family}`)
+        )).toBe(false);
+      }
+      await player.dispose();
+    }
+  );
 
   it("publishes one canonical terminal error after every candidate fails", async () => {
     for (const family of FAMILIES) {
@@ -970,501 +1051,4 @@ describe("player startup source fallback", () => {
     await player.dispose();
   });
 
-  it("admits only exact candidate-scoped RGBA-copy unavailability evidence", () => {
-    const candidate = Object.freeze({
-      sourceIndex: 0,
-      rendition: Object.freeze({ id: "main", codec: CODECS.av1 })
-    });
-    const retryable = rgbaCopyPlayerDiagnostic();
-    expect(retryableRgbaCopyStartupFailure({
-      cleanupFailureCount: 0,
-      rendererDiagnostics: [retryable]
-    }, candidate)).toBe(true);
-
-    const rejectedDiagnostics = [
-      rgbaCopyPlayerDiagnostic({ sourceIndex: 1 }),
-      rgbaCopyPlayerDiagnostic({ rendition: "other" }),
-      rgbaCopyPlayerDiagnostic({ codec: CODECS.vp9 }),
-      rgbaCopyPlayerDiagnostic({ phase: "draw" }),
-      rgbaCopyPlayerDiagnostic({ operation: "restore" }),
-      rgbaCopyPlayerDiagnostic({
-        exception: Object.freeze({
-          name: "EncodingError",
-          message: "arbitrary renderer failure"
-        })
-      }),
-      rgbaCopyPlayerDiagnostic({ glError: 1_282 }),
-      rgbaCopyPlayerDiagnostic({ contextLost: true }),
-      rgbaCopyPlayerDiagnostic({ uploadPath: "native" })
-    ];
-    for (const diagnostic of rejectedDiagnostics) {
-      expect(retryableRgbaCopyStartupFailure({
-        cleanupFailureCount: 0,
-        rendererDiagnostics: [diagnostic]
-      }, candidate)).toBe(false);
-    }
-    expect(retryableRgbaCopyStartupFailure({
-      cleanupFailureCount: 1,
-      rendererDiagnostics: [retryable]
-    }, candidate)).toBe(false);
-  });
 });
-
-const FAMILIES = Object.freeze([
-  "av1",
-  "vp9",
-  "h265",
-  "h264"
-] as const);
-
-const CODECS = Object.freeze({
-  av1: "av01.0.05M.08",
-  vp9: "vp09.00.10.08",
-  h265: "hvc1.1.6.L93.B0",
-  h264: "avc1.42E020"
-} satisfies Readonly<Record<CodecFamily, string>>);
-
-const WIDTHS = Object.freeze({
-  av1: 16,
-  vp9: 18,
-  h265: 20,
-  h264: 22
-} satisfies Readonly<Record<CodecFamily, number>>);
-
-class SyntheticAsset {
-  public readonly manifest;
-  public readonly blobs;
-  public readonly records;
-  readonly #family: CodecFamily;
-  #disposed = false;
-
-  public constructor(family: CodecFamily, codec: string) {
-    this.#family = family;
-    const unit = `${family}-body`;
-    this.manifest = {
-      codec: family,
-      canvas: { width: 16, height: 16, fit: "contain", pixelAspect: [1, 1] },
-      frameRate: { numerator: 30, denominator: 1 },
-      renditions: [{
-        id: "main",
-        codec,
-        bitDepth: 8,
-        codedWidth: WIDTHS[family],
-        codedHeight: 16,
-        bitrate: { average: 1_000, peak: 1_000 },
-        alphaLayout: { type: "opaque", colorRect: [0, 0, 16, 16] }
-      }],
-      units: [{
-        id: unit,
-        kind: "body",
-        playback: "loop",
-        frameCount: 1,
-        ports: [{ id: "entry", entryFrame: 0, portalFrames: [0] }],
-        chunks: [{ rendition: "main", chunkStart: 0, chunkCount: 1 }]
-      }],
-      initialState: family,
-      states: [{ id: family, bodyUnit: unit }],
-      edges: [],
-      bindings: [],
-      readiness: { policy: "all-routes", bootstrapUnits: [], immediateEdges: [] },
-      limits: {
-        maxRuntimeBytes: 16_000_000,
-        decodedPixelBytes: 2_048,
-        persistentCacheBytes: 0,
-        runtimeWorkingSetBytes: 1_000_000
-      }
-    };
-    this.blobs = [{
-      rendition: "main",
-      unit,
-      offset: 1_000,
-      length: 1,
-      chunkStart: 0,
-      chunkCount: 1
-    }];
-    this.records = [{
-      offset: 1_000,
-      length: 1,
-      presentationTimestamp: 0,
-      duration: 1,
-      randomAccess: true,
-      displayedFrameCount: 1
-    }];
-  }
-
-  public async unitBytes(): Promise<Uint8Array<ArrayBuffer>> {
-    return new Uint8Array(1);
-  }
-
-  public chunkBytes(): ArrayBuffer {
-    return new Uint8Array([0]).buffer;
-  }
-
-  public async dispose(): Promise<void> {
-    if (this.#disposed) return;
-    startup.disposals.push(this.#family);
-    startup.operations.push(`asset-dispose:${this.#family}`);
-    if (startup.cleanupFailures.has(this.#family)) {
-      throw new Error(`synthetic asset cleanup failure for ${this.#family}`);
-    }
-    this.#disposed = true;
-  }
-
-  public snapshot() {
-    return {
-      mode: "range",
-      disposed: this.#disposed,
-      declaredFileBytes: 2_000,
-      metadataBytes: 1_000,
-      verifiedBytes: 1,
-      residentBlobBytes: 1,
-      activeTransportBodies: 0,
-      pendingLoads: 0,
-      interestedWaiters: 0
-    };
-  }
-}
-
-function createHarness(
-  families: readonly CodecFamily[],
-  controller = new AbortController()
-) {
-  const publications = {
-    metadata: [] as string[],
-    readiness: [] as string[],
-    draws: 0,
-    retirements: 0,
-    playbackFailures: [] as string[]
-  };
-  const terminal = new AvalPlaybackError(Object.freeze({
-    code: "worker-decode-failure",
-    message: "Playback could not continue.",
-    operation: "prepare"
-  }), 1);
-  const input = {
-    canvas: new EventTarget() as HTMLCanvasElement,
-    platform: testPlatform(),
-    initialPresentation: { width: 16, height: 16, dpr: 1, fit: null },
-    baseUrl: "https://example.test/",
-    sources: families.map((family, sourceIndex) => ({
-      src: `${family}.avl`,
-      codec: CODECS[family],
-      integrity: "",
-      sourceIndex
-    })),
-    credentials: "same-origin" as const,
-    signal: controller.signal,
-    preparationTimeoutMs: 5_000,
-    motion: "full" as const,
-    reduced: false,
-    initialState: null,
-    initialBody: false,
-    visible: true,
-    decoderReady: () => true,
-    onResourceBytes: () => undefined,
-    onMetadata: (metadata: Readonly<{ initialState: string }>) => {
-      publications.metadata.push(metadata.initialState);
-    },
-    onReadiness: (value: string) => publications.readiness.push(value),
-    onAnimationResourcesRetired: () => { publications.retirements += 1; },
-    onDraw: () => { publications.draws += 1; },
-    onRestart: () => undefined,
-    onEvent: () => undefined,
-    onFailure: () => undefined,
-    onPlaybackFailure: (
-      code: ConstructorParameters<typeof AvalPlaybackError>[0]["code"],
-      operation: string
-    ) => {
-      publications.playbackFailures.push(`${code}:${operation}`);
-      return terminal;
-    }
-  };
-  return { controller, input, publications, terminal };
-}
-
-async function prepareAttempt(input: Parameters<typeof createPlayer>[0]) {
-  let player: Awaited<ReturnType<typeof createPlayer>> | null = null;
-  try {
-    player = await createPlayer(input);
-    player.activate();
-    const result = await player.prepare();
-    return { status: "fulfilled" as const, player, result };
-  } catch (error) {
-    if (player !== null) {
-      try { await player.dispose(); } catch { /* retain the startup outcome */ }
-    }
-    return { status: "rejected" as const, error };
-  }
-}
-
-function requirePrepared(
-  outcome: Awaited<ReturnType<typeof prepareAttempt>>
-): Awaited<ReturnType<typeof createPlayer>> {
-  if (outcome.status === "rejected") throw outcome.error;
-  return outcome.player;
-}
-
-function failLiveDecoder(family: CodecFamily): void {
-  const control = startup.decoders.find((candidate) =>
-    candidate.codec === family && !candidate.disposed
-  );
-  if (control === undefined) throw new Error(`no live ${family} decoder`);
-  control.fail();
-}
-
-async function eventually(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (predicate()) return;
-    await Promise.resolve();
-  }
-  throw new Error("condition did not become true");
-}
-
-function invalidOutputError(codec: string): Error {
-  const error = new Error(`synthetic invalid decoded frame for ${codec}`);
-  error.name = "EncodingError";
-  return error;
-}
-
-function rgbaCopyFailureError(): RendererFailureError {
-  return new RendererFailureError(baseRgbaCopyDiagnostic());
-}
-
-function rgbaCopyPlayerDiagnostic(
-  overrides: Partial<PlayerRendererDiagnostic> = {}
-): Readonly<PlayerRendererDiagnostic> {
-  return Object.freeze({
-    ...baseRgbaCopyDiagnostic(),
-    sourceIndex: 0,
-    rendition: "main",
-    codec: CODECS.av1,
-    ...overrides
-  });
-}
-
-function baseRgbaCopyDiagnostic(): Readonly<RendererFailureDiagnostic> {
-  return createRendererFailureDiagnostic({
-    backend: "webgl2",
-    phase: "rgba-copy",
-    operation: "runtime",
-    operationOrdinal: 2,
-    reason: new DOMException(
-      "VideoFrame RGBA export is unavailable",
-      "NotSupportedError"
-    ),
-    glError: null,
-    contextLost: false,
-    uploadPath: "rgba-copy",
-    textureOrdinal: null,
-    layout: {
-      codedWidth: 16,
-      codedHeight: 16,
-      storageWidth: 16,
-      storageHeight: 16,
-      logicalWidth: 16,
-      logicalHeight: 16
-    },
-    backing: { width: 16, height: 16 },
-    bytes: {
-      stagingBytes: 1_024,
-      residentBytes: 0,
-      textureBytes: 3_840,
-      backingBytes: 1_280,
-      runtimeBytes: 6_144,
-      maxTextureBytes: 16_000_000,
-      maxBackingBytes: 16_000_000,
-      maxRuntimeBytes: 16_000_000
-    },
-    limits: {
-      maxTextureSize: 8_192,
-      maxViewportWidth: 8_192,
-      maxViewportHeight: 8_192,
-      maxResidentTextures: 4_096
-    },
-    contextAttributes: null,
-    vendor: "Synthetic Vendor",
-    renderer: "Synthetic Renderer"
-  });
-}
-
-function codecFamily(codec: string): CodecFamily {
-  return codec.startsWith("av01.") ? "av1"
-    : codec.startsWith("vp09.") ? "vp9"
-      : codec.startsWith("hvc1.") ? "h265" : "h264";
-}
-
-function familyForWidth(width: number): CodecFamily {
-  const match = FAMILIES.find((family) => WIDTHS[family] === width);
-  if (match === undefined) throw new Error(`unknown synthetic width ${String(width)}`);
-  return match;
-}
-
-function installSafariZeroDurationDecoder(): Readonly<{
-  repairedDurations: number[];
-  missingDurationFrames: Array<{ readonly closed: boolean }>;
-}> {
-  const repairedDurations: number[] = [];
-  const missingDurationFrames: Array<{ readonly closed: boolean }> = [];
-
-  class SafariVideoFrame {
-    public readonly timestamp: number;
-    public readonly duration: number | null;
-    public readonly codedWidth: number;
-    public readonly codedHeight: number;
-    public readonly displayWidth: number;
-    public readonly displayHeight: number;
-    public readonly visibleRect: Readonly<{
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    }>;
-    public readonly colorSpace: Readonly<{
-      fullRange: boolean | null;
-      matrix: VideoMatrixCoefficients | null;
-      primaries: VideoColorPrimaries | null;
-      transfer: VideoTransferCharacteristics | null;
-    }>;
-    public closed = false;
-
-    public constructor(
-      source: SafariVideoFrame | Readonly<{
-        timestamp: number;
-        duration: number | null;
-        codedWidth: number;
-        codedHeight: number;
-        displayWidth: number;
-        displayHeight: number;
-        colorSpace: Readonly<{
-          fullRange: boolean | null;
-          matrix: VideoMatrixCoefficients | null;
-          primaries: VideoColorPrimaries | null;
-          transfer: VideoTransferCharacteristics | null;
-        }>;
-      }>,
-      init: Readonly<{ duration?: number }> = {}
-    ) {
-      this.timestamp = source.timestamp;
-      this.duration = init.duration ?? source.duration;
-      this.codedWidth = source.codedWidth;
-      this.codedHeight = source.codedHeight;
-      this.displayWidth = source.displayWidth;
-      this.displayHeight = source.displayHeight;
-      this.visibleRect = Object.freeze({
-        x: 0,
-        y: 0,
-        width: source.displayWidth,
-        height: source.displayHeight
-      });
-      this.colorSpace = source.colorSpace;
-      if (source instanceof SafariVideoFrame && init.duration !== undefined) {
-        repairedDurations.push(init.duration);
-      }
-    }
-
-    public close(): void { this.closed = true; }
-  }
-
-  class SafariWorker {
-    readonly #messageListeners = new Set<(event: Readonly<{ data: unknown }>) => void>();
-    #config: Readonly<VideoDecoderConfig> | null = null;
-
-    public addEventListener(
-      type: string,
-      listener: (event: Readonly<{ data: unknown }>) => void
-    ): void {
-      if (type === "message") this.#messageListeners.add(listener);
-    }
-
-    public postMessage(message: unknown): void {
-      const command = message as Readonly<{
-        t: string;
-        config?: Readonly<VideoDecoderConfig>;
-        run?: number;
-        chunks?: readonly Readonly<{
-          timestamp: number;
-          duration: number;
-        }>[];
-      }>;
-      if (command.t === "configure") {
-        if (command.config === undefined) throw new Error("missing decoder config");
-        this.#config = command.config;
-        queueMicrotask(() => this.#emit({ t: "configured", supported: true }));
-        return;
-      }
-      if (command.t === "start") {
-        queueMicrotask(() => this.#emit({ t: "started", run: command.run }));
-        return;
-      }
-      if (command.t === "decode") {
-        const config = this.#config;
-        if (config === null || command.run === undefined || command.chunks === undefined) {
-          throw new Error("invalid synthetic decoder command");
-        }
-        queueMicrotask(() => {
-          for (const chunk of command.chunks ?? []) {
-            const frame = new SafariVideoFrame({
-              timestamp: chunk.timestamp,
-              duration: 0,
-              codedWidth: config.codedWidth ?? 1,
-              codedHeight: config.codedHeight ?? 1,
-              displayWidth: config.displayAspectWidth ?? config.codedWidth ?? 1,
-              displayHeight: config.displayAspectHeight ?? config.codedHeight ?? 1,
-              colorSpace: Object.freeze({
-                fullRange: config.colorSpace?.fullRange ?? null,
-                matrix: config.colorSpace?.matrix ?? null,
-                primaries: config.colorSpace?.primaries ?? null,
-                transfer: config.colorSpace?.transfer ?? null
-              })
-            });
-            missingDurationFrames.push(frame);
-            this.#emit({
-              t: "frame",
-              run: command.run,
-              timestamp: chunk.timestamp,
-              frame
-            });
-          }
-          this.#emit({ t: "accepted", run: command.run });
-        });
-        return;
-      }
-      if (command.t === "flush") {
-        queueMicrotask(() => this.#emit({ t: "flushed", run: command.run }));
-        return;
-      }
-      if (command.t === "close") {
-        queueMicrotask(() => this.#emit({ t: "closed", run: command.run }));
-      }
-    }
-
-    public terminate(): void {}
-
-    #emit(data: unknown): void {
-      for (const listener of this.#messageListeners) listener({ data });
-    }
-  }
-
-  vi.stubGlobal(
-    "VideoFrame",
-    SafariVideoFrame as unknown as typeof globalThis.VideoFrame
-  );
-  vi.stubGlobal("Worker", SafariWorker as unknown as typeof globalThis.Worker);
-  return { repairedDurations, missingDurationFrames };
-}
-
-function testPlatform() {
-  return {
-    fetch: globalThis.fetch.bind(globalThis),
-    Worker: globalThis.Worker ?? null,
-    VideoDecoder: globalThis.VideoDecoder ?? null,
-    VideoFrame: globalThis.VideoFrame ?? null,
-    requestAnimationFrame: globalThis.requestAnimationFrame.bind(globalThis),
-    cancelAnimationFrame: globalThis.cancelAnimationFrame.bind(globalThis),
-    now: () => performance.now(),
-    setTimeout: (callback: () => void, delay: number) =>
-      globalThis.setTimeout(callback, delay) as unknown as number,
-    clearTimeout: (handle: number) => globalThis.clearTimeout(handle),
-    crypto: globalThis.crypto
-  };
-}
