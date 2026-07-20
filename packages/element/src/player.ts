@@ -415,7 +415,8 @@ async function selectPlayer(
         Worker: input.platform.Worker,
         VideoFrame: input.platform.VideoFrame,
         setTimeout: input.platform.setTimeout,
-        clearTimeout: input.platform.clearTimeout
+        clearTimeout: input.platform.clearTimeout,
+        sampleFrameRate: asset.manifest.frameRate
       });
       const disposeDecoders = (): readonly Readonly<DecoderPoolDiagnostic>[] => {
         const diagnostics = decoders.snapshot().decoderDiagnostics;

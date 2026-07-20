@@ -20,6 +20,86 @@ afterEach(() => {
 });
 
 describe("Decoder output certification", () => {
+  it("converts AVAL frame ticks to WebCodecs microseconds without weakening output validation", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+
+    const decoder = configuredDecoder({
+      sampleFrameRate: { numerator: 30, denominator: 1 }
+    });
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+
+    const run = decoder.createRun([{
+      data: new Uint8Array([1]).buffer,
+      timestamp: 7,
+      duration: 1,
+      key: true,
+      displayedFrames: 1
+    }]);
+    worker.emit({ t: "started", run: run.generation });
+
+    expect(worker.posted).toContainEqual({
+      t: "decode",
+      run: run.generation,
+      chunks: [{
+        data: expect.any(ArrayBuffer),
+        timestamp: 233_333,
+        duration: 33_334,
+        key: true
+      }]
+    });
+
+    worker.emit({ t: "accepted", run: run.generation });
+    const frame = new VideoFrame(32, 34, 233_333);
+    Object.defineProperty(frame, "duration", { value: 0 });
+    worker.emit({
+      t: "frame",
+      run: run.generation,
+      timestamp: 233_333,
+      frame
+    });
+
+    await expect(run.take(0)).rejects.toThrow(
+      "AVAL decoder returned an invalid frame"
+    );
+    expect(decoder.snapshot().diagnostic?.outputFailure).toMatchObject({
+      kind: "timing",
+      field: "duration",
+      expected: { timestamp: 233_333, duration: 33_334 },
+      actual: { timestamp: 233_333, duration: 0 }
+    });
+    decoder.dispose();
+  });
+
+  it("rejects fractional multi-frame chunk timing that WebCodecs cannot represent exactly", async () => {
+    const Worker = fakeWorker();
+    const VideoFrame = fakeVideoFrame();
+    vi.stubGlobal("Worker", Worker);
+    vi.stubGlobal("VideoFrame", VideoFrame);
+
+    const decoder = configuredDecoder({
+      sampleFrameRate: { numerator: 60, denominator: 1 }
+    });
+    const worker = Worker.latest();
+    worker.emit({ t: "configured", supported: true });
+    await decoder.supported();
+
+    expect(() => decoder.createRun([{
+      data: new Uint8Array([1]).buffer,
+      timestamp: 0,
+      duration: 1,
+      key: true,
+      displayedFrames: 3
+    }])).toThrow(
+      "multi-frame decoder timing cannot be represented by one WebCodecs chunk"
+    );
+    decoder.dispose();
+  });
+
   it("counts only acknowledged native and logical lifecycle successes", async () => {
     const Worker = fakeWorker();
     const VideoFrame = fakeVideoFrame();

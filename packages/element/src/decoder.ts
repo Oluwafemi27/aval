@@ -23,6 +23,10 @@ import {
   type DecoderOutputField
 } from "./decoder-diagnostics.js";
 import { saturatingIncrement } from "./playback-lifecycle.js";
+import {
+  webCodecsTimingForTicks,
+  type WebCodecsFrameRate
+} from "./webcodecs-time.js";
 
 export interface DecodeSample {
   readonly data: ArrayBuffer;
@@ -59,6 +63,8 @@ export interface DecoderLimits {
   readonly VideoFrame?: typeof globalThis.VideoFrame;
   readonly setTimeout?: (callback: () => void, delay: number) => number;
   readonly clearTimeout?: (handle: number) => void;
+  /** When present, DecodeSample timing is expressed in AVAL frame ticks. */
+  readonly sampleFrameRate?: Readonly<WebCodecsFrameRate>;
 }
 
 export interface DecoderSnapshot {
@@ -93,6 +99,7 @@ export class Decoder {
   readonly #VideoFrame: typeof globalThis.VideoFrame;
   readonly #setTimeout: (callback: () => void, delay: number) => number;
   readonly #clearTimeout: (handle: number) => void;
+  readonly #sampleFrameRate: Readonly<WebCodecsFrameRate> | null;
   readonly #support = deferred<boolean>();
   readonly #failure = deferred<never>();
   #run: DecodeRun | null = null;
@@ -133,6 +140,9 @@ export class Decoder {
     this.#setTimeout = limits.setTimeout ?? ((callback, delay) =>
       globalThis.setTimeout(callback, delay) as unknown as number);
     this.#clearTimeout = limits.clearTimeout ?? ((handle) => globalThis.clearTimeout(handle));
+    this.#sampleFrameRate = limits.sampleFrameRate === undefined
+      ? null
+      : validateSampleFrameRate(limits.sampleFrameRate);
     const WorkerConstructor = limits.Worker ?? globalThis.Worker;
     const VideoFrameConstructor = limits.VideoFrame ?? globalThis.VideoFrame;
     if (typeof WorkerConstructor !== "function" ||
@@ -194,10 +204,14 @@ export class Decoder {
     if (this.#sequence === MAX_BYTES) {
       throw new RangeError("decoder run identity is exhausted");
     }
+    const sampleFrameRate = this.#sampleFrameRate;
+    const runtimeSamples = sampleFrameRate === null
+      ? samples
+      : samples.map((sample) => webCodecsSampleForTicks(sample, sampleFrameRate));
     const id = ++this.#sequence;
     const run = new DecodeRun(
       id,
-      samples,
+      runtimeSamples,
       this.#expectation,
       (message, transfer) => {
         if (this.#disposed || this.#error !== undefined) throw abortError();
@@ -628,6 +642,55 @@ export class Decoder {
     this.#lane = { phase: "terminal" };
     this.#worker.terminate();
   }
+}
+
+function validateSampleFrameRate(
+  frameRate: Readonly<WebCodecsFrameRate>
+): Readonly<WebCodecsFrameRate> {
+  // Exercise the same validation used for every conversion once at setup.
+  webCodecsTimingForTicks(0, 0, frameRate);
+  return Object.freeze({
+    numerator: frameRate.numerator,
+    denominator: frameRate.denominator
+  });
+}
+
+function webCodecsSampleForTicks(
+  sample: Readonly<DecodeSample>,
+  frameRate: Readonly<WebCodecsFrameRate>
+): Readonly<DecodeSample> {
+  const timing = webCodecsTimingForTicks(
+    sample.timestamp,
+    sample.duration,
+    frameRate
+  );
+  if (
+    Number.isSafeInteger(sample.displayedFrames) &&
+    sample.displayedFrames > 1 &&
+    sample.duration > 0
+  ) {
+    for (let order = 1; order < sample.displayedFrames; order += 1) {
+      const outputTick =
+        BigInt(sample.timestamp) + BigInt(sample.duration) * BigInt(order);
+      if (outputTick > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new RangeError("multi-frame decoder timing exceeds the safe-integer range");
+      }
+      const output = webCodecsTimingForTicks(
+        Number(outputTick),
+        sample.duration,
+        frameRate
+      );
+      if (
+        output.timestamp !== timing.timestamp + timing.duration * order ||
+        output.duration !== timing.duration
+      ) {
+        throw new RangeError(
+          "multi-frame decoder timing cannot be represented by one WebCodecs chunk"
+        );
+      }
+    }
+  }
+  return Object.freeze({ ...sample, ...timing });
 }
 
 export class DecodeRun {
