@@ -978,8 +978,10 @@ class PlayerImpl implements Player {
     };
     this.#captureDecoderLifecycle(decoders.playbackLifecycle);
     this.#captureDecoderDiagnostics(decoders.decoderDiagnostics);
+    const renderer = this.#renderer ?? this.#retiredRenderer;
     const rendererSnapshot: Readonly<RendererSnapshot> =
-      (this.#renderer ?? this.#retiredRenderer)?.snapshot() ?? Object.freeze({
+      renderer?.snapshot() ?? Object.freeze({
+      backend: "webgl2",
       cssWidth: 0,
       cssHeight: 0,
       backingWidth: 0,
@@ -1004,6 +1006,7 @@ class PlayerImpl implements Player {
     });
     this.#captureRendererDiagnostic(rendererSnapshot.failure);
     const {
+      backend: _rendererBackend,
       failure: _rendererFailure,
       uploadMode: _uploadMode,
       nativeProbeAttempts: _nativeProbeAttempts,
@@ -1019,6 +1022,9 @@ class PlayerImpl implements Player {
       transitioning: graph?.isTransitioning ?? false,
       selectedRendition: this.#staticReason === null ? this.#rendition.id : null,
       selectedCodec: this.#staticReason === null ? this.#rendition.codec : null,
+      rendererBackend: renderer === null
+        ? null
+        : rendererSnapshot.backend,
       selectedBitDepth: this.#staticReason === null ? this.#rendition.bitDepth : null,
       transportMode: asset.mode,
       declaredFileBytes: asset.declaredFileBytes,

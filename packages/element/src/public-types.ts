@@ -437,6 +437,7 @@ export interface AvalRendererDiagnostic {
   readonly sourceIndex: number;
   readonly rendition: string;
   readonly codec: string;
+  readonly backend: "webgl2" | "canvas2d";
   readonly phase:
     | "backing-admission"
     | "context-create"
@@ -563,6 +564,7 @@ export interface AvalDiagnostics {
   readonly runtime: Readonly<{
     selectedRendition: string | null;
     selectedCodec: string | null;
+    rendererBackend: "webgl2" | "canvas2d" | null;
     selectedBitDepth: 8 | 10 | null;
     transportMode: "range" | "full" | null;
     declaredFileBytes: number;

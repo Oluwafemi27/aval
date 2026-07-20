@@ -26,6 +26,7 @@ type StartupOutcome =
 const startup = vi.hoisted(() => ({
   outcomes: new Map<string, StartupOutcome>(),
   probeOutcomes: new Map<string, readonly [StartupOutcome, StartupOutcome]>(),
+  actualDecoderFamilies: new Set<string>(),
   opens: [] as string[],
   disposals: [] as string[],
   operations: [] as string[],
@@ -61,12 +62,16 @@ vi.mock("../src/codec-validator.js", () => ({
   })
 }));
 
-vi.mock("../src/decoder.js", () => ({
-  Decoder: class {
+vi.mock("../src/decoder.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/decoder.js")>(
+    "../src/decoder.js"
+  );
+  return {
+    Decoder: class SyntheticDecoder {
     public encodedBytes = 0;
     readonly #codec: string;
-    readonly #failure: Promise<never>;
-    readonly #control: {
+    readonly #failure!: Promise<never>;
+    readonly #control!: {
       codec: string;
       disposed: boolean;
       fail: (reason?: Error, phase?: string, code?: string) => void;
@@ -80,11 +85,22 @@ vi.mock("../src/decoder.js", () => ({
     #rejectRunReady: ((reason: unknown) => void) | null = null;
     #runReadySettled = false;
 
-    public constructor(config: Readonly<VideoDecoderConfig>) {
+    public constructor(
+      config: Readonly<VideoDecoderConfig>,
+      expectation?: ConstructorParameters<typeof actual.Decoder>[1],
+      limits?: ConstructorParameters<typeof actual.Decoder>[2]
+    ) {
       this.#codec = codecFamily(config.codec);
       this.#lane = startup.decoders.filter(({ codec }) =>
         codec === this.#codec
       ).length % 2 as 0 | 1;
+      if (startup.actualDecoderFamilies.has(this.#codec)) {
+        return new actual.Decoder(
+          config,
+          expectation,
+          limits
+        ) as unknown as SyntheticDecoder;
+      }
       this.#failure = new Promise<never>((_resolve, reject) => {
         this.#rejectFailure = reject;
       });
@@ -281,8 +297,9 @@ vi.mock("../src/decoder.js", () => ({
       }
       this.#rejectFailure(reason);
     }
-  }
-}));
+    }
+  };
+});
 
 vi.mock("../src/renderer.js", () => ({
   Renderer: class {
@@ -367,6 +384,7 @@ import {
 beforeEach(() => {
   startup.outcomes.clear();
   startup.probeOutcomes.clear();
+  startup.actualDecoderFamilies.clear();
   startup.opens.length = 0;
   startup.disposals.length = 0;
   startup.operations.length = 0;
@@ -443,6 +461,36 @@ describe("player startup source fallback", () => {
     if (outcome.status !== "fulfilled") throw outcome.error;
     expect(startup.opens).toEqual(["av1", "vp9", "h265"]);
     expect(player.snapshot(false).selectedCodec).toBe(CODECS.h265);
+    expect(harness.publications.playbackFailures).toEqual([]);
+    await player.dispose();
+  });
+
+  it("keeps Safari HEVC selected after repairing a zero frame duration", async () => {
+    startup.outcomes.set("av1", "probe-unsupported-false");
+    startup.outcomes.set("vp9", "probe-unsupported-false");
+    startup.actualDecoderFamilies.add("h265");
+    const safari = installSafariZeroDurationDecoder();
+    const harness = createHarness(FAMILIES);
+
+    const outcome = await prepareAttempt(harness.input);
+
+    const player = requirePrepared(outcome);
+    if (outcome.status !== "fulfilled") throw outcome.error;
+    expect(startup.opens).toEqual(["av1", "vp9", "h265"]);
+    expect(startup.opens).not.toContain("h264");
+    const snapshot = player.snapshot(false);
+    expect(snapshot.selectedCodec).toBe(CODECS.h265);
+    expect(snapshot.decoderDiagnostics.filter(({ codec }) =>
+      codec === CODECS.h265
+    )).toEqual([]);
+    expect(safari.repairedDurations.length).toBeGreaterThan(0);
+    expect(safari.repairedDurations.every((duration) => duration === 33_333))
+      .toBe(true);
+    expect(safari.missingDurationFrames).toHaveLength(
+      safari.repairedDurations.length
+    );
+    expect(safari.missingDurationFrames.every(({ closed }) => closed)).toBe(true);
+    expect(harness.publications.metadata).toEqual(["h265"]);
     expect(harness.publications.playbackFailures).toEqual([]);
     await player.dispose();
   });
@@ -1196,6 +1244,7 @@ function rgbaCopyPlayerDiagnostic(
 
 function baseRgbaCopyDiagnostic(): Readonly<RendererFailureDiagnostic> {
   return createRendererFailureDiagnostic({
+    backend: "webgl2",
     phase: "rgba-copy",
     operation: "runtime",
     operationOrdinal: 2,
@@ -1248,6 +1297,160 @@ function familyForWidth(width: number): CodecFamily {
   const match = FAMILIES.find((family) => WIDTHS[family] === width);
   if (match === undefined) throw new Error(`unknown synthetic width ${String(width)}`);
   return match;
+}
+
+function installSafariZeroDurationDecoder(): Readonly<{
+  repairedDurations: number[];
+  missingDurationFrames: Array<{ readonly closed: boolean }>;
+}> {
+  const repairedDurations: number[] = [];
+  const missingDurationFrames: Array<{ readonly closed: boolean }> = [];
+
+  class SafariVideoFrame {
+    public readonly timestamp: number;
+    public readonly duration: number | null;
+    public readonly codedWidth: number;
+    public readonly codedHeight: number;
+    public readonly displayWidth: number;
+    public readonly displayHeight: number;
+    public readonly visibleRect: Readonly<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>;
+    public readonly colorSpace: Readonly<{
+      fullRange: boolean | null;
+      matrix: VideoMatrixCoefficients | null;
+      primaries: VideoColorPrimaries | null;
+      transfer: VideoTransferCharacteristics | null;
+    }>;
+    public closed = false;
+
+    public constructor(
+      source: SafariVideoFrame | Readonly<{
+        timestamp: number;
+        duration: number | null;
+        codedWidth: number;
+        codedHeight: number;
+        displayWidth: number;
+        displayHeight: number;
+        colorSpace: Readonly<{
+          fullRange: boolean | null;
+          matrix: VideoMatrixCoefficients | null;
+          primaries: VideoColorPrimaries | null;
+          transfer: VideoTransferCharacteristics | null;
+        }>;
+      }>,
+      init: Readonly<{ duration?: number }> = {}
+    ) {
+      this.timestamp = source.timestamp;
+      this.duration = init.duration ?? source.duration;
+      this.codedWidth = source.codedWidth;
+      this.codedHeight = source.codedHeight;
+      this.displayWidth = source.displayWidth;
+      this.displayHeight = source.displayHeight;
+      this.visibleRect = Object.freeze({
+        x: 0,
+        y: 0,
+        width: source.displayWidth,
+        height: source.displayHeight
+      });
+      this.colorSpace = source.colorSpace;
+      if (source instanceof SafariVideoFrame && init.duration !== undefined) {
+        repairedDurations.push(init.duration);
+      }
+    }
+
+    public close(): void { this.closed = true; }
+  }
+
+  class SafariWorker {
+    readonly #messageListeners = new Set<(event: Readonly<{ data: unknown }>) => void>();
+    #config: Readonly<VideoDecoderConfig> | null = null;
+
+    public addEventListener(
+      type: string,
+      listener: (event: Readonly<{ data: unknown }>) => void
+    ): void {
+      if (type === "message") this.#messageListeners.add(listener);
+    }
+
+    public postMessage(message: unknown): void {
+      const command = message as Readonly<{
+        t: string;
+        config?: Readonly<VideoDecoderConfig>;
+        run?: number;
+        chunks?: readonly Readonly<{
+          timestamp: number;
+          duration: number;
+        }>[];
+      }>;
+      if (command.t === "configure") {
+        if (command.config === undefined) throw new Error("missing decoder config");
+        this.#config = command.config;
+        queueMicrotask(() => this.#emit({ t: "configured", supported: true }));
+        return;
+      }
+      if (command.t === "start") {
+        queueMicrotask(() => this.#emit({ t: "started", run: command.run }));
+        return;
+      }
+      if (command.t === "decode") {
+        const config = this.#config;
+        if (config === null || command.run === undefined || command.chunks === undefined) {
+          throw new Error("invalid synthetic decoder command");
+        }
+        queueMicrotask(() => {
+          for (const chunk of command.chunks ?? []) {
+            const frame = new SafariVideoFrame({
+              timestamp: chunk.timestamp,
+              duration: 0,
+              codedWidth: config.codedWidth ?? 1,
+              codedHeight: config.codedHeight ?? 1,
+              displayWidth: config.displayAspectWidth ?? config.codedWidth ?? 1,
+              displayHeight: config.displayAspectHeight ?? config.codedHeight ?? 1,
+              colorSpace: Object.freeze({
+                fullRange: config.colorSpace?.fullRange ?? null,
+                matrix: config.colorSpace?.matrix ?? null,
+                primaries: config.colorSpace?.primaries ?? null,
+                transfer: config.colorSpace?.transfer ?? null
+              })
+            });
+            missingDurationFrames.push(frame);
+            this.#emit({
+              t: "frame",
+              run: command.run,
+              timestamp: chunk.timestamp,
+              frame
+            });
+          }
+          this.#emit({ t: "accepted", run: command.run });
+        });
+        return;
+      }
+      if (command.t === "flush") {
+        queueMicrotask(() => this.#emit({ t: "flushed", run: command.run }));
+        return;
+      }
+      if (command.t === "close") {
+        queueMicrotask(() => this.#emit({ t: "closed", run: command.run }));
+      }
+    }
+
+    public terminate(): void {}
+
+    #emit(data: unknown): void {
+      for (const listener of this.#messageListeners) listener({ data });
+    }
+  }
+
+  vi.stubGlobal(
+    "VideoFrame",
+    SafariVideoFrame as unknown as typeof globalThis.VideoFrame
+  );
+  vi.stubGlobal("Worker", SafariWorker as unknown as typeof globalThis.Worker);
+  return { repairedDurations, missingDurationFrames };
 }
 
 function testPlatform() {

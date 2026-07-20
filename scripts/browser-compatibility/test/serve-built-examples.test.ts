@@ -293,6 +293,7 @@ interface RendererModeResult {
     contextLost: boolean;
   };
   rendererSnapshot: {
+    backend: "webgl2" | "canvas2d";
     backingWidth: number;
     backingHeight: number;
     stagingBytes: number;
@@ -382,6 +383,7 @@ const CAPABILITY_KEYS = [
   "vendor"
 ] as const;
 const SNAPSHOT_KEYS = [
+  "backend",
   "backingHeight",
   "backingWidth",
   "contextListenerCount",
@@ -490,6 +492,7 @@ function assertRendererReport(
 
     expectExactKeys(result.rendererSnapshot, SNAPSHOT_KEYS);
     expect(result.rendererSnapshot).toMatchObject({
+      backend: "webgl2",
       backingWidth: expectedCase.backing[0],
       backingHeight: expectedCase.backing[1],
       resourceCount: 4,

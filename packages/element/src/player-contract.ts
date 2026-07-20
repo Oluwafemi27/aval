@@ -59,6 +59,7 @@ export interface PlayerSnapshot {
   readonly transitioning: boolean;
   readonly selectedRendition: string | null;
   readonly selectedCodec: string | null;
+  readonly rendererBackend: "webgl2" | "canvas2d" | null;
   readonly selectedBitDepth: 8 | 10 | null;
   readonly transportMode: "range" | "full" | null;
   readonly declaredFileBytes: number;

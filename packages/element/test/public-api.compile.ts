@@ -8,6 +8,7 @@ import type {
   AvalPublicFailure,
   AvalPlaybackLifecycleCounters,
   AvalReadinessChangeDetail,
+  AvalRendererDiagnostic,
   AvalSourceCandidate,
   StaticReason
 } from "@pixel-point/aval-element";
@@ -22,6 +23,7 @@ declare const readinessDetail: Readonly<AvalReadinessChangeDetail>;
 declare const playbackError: AvalPlaybackError;
 declare const events: AvalElementEventMap;
 declare const decoderDiagnostic: Readonly<AvalDecoderDiagnostic>;
+declare const rendererDiagnostic: Readonly<AvalRendererDiagnostic>;
 
 const decoderWorkers: 2 = ELEMENT_DECODER_CAPACITY.workerCount;
 void decoderWorkers;
@@ -46,6 +48,12 @@ const lifecycle: Readonly<AvalPlaybackLifecycleCounters> =
 void lifecycle.nativeDecoderCreatesByLane[0];
 void decoderDiagnostic.sourceGeneration;
 void decoderDiagnostic.exception?.message;
+const activeRendererBackend: "webgl2" | "canvas2d" | null =
+  diagnostics.runtime.rendererBackend;
+const failedRendererBackend: "webgl2" | "canvas2d" =
+  rendererDiagnostic.backend;
+void activeRendererBackend;
+void failedRendererBackend;
 
 const attributes: AvalElementAttributes = {
   motion: "reduce",
@@ -109,6 +117,8 @@ playbackError.failure.operation = null;
 decoderDiagnostic.sourceGeneration = 7;
 // @ts-expect-error nested decoder exception evidence is immutable
 decoderDiagnostic.exception!.message = "forged";
+// @ts-expect-error renderer failure backend evidence is immutable
+rendererDiagnostic.backend = "canvas2d";
 // @ts-expect-error playback lifecycle counters are immutable
 lifecycle.drawsCompleted = 7;
 // @ts-expect-error playback decoder lane tuples are immutable

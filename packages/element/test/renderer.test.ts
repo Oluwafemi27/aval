@@ -11,6 +11,21 @@ describe("renderer geometry admission", () => {
     expect(() => new Renderer(canvas(), layout())).toThrow(/WebGL2/u);
   });
 
+  it("selects Canvas2D on the same canvas only after exact-null WebGL2", () => {
+    const fixture = canvas2dOnlyFixture();
+    const renderer = new Renderer(fixture.canvas, layout(), {
+      createCanvas: fixture.createCanvas
+    });
+
+    expect(renderer.snapshot()).toMatchObject({
+      backend: "canvas2d",
+      failure: null,
+      textureBytes: 0
+    });
+    expect(fixture.outputRequests).toEqual(["webgl2", "2d"]);
+    renderer.dispose();
+  });
+
   it("rejects extent-based storage that drops canonical odd padding", () => {
     expect(() => new Renderer(canvas(), {
       ...layout(), storageWidth: 47, storageHeight: 103
@@ -28,7 +43,12 @@ describe("renderer failure diagnostics", () => {
   it("distinguishes context creation from pre-GL resource admission", () => {
     expectRendererFailure(
       () => new Renderer(canvas(), layout()),
-      { operation: "construct", phase: "context-create", contextLost: false }
+      {
+        backend: "webgl2",
+        operation: "construct",
+        phase: "context-create",
+        contextLost: false
+      }
     );
 
     expect(() => new Renderer(webglCanvas().canvas, layout(), {
@@ -801,8 +821,42 @@ function canvas(): HTMLCanvasElement {
     height: 1,
     addEventListener() {},
     removeEventListener() {},
-    getContext() { return null; }
+    getContext() { throw new Error("WebGL2 is unavailable"); }
   } as unknown as HTMLCanvasElement;
+}
+
+function canvas2dOnlyFixture(): Readonly<{
+  canvas: HTMLCanvasElement;
+  createCanvas: (width: number, height: number) => HTMLCanvasElement;
+  outputRequests: string[];
+}> {
+  const outputRequests: string[] = [];
+  const makeCanvas = (
+    width: number,
+    height: number,
+    recordRequests: boolean
+  ): HTMLCanvasElement => {
+    const context = {
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: "high",
+      globalCompositeOperation: "source-over"
+    } as unknown as CanvasRenderingContext2D;
+    return {
+      width,
+      height,
+      addEventListener() {},
+      removeEventListener() {},
+      getContext(type: string) {
+        if (recordRequests) outputRequests.push(type);
+        return type === "2d" ? context : null;
+      }
+    } as unknown as HTMLCanvasElement;
+  };
+  return {
+    canvas: makeCanvas(48, 104, true),
+    createCanvas: (width, height) => makeCanvas(width, height, false),
+    outputRequests
+  };
 }
 
 function frame(

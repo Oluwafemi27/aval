@@ -129,6 +129,7 @@ vi.mock("../src/player.js", () => ({
       transitioning: false,
       selectedRendition: granted ? "main" : null,
       selectedCodec: granted ? "avc1.64001E" : null,
+      rendererBackend: granted ? "webgl2" : null,
       selectedBitDepth: granted ? 8 : null,
       transportMode: granted ? "range" : null,
       declaredFileBytes: disposed || animationRetired ? 0 : 1_024,
@@ -385,6 +386,7 @@ vi.mock("../src/player.js", () => ({
           sourceIndex: 0,
           rendition: "main",
           codec: "avc1.64001E",
+          backend: "webgl2",
           phase: "rgba-copy",
           operation: "runtime",
           operationOrdinal: 7,
@@ -996,6 +998,7 @@ describe("element lifecycle regressions", () => {
     harness.brokerMode = "immediate";
     const { element, source } = createConnectedElement("motion.avl");
     await element.prepare();
+    expect(element.getDiagnostics().runtime.rendererBackend).toBe("webgl2");
     const player = playerAt(0);
     let diagnosticsAtEvent: ReturnType<AvalElement["getDiagnostics"]> | null = null;
     element.addEventListener("error", () => {
@@ -1019,6 +1022,7 @@ describe("element lifecycle regressions", () => {
       sourceIndex: 0,
       rendition: "main",
       codec: "avc1.64001E",
+      backend: "webgl2",
       phase: "rgba-copy",
       operation: "runtime",
       operationOrdinal: 7,

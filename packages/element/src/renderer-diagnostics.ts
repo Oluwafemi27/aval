@@ -18,6 +18,7 @@ export type RendererDiagnosticPhase =
 
 export type RendererDiagnosticOperation = "construct" | "runtime" | "restore";
 export type RendererDiagnosticUploadPath = "native" | "rgba-copy";
+export type RendererDiagnosticBackend = "webgl2" | "canvas2d";
 
 export interface RendererDiagnosticLayout {
   readonly codedWidth: number;
@@ -65,6 +66,7 @@ export interface RendererDiagnosticContextAttributes {
 }
 
 export interface RendererFailureDiagnostic {
+  readonly backend: RendererDiagnosticBackend;
   readonly phase: RendererDiagnosticPhase;
   readonly operation: RendererDiagnosticOperation;
   readonly operationOrdinal: number;
@@ -83,6 +85,8 @@ export interface RendererFailureDiagnostic {
 }
 
 export interface RendererFailureDiagnosticInput {
+  /** Defaults to WebGL2 for the existing renderer while backend selection migrates. */
+  readonly backend?: RendererDiagnosticBackend;
   readonly phase: RendererDiagnosticPhase;
   readonly operation: RendererDiagnosticOperation;
   readonly operationOrdinal: number;
@@ -114,6 +118,7 @@ export function createRendererFailureDiagnostic(
   input: Readonly<RendererFailureDiagnosticInput>
 ): Readonly<RendererFailureDiagnostic> {
   return Object.freeze({
+    backend: input.backend ?? "webgl2",
     phase: input.phase,
     operation: input.operation,
     operationOrdinal: nonNegativeSafeInteger(input.operationOrdinal),

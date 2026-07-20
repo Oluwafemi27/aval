@@ -741,6 +741,7 @@ function playerSnapshot(live: boolean): Readonly<PlayerSnapshot> {
     transitioning: false,
     selectedRendition: live ? "main" : null,
     selectedCodec: live ? "avc1.64001E" : null,
+    rendererBackend: live ? "webgl2" : null,
     selectedBitDepth: live ? 8 : null,
     transportMode: live ? "full" : null,
     declaredFileBytes: live ? 1_024 : 0,

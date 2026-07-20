@@ -33,6 +33,7 @@ const media = vi.hoisted(() => ({
   rendererFailureError: null as RendererFailureError | null,
   rendererConstructionFailureError: null as RendererFailureError | null,
   rendererDiagnostic: null as Readonly<RendererFailureDiagnostic> | null,
+  rendererBackend: "webgl2" as "webgl2" | "canvas2d",
   decoderFailures: [] as Array<{
     promise: Promise<never>;
     reject: (reason: unknown) => void;
@@ -342,6 +343,7 @@ vi.mock("../src/renderer.js", () => ({
     public admit() { return { textureBytes: 3, runtimeBytes: 5 }; }
     public snapshot() {
       return {
+        backend: media.rendererBackend,
         cssWidth: 16,
         cssHeight: 16,
         backingWidth: 16,
@@ -406,6 +408,7 @@ afterEach(() => {
   media.rendererFailureError = null;
   media.rendererConstructionFailureError = null;
   media.rendererDiagnostic = null;
+  media.rendererBackend = "webgl2";
   media.decoderFailures.length = 0;
   media.decoderDiagnostics.length = 0;
   vi.useRealTimers();
@@ -413,6 +416,21 @@ afterEach(() => {
 });
 
 describe("player multi-route prefetch", () => {
+  it("reports the selected renderer backend independently from the codec", async () => {
+    media.rendererBackend = "canvas2d";
+    const { player } = await createReadyTerminalPlayer(
+      "renderer-failure",
+      "render"
+    );
+
+    expect(player.snapshot(false)).toMatchObject({
+      selectedCodec: "avc1.640020",
+      rendererBackend: "canvas2d"
+    });
+
+    await player.dispose();
+  });
+
   it("prepares only the initial live path instead of rehearsing every route", async () => {
     vi.stubGlobal("Worker", class {});
     vi.stubGlobal("VideoDecoder", class {});
@@ -718,6 +736,7 @@ describe("player multi-route prefetch", () => {
       sourceIndex: 0,
       rendition: "main",
       codec: "avc1.640020",
+      backend: "webgl2",
       phase: "context-create",
       operation: "construct"
     });
@@ -744,6 +763,7 @@ describe("player multi-route prefetch", () => {
       sourceIndex: 0,
       rendition: "main",
       codec: "avc1.640020",
+      backend: "webgl2",
       phase: "rgba-copy",
       operation: "runtime",
       operationOrdinal: 4,

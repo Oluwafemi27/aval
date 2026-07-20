@@ -275,6 +275,7 @@ function runtime(
     transitioning: false,
     selectedRendition: null,
     selectedCodec: null,
+    rendererBackend: null,
     selectedBitDepth: null,
     transportMode: null,
     declaredFileBytes: 0,

@@ -461,7 +461,10 @@ function installOverlay(diagnostics) {
       const element = report.latest?.element;
       const runtime = element?.diagnostics?.runtime;
       const failure = element?.diagnostics?.lastFailure;
-      const outcome = runtime?.selectedCodec ?? failure?.code ?? "pending";
+      const selectedCodec = runtime?.selectedCodec;
+      const outcome = typeof selectedCodec === "string"
+        ? `${selectedCodec} @ ${runtime?.rendererBackend ?? "renderer-pending"}`
+        : failure?.code ?? "pending";
       const summary = [
         `${String(report.checkpoints.length)}/${String(CHECKPOINT_LIMIT)} checkpoints`,
         overlayDiagnosticField(element?.readiness ?? "pending"),
@@ -524,6 +527,7 @@ function overlayFailureSummaries(runtime) {
       : diagnostic.contextLost === false ? "available" : "unknown";
     lines.push([
       `renderer[${overlayDiagnosticField(diagnostic.sourceIndex)}]`,
+      `backend=${overlayDiagnosticField(diagnostic.backend)}`,
       `phase=${overlayDiagnosticField(diagnostic.phase)}`,
       `gl=${overlayGlError(diagnostic.glError)}`,
       `context=${contextState}`

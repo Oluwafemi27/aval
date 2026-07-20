@@ -254,6 +254,7 @@ function readCapabilities(gl) {
 
 function boundedRendererSnapshot(value) {
   return deepFreeze({
+    backend: value.backend === "canvas2d" ? "canvas2d" : "webgl2",
     backingWidth: safeNonNegativeInteger(value.backingWidth),
     backingHeight: safeNonNegativeInteger(value.backingHeight),
     stagingBytes: safeNonNegativeInteger(value.stagingBytes),
@@ -323,7 +324,7 @@ function render(report) {
     heading.textContent = result.mode;
     const summary = document.createElement("p");
     summary.textContent = result.status === "success"
-      ? "Production initialization completed."
+      ? `Production initialization completed (${result.rendererSnapshot?.backend ?? "unknown"}).`
       : `Failed in ${result.diagnostic?.phase ?? "an unknown phase"}.`;
     article.append(heading, summary);
     return article;

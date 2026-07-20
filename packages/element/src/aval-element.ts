@@ -2118,6 +2118,7 @@ export function createAvalElementClass(
         runtime: Object.freeze({
           selectedRendition: runtime.selectedRendition,
           selectedCodec: runtime.selectedCodec,
+          rendererBackend: runtime.rendererBackend,
           selectedBitDepth: runtime.selectedBitDepth,
           transportMode: runtime.transportMode,
           declaredFileBytes: runtime.declaredFileBytes,
@@ -2839,6 +2840,7 @@ function emptyRuntime(): PlayerSnapshot {
     transitioning: false,
     selectedRendition: null,
     selectedCodec: null,
+    rendererBackend: null,
     selectedBitDepth: null,
     transportMode: null,
     declaredFileBytes: 0,

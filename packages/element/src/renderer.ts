@@ -1,4 +1,4 @@
-import { sameAspectRatio } from "./media-geometry.js";
+import { Canvas2dRenderer } from "./canvas2d-renderer.js";
 import {
   createRendererFailureDiagnostic,
   RendererFailureError,
@@ -8,18 +8,25 @@ import {
   type RendererDiagnosticUploadPath,
   type RendererFailureDiagnostic
 } from "./renderer-diagnostics.js";
+import {
+  allocationBytes,
+  calculateRendererBacking,
+  calculateRendererViewport,
+  checkedProduct,
+  checkedRenderLayout as checkedLayout,
+  checkedSum,
+  isRendererFit,
+  rgbaBytes,
+  validateRenderFrame as validateFrame,
+  type RenderLayout,
+  type RendererFit
+} from "./renderer-geometry.js";
+import {
+  selectRendererBackend,
+  WebGlUnavailableError
+} from "./renderer-selection.js";
 
-export interface RenderLayout {
-  readonly codedWidth: number;
-  readonly codedHeight: number;
-  readonly storageWidth: number;
-  readonly storageHeight: number;
-  readonly logicalWidth: number;
-  readonly logicalHeight: number;
-  readonly pixelAspect: readonly [number, number];
-  readonly colorRect: readonly [number, number, number, number];
-  readonly alphaRect?: readonly [number, number, number, number];
-}
+export type { RenderLayout } from "./renderer-geometry.js";
 
 export interface RendererLimits {
   readonly maxTextureBytes?: number;
@@ -36,6 +43,7 @@ export interface RendererLimits {
     sh: number,
     options: ImageBitmapOptions
   ) => Promise<ImageBitmap>;
+  readonly createCanvas?: (width: number, height: number) => HTMLCanvasElement;
   readonly onContextChange?: (change: Readonly<RendererContextChange>) => void;
   readonly initialPresentation?: Readonly<{
     width: number;
@@ -53,6 +61,7 @@ export type RendererContextChange =
 export type RendererUploadMode = "native-probing" | "native" | "rgba-copy";
 
 export interface RendererSnapshot {
+  readonly backend: "webgl2" | "canvas2d";
   readonly cssWidth: number;
   readonly cssHeight: number;
   readonly backingWidth: number;
@@ -89,7 +98,81 @@ const NATIVE_PROBE_ACCOUNTED_BYTES = NATIVE_PROBE_BYTES * 2;
 const MAX_NATIVE_PROBE_ATTEMPTS = 3;
 const ID = /^[a-z][a-z0-9._-]{0,63}$/;
 
-export class Renderer {
+interface RendererBackend {
+  resize(
+    cssWidth: number,
+    cssHeight: number,
+    devicePixelRatio: number,
+    fit: string
+  ): void;
+  draw(frame: VideoFrame): Promise<void>;
+  store(group: string, index: number, frame: VideoFrame): Promise<void>;
+  drawStored(group: string, index: number): Promise<void>;
+  settled(): Promise<void>;
+  admit(residentCount: number): Readonly<{
+    textureBytes: number;
+    runtimeBytes: number;
+  }>;
+  snapshot(): Readonly<RendererSnapshot>;
+  dispose(): void;
+}
+
+export class Renderer implements RendererBackend {
+  readonly #backend: RendererBackend;
+
+  public constructor(
+    canvas: HTMLCanvasElement,
+    layout: Readonly<RenderLayout>,
+    limits: Readonly<RendererLimits> = {}
+  ) {
+    this.#backend = selectRendererBackend<RendererBackend>(
+      () => new WebGl2Renderer(canvas, layout, limits),
+      () => new Canvas2dRenderer(canvas, layout, limits)
+    );
+  }
+
+  public resize(
+    cssWidth: number,
+    cssHeight: number,
+    devicePixelRatio: number,
+    fit: string
+  ): void {
+    this.#backend.resize(cssWidth, cssHeight, devicePixelRatio, fit);
+  }
+
+  public draw(frame: VideoFrame): Promise<void> {
+    return this.#backend.draw(frame);
+  }
+
+  public store(group: string, index: number, frame: VideoFrame): Promise<void> {
+    return this.#backend.store(group, index, frame);
+  }
+
+  public drawStored(group: string, index: number): Promise<void> {
+    return this.#backend.drawStored(group, index);
+  }
+
+  public settled(): Promise<void> {
+    return this.#backend.settled();
+  }
+
+  public admit(residentCount: number): Readonly<{
+    textureBytes: number;
+    runtimeBytes: number;
+  }> {
+    return this.#backend.admit(residentCount);
+  }
+
+  public snapshot(): Readonly<RendererSnapshot> {
+    return this.#backend.snapshot();
+  }
+
+  public dispose(): void {
+    this.#backend.dispose();
+  }
+}
+
+class WebGl2Renderer {
   readonly #canvas: HTMLCanvasElement;
   readonly #layout: Readonly<RenderLayout>;
   readonly #lost: (event: Event) => void;
@@ -130,7 +213,7 @@ export class Renderer {
   #nativeProbeReadback = new Uint8Array(0);
   #referenceProbeReadback = new Uint8Array(0);
   #resizeQueued = false;
-  #fit = "contain";
+  #fit: RendererFit = "contain";
   #cssWidth = 0;
   #cssHeight = 0;
   #dpr = 1;
@@ -188,17 +271,16 @@ export class Renderer {
     let width = canvas.width;
     let height = canvas.height;
     if (initial !== undefined) {
-      if (!Number.isFinite(initial.width) || initial.width < 0 ||
-        !Number.isFinite(initial.height) || initial.height < 0 ||
-        !Number.isFinite(initial.dpr) || initial.dpr <= 0 ||
-        !["contain", "cover", "fill", "none"].includes(initial.fit)) {
+      if (!isRendererFit(initial.fit)) {
         throw new RangeError("renderer presentation geometry is invalid");
       }
-      width = Math.max(1, Math.round(initial.width * initial.dpr));
-      height = Math.max(1, Math.round(initial.height * initial.dpr));
-      if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
-        throw new RangeError("renderer backing dimensions are invalid");
-      }
+      const backing = calculateRendererBacking(
+        initial.width,
+        initial.height,
+        initial.dpr
+      );
+      width = backing.width;
+      height = backing.height;
     }
     const oldWidth = canvas.width;
     const oldHeight = canvas.height;
@@ -221,7 +303,10 @@ export class Renderer {
         }
         this.#cssWidth = Math.max(1, initial.width);
         this.#cssHeight = Math.max(1, initial.height);
-        this.#dpr = initial.dpr;
+        this.#dpr = Math.max(0.1, initial.dpr);
+        if (!isRendererFit(initial.fit)) {
+          throw new RangeError("renderer presentation geometry is invalid");
+        }
         this.#fit = initial.fit;
       }
       this.#assertBudget(0, this.#backingBytes(canvas.width, canvas.height));
@@ -252,18 +337,14 @@ export class Renderer {
   ): void {
     if (this.#state === "disposed") return;
     if (this.#state === "error") throw unavailable();
-    if (
-      !Number.isFinite(cssWidth) || cssWidth < 0 ||
-      !Number.isFinite(cssHeight) || cssHeight < 0 ||
-      !Number.isFinite(devicePixelRatio) || devicePixelRatio <= 0 ||
-      !["contain", "cover", "fill", "none"].includes(fit)
-    ) throw new RangeError("renderer presentation geometry is invalid");
-    const dpr = Math.max(0.1, devicePixelRatio);
-    const width = Math.max(1, Math.round(cssWidth * dpr));
-    const height = Math.max(1, Math.round(cssHeight * dpr));
-    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
-      throw new RangeError("renderer backing dimensions are invalid");
+    if (!isRendererFit(fit)) {
+      throw new RangeError("renderer presentation geometry is invalid");
     }
+    const { width, height, dpr } = calculateRendererBacking(
+      cssWidth,
+      cssHeight,
+      devicePixelRatio
+    );
     const operationOrdinal = this.#beginOperation();
     if (
       width > this.#maxTextureSize || height > this.#maxTextureSize ||
@@ -475,6 +556,7 @@ export class Renderer {
       : 0;
     const residentBytes = 0;
     return Object.freeze({
+      backend: "webgl2" as const,
       cssWidth: this.#cssWidth,
       cssHeight: this.#cssHeight,
       backingWidth: this.#canvas.width,
@@ -613,6 +695,9 @@ export class Renderer {
         operationOrdinal,
         reason
       );
+    }
+    if (gl === null && operation === "construct") {
+      throw new WebGlUnavailableError();
     }
     if (gl === null || contextLost(gl)) {
       throw this.#failure(
@@ -1258,32 +1343,25 @@ export class Renderer {
     }
     const backingWidth = this.#canvas.width;
     const backingHeight = this.#canvas.height;
-    const sourceWidth = this.#layout.logicalWidth *
-      this.#layout.pixelAspect[0] / this.#layout.pixelAspect[1];
-    const sourceHeight = this.#layout.logicalHeight;
-    let width = backingWidth;
-    let height = backingHeight;
-    if (this.#fit !== "fill") {
-      const scale = this.#fit === "cover"
-        ? Math.max(backingWidth / sourceWidth, backingHeight / sourceHeight)
-        : this.#fit === "none"
-          ? this.#dpr
-          : Math.min(backingWidth / sourceWidth, backingHeight / sourceHeight);
-      width = Math.max(1, Math.round(sourceWidth * scale));
-      height = Math.max(1, Math.round(sourceHeight * scale));
-    }
+    const viewport = calculateRendererViewport(
+      this.#layout,
+      backingWidth,
+      backingHeight,
+      this.#dpr,
+      this.#fit
+    );
     if (
-      !Number.isSafeInteger(width) || !Number.isSafeInteger(height) ||
-      width > this.#maxViewportWidth || height > this.#maxViewportHeight
+      viewport.width > this.#maxViewportWidth ||
+      viewport.height > this.#maxViewportHeight
     ) throw new RendererArithmeticError("renderer viewport exceeds device limits");
     try {
       gl.viewport(0, 0, backingWidth, backingHeight);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.viewport(
-        Math.round((backingWidth - width) / 2),
-        Math.round((backingHeight - height) / 2),
-        width,
-        height
+        viewport.x,
+        viewport.y,
+        viewport.width,
+        viewport.height
       );
       gl.useProgram(program);
       gl.activeTexture(gl.TEXTURE0);
@@ -1394,6 +1472,7 @@ export class Renderer {
     if (this.#failureError !== null) return this.#failureError;
     const bytes = this.#diagnosticBytes();
     const diagnostic = createRendererFailureDiagnostic({
+      backend: "webgl2",
       phase,
       operation,
       operationOrdinal,
@@ -1544,147 +1623,11 @@ export class Renderer {
   }
 }
 
-function allocationBytes(rawBytes: number): number {
-  return Math.ceil(checkedProduct(rawBytes, 5) / 4);
-}
-
-function checkedLayout(value: Readonly<RenderLayout>): RenderLayout {
-  const codedWidth = dimension(value.codedWidth);
-  const codedHeight = dimension(value.codedHeight);
-  const storageWidth = dimension(value.storageWidth);
-  const storageHeight = dimension(value.storageHeight);
-  const logicalWidth = dimension(value.logicalWidth);
-  const logicalHeight = dimension(value.logicalHeight);
-  const pixelAspect = value.pixelAspect;
-  if (
-    pixelAspect.length !== 2 ||
-    !Number.isSafeInteger(pixelAspect[0]) || pixelAspect[0] < 1 ||
-    !Number.isSafeInteger(pixelAspect[1]) || pixelAspect[1] < 1 ||
-    !Number.isFinite(logicalWidth * pixelAspect[0] / pixelAspect[1])
-  ) throw new RangeError("renderer pixel aspect is invalid");
-  if (storageWidth > codedWidth || storageHeight > codedHeight) {
-    throw new RangeError("renderer storage exceeds coded dimensions");
-  }
-  const colorRect = rect(value.colorRect, storageWidth, storageHeight);
-  const alphaRect = value.alphaRect === undefined
-    ? undefined : rect(value.alphaRect, storageWidth, storageHeight);
-  const paneWidth = colorRect[2] + colorRect[2] % 2;
-  const paneHeight = colorRect[3] + colorRect[3] % 2;
-  const expectedHeight = alphaRect === undefined
-    ? paneHeight : paneHeight * 2 + 8;
-  if (
-    colorRect[0] !== 0 || colorRect[1] !== 0 ||
-    storageWidth !== paneWidth || storageHeight !== expectedHeight ||
-    alphaRect !== undefined && (
-      alphaRect[0] !== 0 || alphaRect[1] !== paneHeight + 8 ||
-      alphaRect[2] !== colorRect[2] || alphaRect[3] !== colorRect[3]
-    )
-  ) {
-    throw new RangeError("renderer storage rectangle is not canonical");
-  }
-  return Object.freeze({
-    codedWidth,
-    codedHeight,
-    storageWidth,
-    storageHeight,
-    logicalWidth,
-    logicalHeight,
-    pixelAspect: Object.freeze([pixelAspect[0], pixelAspect[1]]) as
-      readonly [number, number],
-    colorRect,
-    ...(alphaRect === undefined ? {} : { alphaRect })
-  });
-}
-
-function validateFrame(
-  frame: VideoFrame,
-  layout: Readonly<RenderLayout>
-): DOMRectReadOnly {
-  const visible = frame.visibleRect;
-  if (
-    visible === null ||
-    !Number.isSafeInteger(frame.codedWidth) || frame.codedWidth < 1 ||
-    !Number.isSafeInteger(frame.codedHeight) || frame.codedHeight < 1 ||
-    !Number.isSafeInteger(frame.displayWidth) || frame.displayWidth < 1 ||
-    !Number.isSafeInteger(frame.displayHeight) || frame.displayHeight < 1 ||
-    !sameAspectRatio(
-      frame.displayWidth,
-      frame.displayHeight,
-      layout.storageWidth,
-      layout.storageHeight
-    ) ||
-    !Number.isSafeInteger(visible.x) || visible.x < 0 ||
-    !Number.isSafeInteger(visible.y) || visible.y < 0 ||
-    visible.width !== layout.storageWidth ||
-    visible.height !== layout.storageHeight ||
-    visible.x > frame.codedWidth - visible.width ||
-    visible.y > frame.codedHeight - visible.height
-  ) throw new Error("decoded frame geometry is invalid");
-  return visible;
-}
-
 function residentKey(group: string, index: number): string {
   if (!ID.test(group) || !Number.isSafeInteger(index) || index < 0) {
     throw new RangeError("resident frame key is invalid");
   }
   return `${group}\0${String(index)}`;
-}
-
-function rect(
-  value: readonly number[],
-  width: number,
-  height: number
-): readonly [number, number, number, number] {
-  if (value.length !== 4) throw new RangeError("renderer rectangle is invalid");
-  const result = [
-    coordinate(value[0]),
-    coordinate(value[1]),
-    dimension(value[2]),
-    dimension(value[3])
-  ] as [number, number, number, number];
-  if (
-    result[0] > width - result[2] ||
-    result[1] > height - result[3]
-  ) throw new RangeError("renderer rectangle exceeds storage");
-  return Object.freeze(result);
-}
-
-function coordinate(value: number | undefined): number {
-  if (!Number.isSafeInteger(value) || value === undefined || value < 0) {
-    throw new RangeError("renderer coordinate is invalid");
-  }
-  return value;
-}
-
-function dimension(value: number | undefined): number {
-  if (value === undefined || !Number.isSafeInteger(value) || value < 1) {
-    throw new RangeError("renderer dimension is invalid");
-  }
-  return value;
-}
-
-function rgbaBytes(width: number, height: number): number {
-  return checkedProduct(checkedProduct(width, height), 4);
-}
-
-function checkedProduct(left: number, right: number): number {
-  if (
-    !Number.isSafeInteger(left) || left < 0 ||
-    !Number.isSafeInteger(right) || right < 0 ||
-    right !== 0 && left > Math.floor(Number.MAX_SAFE_INTEGER / right)
-  ) throw new RangeError("renderer byte count is unsafe");
-  return left * right;
-}
-
-function checkedSum(values: readonly number[]): number {
-  let total = 0;
-  for (const value of values) {
-    if (value > Number.MAX_SAFE_INTEGER - total) {
-      throw new RangeError("renderer byte sum is unsafe");
-    }
-    total += value;
-  }
-  return total;
 }
 
 function cap(value: number | undefined, label: string): number {

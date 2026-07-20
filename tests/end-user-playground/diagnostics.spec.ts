@@ -197,6 +197,7 @@ test("captures bounded query-only browser diagnostics", async ({
       lastFailure: { code: "renderer-failure" },
       runtime: {
         selectedCodec: null,
+        rendererBackend: null,
         decoderDiagnostics: [{
           sourceIndex: 2,
           unit: "body-01",
@@ -217,6 +218,7 @@ test("captures bounded query-only browser diagnostics", async ({
         }],
         rendererDiagnostics: [{
           sourceIndex: 2,
+          backend: "webgl2",
           phase: "native-upload",
           glError: 0x0502,
           contextLost: false,
@@ -237,7 +239,7 @@ test("captures bounded query-only browser diagnostics", async ({
     "mismatch=display-aspect/display-aspect/host-expectation"
   );
   await expect(overlayStatus).toContainText(
-    "renderer[2] phase=native-upload " +
+    "renderer[2] backend=webgl2 phase=native-upload " +
     "gl=INVALID_OPERATION(0x0502) context=available"
   );
   const safeOverlayStatus = await overlayStatus.textContent();
@@ -264,6 +266,7 @@ test("captures bounded query-only browser diagnostics", async ({
       sourceBytes: "[redacted-sensitive]"
     }],
     rendererDiagnostics: [{
+      backend: "webgl2",
       phase: "native-upload",
       glError: 0x0502,
       contextLost: false,
