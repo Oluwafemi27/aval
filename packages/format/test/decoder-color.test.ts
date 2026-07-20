@@ -39,11 +39,35 @@ describe("decoder color classification", () => {
     });
   });
 
-  it("rejects full-range sRGB as a range mismatch", () => {
+  it("accepts the captured WebKit full-range sRGB normalization", () => {
     expect(classifyDecoderColor(
       BT709_LIMITED,
       ["bt709", "iec61966-2-1", "bt709", true]
-    )).toEqual({ kind: "incompatible", field: "range" });
+    )).toEqual({
+      kind: "known-normalization",
+      normalization: "webkit-bt709-full-range-srgb-transfer"
+    });
+  });
+
+  it.each([
+    ["primaries", ["smpte170m", "iec61966-2-1", "bt709", true]],
+    ["transfer", ["bt709", "bt709", "bt709", true]],
+    ["matrix", ["bt709", "iec61966-2-1", "smpte170m", true]],
+    ["range", ["bt709", "iec61966-2-1", "bt709", null]]
+  ] as const)(
+    "rejects a WebKit-normalization near miss in %s",
+    (_field, actual) => {
+      expect(classifyDecoderColor(BT709_LIMITED, actual).kind).toBe(
+        "incompatible"
+      );
+    }
+  );
+
+  it("does not apply the WebKit normalization to a non-limited expectation", () => {
+    expect(classifyDecoderColor(
+      ["bt709", "bt709", "bt709", true],
+      ["bt709", "iec61966-2-1", "bt709", true]
+    )).toEqual({ kind: "incompatible", field: "transfer" });
   });
 
   it.each([

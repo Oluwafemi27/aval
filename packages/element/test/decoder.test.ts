@@ -233,34 +233,41 @@ describe("Decoder output certification", () => {
     decoder.dispose();
   });
 
-  it("accepts the browser sRGB transfer normalization of limited BT.709", async () => {
-    const Worker = fakeWorker();
-    const VideoFrame = fakeVideoFrame({
-      fullRange: false,
-      matrix: "bt709",
-      primaries: "bt709",
-      transfer: "iec61966-2-1"
-    });
-    vi.stubGlobal("Worker", Worker);
-    vi.stubGlobal("VideoFrame", VideoFrame);
-    const decoder = strictBt709Decoder("avc1.640020");
-    const worker = Worker.latest();
-    worker.emit({ t: "configured", supported: true });
-    await decoder.supported();
-    const run = oneFrameRun(decoder);
-    worker.emit({ t: "started", run: run.generation });
-    worker.emit({ t: "accepted", run: run.generation });
-    worker.emit({
-      t: "frame",
-      run: run.generation,
-      timestamp: 0,
-      frame: new VideoFrame(32, 34)
-    });
+  it.each([
+    ["limited-range sRGB", "avc1.640020", false],
+    ["captured WebKit H.264", "avc1.640020", true],
+    ["captured WebKit HEVC", "hvc1.1.6.L93.B0", true]
+  ] as const)(
+    "accepts the %s transfer normalization of limited BT.709",
+    async (_label, codec, fullRange) => {
+      const Worker = fakeWorker();
+      const VideoFrame = fakeVideoFrame({
+        fullRange,
+        matrix: "bt709",
+        primaries: "bt709",
+        transfer: "iec61966-2-1"
+      });
+      vi.stubGlobal("Worker", Worker);
+      vi.stubGlobal("VideoFrame", VideoFrame);
+      const decoder = strictBt709Decoder(codec);
+      const worker = Worker.latest();
+      worker.emit({ t: "configured", supported: true });
+      await decoder.supported();
+      const run = oneFrameRun(decoder);
+      worker.emit({ t: "started", run: run.generation });
+      worker.emit({ t: "accepted", run: run.generation });
+      worker.emit({
+        t: "frame",
+        run: run.generation,
+        timestamp: 0,
+        frame: new VideoFrame(32, 34)
+      });
 
-    const frame = await run.take(0);
-    run.release(frame);
-    decoder.dispose();
-  });
+      const frame = await run.take(0);
+      run.release(frame);
+      decoder.dispose();
+    }
+  );
 
   it.each([
     ["AV1", "av01.0.01M.08.0.110.01.01.01.0"],
@@ -293,11 +300,13 @@ describe("Decoder output certification", () => {
     }
   );
 
-  it("retains frozen raw color tuples for a true matrix mismatch", async () => {
+  it("retains frozen raw tuples for a WebKit color-space near miss", async () => {
     const Worker = fakeWorker();
     const VideoFrame = fakeVideoFrame({
-      ...BT709_LIMITED_COLOR,
-      matrix: "smpte170m"
+      fullRange: true,
+      matrix: "smpte170m",
+      primaries: "bt709",
+      transfer: "iec61966-2-1"
     });
     vi.stubGlobal("Worker", Worker);
     vi.stubGlobal("VideoFrame", VideoFrame);
@@ -327,7 +336,7 @@ describe("Decoder output certification", () => {
         colorSpace: ["bt709", "bt709", "bt709", false]
       },
       actual: {
-        colorSpace: ["bt709", "bt709", "smpte170m", false]
+        colorSpace: ["bt709", "iec61966-2-1", "smpte170m", true]
       }
     });
     const expectedColor = diagnostic?.outputFailure?.expected?.colorSpace;

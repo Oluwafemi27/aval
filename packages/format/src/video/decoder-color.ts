@@ -11,7 +11,8 @@ export type DecoderColorClassification =
       kind: "known-normalization";
       normalization:
         | "bt709-transfer-as-smpte170m"
-        | "limited-bt709-srgb-transfer";
+        | "limited-bt709-srgb-transfer"
+        | "webkit-bt709-full-range-srgb-transfer";
     }>
   | Readonly<{
       kind: "incompatible";
@@ -26,6 +27,11 @@ const BT709_TRANSFER_AS_SMPTE170M = Object.freeze({
 const LIMITED_BT709_SRGB_TRANSFER = Object.freeze({
   kind: "known-normalization",
   normalization: "limited-bt709-srgb-transfer"
+} as const);
+/** WebKit reports authored limited-range BT.709 through this decoded tuple. */
+const WEBKIT_BT709_FULL_RANGE_SRGB_TRANSFER = Object.freeze({
+  kind: "known-normalization",
+  normalization: "webkit-bt709-full-range-srgb-transfer"
 } as const);
 const INCOMPATIBLE_PRIMARIES = incompatible("primaries");
 const INCOMPATIBLE_TRANSFER = incompatible("transfer");
@@ -51,10 +57,12 @@ export function classifyDecoderColor(
     if (
       actual[0] === "bt709" &&
       actual[1] === "iec61966-2-1" &&
-      actual[2] === "bt709" &&
-      actual[3] === false
+      actual[2] === "bt709"
     ) {
-      return LIMITED_BT709_SRGB_TRANSFER;
+      if (actual[3] === false) return LIMITED_BT709_SRGB_TRANSFER;
+      if (actual[3] === true) {
+        return WEBKIT_BT709_FULL_RANGE_SRGB_TRANSFER;
+      }
     }
   }
 
