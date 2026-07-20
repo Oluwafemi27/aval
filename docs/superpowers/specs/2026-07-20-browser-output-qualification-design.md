@@ -7,10 +7,11 @@ with the recommended compatibility approach; refined after the 2026-07-20
 thermo-nuclear maintainability checkpoint.
 
 **Decision:** Treat browser-reported color metadata through one typed semantic
-classifier, prove packed-alpha output against a compiler-authored bounded
-witness before publishing readiness, and make source fallback consume a typed
-candidate-rejection disposition. Keep renderer lifecycle in one controller with
-small WebGL2 and Canvas2D backends.
+classifier, prove decoded packed-alpha output against a compiler-authored and
+encoded-rendition-verified bounded witness before publishing readiness, and let
+the provisional-startup orchestrator map typed local failures into a closed
+retryable-candidate union. Keep semantic qualification outside one renderer
+controller with small WebGL2 and Canvas2D backends.
 
 ## 1. Objective
 
@@ -25,6 +26,12 @@ startup qualification. AVAL never owns a static or video fallback. When every
 candidate fails, it publishes the existing typed terminal error so the
 application can render its own image, noninteractive video, text, or other
 fallback.
+
+Arbitrary consumer source arrays remain authored-order inputs and are never
+silently re-sorted. First-party examples and certification fixtures must emit
+and assert the exact order above. H.264 must never be opened, probed, fetched,
+or decoded after HEVC succeeds, and it is touched only after every preceding
+authored candidate records a retryable provisional failure.
 
 This design addresses two independently reproduced Android failures:
 
@@ -83,12 +90,15 @@ what the decoded alpha plane should contain.
 
 Firefox 152 already passes all four demos. Firefox 128 produces the intended
 typed `unsupported-profile` result because Mozilla enabled desktop WebCodecs in
-Firefox 130. No Firefox-specific branch is justified. The supported floor is
-Firefox 130; Firefox 129 and 128 remain required negative sentinels.
+Firefox 130. No Firefox-specific branch is justified. Firefox 130 is the
+candidate feature floor until AVAL itself passes the recorded BrowserStack
+matrix; Firefox 129 and 128 remain required negative sentinels.
 
 ## 3. Non-negotiable Contracts
 
 - Authored source order is the only codec-priority policy.
+- Shipped examples enforce `AV1 -> VP9 -> HEVC/H.265 -> H.264`; the runtime
+  preserves arbitrary consumer order instead of pretending it is a rank.
 - No user-agent, OS-name, device-name, or codec-name exception enters color or
   pixel validation.
 - H.264 is not preferred merely because it is broadly available.
@@ -102,6 +112,9 @@ Firefox 130; Firefox 129 and 128 remain required negative sentinels.
   fallback content.
 - Diagnostics retain exact expected and observed metadata but do not control
   fallback by reverse-engineering their field shapes.
+- A packed-alpha rendition without a valid witness is not playback-qualified:
+  malformed data is a terminal asset error and a legacy missing witness is a
+  terminal unsupported-profile result, never a reason to try another codec.
 
 ## 4. Approaches Considered
 
@@ -124,18 +137,23 @@ fallback condition duplicated across WebGL2 and Canvas2D.
 
 This is selected. Color metadata is classified by a pure authority with named
 equivalences. Packed-alpha qualification uses a small compiler-authored witness
-derived from canonical source pixels. One renderer controller performs the
-bounded materialization and witness check before delegating storage and drawing
-to either backend. Candidate selection consumes a typed rejection disposition.
+whose samples are rechecked against the exact emitted bitstream. A provisional
+`DecodedOutputQualifier` performs the bounded semantic check before handing the
+frame to the renderer. Candidate selection consumes a closed typed outcome
+created only by the provisional-startup orchestrator.
 
-The selected approach costs one bounded startup RGBA materialization for a
-witness-bearing candidate and requires regenerated example assets, but it is
-capability-based, deterministic, testable, and independent of browser names.
+The selected approach costs one bounded startup RGBA materialization plus one
+compiler decode-validation pass for each emitted packed-alpha rendition and
+requires regenerated example assets, but it is capability-based,
+deterministic, testable, and independent of browser names.
 
 ## 5. Color-space Classification
 
-Create a focused decoder color module that owns all semantic comparison. It
-returns a discriminated result instead of a boolean:
+Create one DOM-independent color module in `@pixel-point/aval-format` that owns
+all semantic comparison. Both `@pixel-point/aval-element` and the retained
+`@pixel-point/aval-player-web` worker consume it through thin WebCodecs tuple
+adapters; no second matcher remains. It returns a discriminated result instead
+of a boolean:
 
 ```ts
 type DecoderColorClassification =
@@ -155,8 +173,9 @@ For an exact limited-BT.709 expectation, the classifier accepts:
 - `smpte170m` only in the transfer member while primaries, matrix, and limited
   range remain exact, because the normative WebCodecs definition says those
   transfer functions are functionally the same; and
-- the already-supported browser sRGB transfer normalization under its existing
-  narrow shape, retained as a named compatibility rule.
+- the browser sRGB transfer normalization only for the exact tuple
+  `["bt709", "iec61966-2-1", "bt709", false]`, retained as a named
+  compatibility rule. Full-range sRGB is explicitly incompatible.
 
 It continues to reject:
 
@@ -174,10 +193,18 @@ No Android, Chrome, Samsung, Pixel, AV1, or VP9 branch is added.
 
 ### 6.1 Format
 
-Add an optional, versioned output-qualification witness to packed-alpha
-renditions. Legacy assets without a witness remain readable, but new compiler
-output emits one whenever the initial readiness set contains robust alpha
-samples. Certification requires witnesses for every packed-alpha example.
+Bump the asset wire/header minor and manifest version to `1.1`. Format readers
+dispatch explicitly: legacy `1.0` assets keep their original exact-key schema,
+while `1.1` adds `outputQualification` and requires it on every packed-alpha
+rendition. This avoids silently changing the meaning of strict `1.0`.
+
+The current parser can still inspect legacy `1.0` assets, but packed-alpha
+playback has a stricter qualified profile: a legacy missing witness is a
+terminal unsupported-profile failure. A malformed `1.1` witness is a terminal
+invalid-asset failure. Neither condition is codec-retryable. New compilation
+always emits `1.1`, fails if it cannot emit a qualified witness, and all
+first-party examples are regenerated. The element's independent exact-key
+asset reader is an unconditional part of this versioned migration.
 
 The witness is bounded:
 
@@ -189,44 +216,74 @@ interface PackedAlphaWitnessV1 {
   readonly samples: readonly Readonly<{
     readonly x: number;
     readonly y: number;
-    readonly expected: "transparent" | "opaque";
+    readonly expectedRange: readonly [minimum: number, maximum: number];
   }>[];
 }
 ```
 
-- The compiler emits exactly two through eight samples.
-- Coordinates address logical alpha-pane pixels, not coded padding.
-- Transparent samples come from stable neighborhoods whose canonical alpha is
-  at most 8.
-- Opaque samples come from stable neighborhoods whose canonical alpha is at
-  least 247.
-- The compiler chooses samples deterministically by source/unit/frame and
-  row-major coordinate.
-- A witness must contain at least one transparent and one opaque sample.
-- If no initial-readiness frame has both robust classes, compilation may omit
-  the optional witness, but compatibility certification rejects the resulting
-  packed-alpha example until an author supplies certifiable startup content.
+- The compiler emits one through eight samples. Valid content is not required
+  to contain both fully transparent and fully opaque pixels.
+- Coordinates are local visible-alpha-rendition pixels. Runtime addressing
+  adds `alphaRect.x` and `alphaRect.y`; coded padding and gutter coordinates are
+  never authorable.
+- Every inclusive expected interval is bounded to `0..255`, has width at most
+  96, and contains both canonical source alpha `c` and compiler-decoded emitted
+  alpha `e`. After requiring `abs(c - e) <= 32`, construction is exact:
+  `[max(0, min(c, e) - 32), min(255, max(c, e) + 32)]`. Transparent/opaque
+  samples naturally produce narrow clipped edge intervals, while uniformly
+  opaque, uniformly transparent, or mid-alpha content remains compilable.
+- The compiler chooses samples deterministically by unit/frame, low local
+  gradient, then row-major coordinate. Coordinates are unique. When the chosen
+  frame contains canonical alpha values separated by at least 128, the witness
+  includes two samples with non-overlapping expected intervals; otherwise one
+  representative sample is valid.
+- `frame` is the zero-based local presentation index inside `unit`, must be less
+  than that unit's `frameCount`, and is not a global decode ordinal. The unit
+  must be in `readiness.bootstrapUnits` and contain a chunk span for the selected
+  rendition. Manifest relation validation enforces all three references.
+- After encoding, the compiler decodes the exact emitted rendition and retains
+  only candidates whose decoded alpha-pane red value differs from canonical
+  alpha by at most 32. It applies the exact min/max-plus-32 formula above. If no
+  meaningful bounded sample survives in the readiness span, compilation fails
+  with an actionable qualification error.
 
-The runtime accepts a transparent decoded sample at or below 32 and an opaque
-sample at or above 223. These thresholds tolerate bounded lossy ringing while
-remaining far apart. They are format constants with compiler and runtime tests,
-not tunable browser exceptions.
+The interval width and maximum compiler-reference delta are format constants
+with compiler and runtime tests, not tunable browser exceptions.
 
 ### 6.2 Runtime proof
 
-During provisional startup, the shared renderer controller materializes the
-witness frame to sRGB RGBA once through the existing timed, exact
-`VideoFrame.copyTo()` contract. It samples the alpha pane's red channel using
-the rendition geometry and the witness coordinates.
+During provisional startup, the startup orchestrator schedules the witness
+unit/frame before publication, including prerequisite chunks from the nearest
+random-access point. It passes the already-decoded target frame and its explicit
+unit/local-presentation identity to `DecodedOutputQualifier`. The qualifier
+validates that identity, materializes the frame to sRGB RGBA once through a
+shared bounded materializer, then samples the alpha pane's red channel using
+canonical rendition geometry and local witness coordinates.
 
-The candidate is qualified only when every witness sample matches its class.
+The materializer first uses the existing timed, exact
+`VideoFrame.copyTo({ format: "RGBA" })` contract. An ordinary unsupported-copy
+result may use one bounded Canvas2D `drawImage`/`getImageData` readback. Timeout,
+unsafe layout, taint/security failure, context failure, or inability to obtain
+CPU pixels is a terminal materializer/browser-capability failure and never
+advances the codec ladder.
+
+The candidate is qualified only when every witness sample lies inside its
+inclusive expected interval.
 A mismatch produces a typed decoded-output failure before `visualReady` or
-`interactiveReady`. Because the witness is compared with authored semantics,
-it catches corruption shared by native texture upload and RGBA copy.
+`interactiveReady`. Only this semantic mismatch is eligible for provisional
+codec retry. Rejected resources and unpublished readiness state are fully
+retired before the successor opens. Because the witness is compared with the
+decoded emitted rendition, it catches corruption shared by native texture
+upload and RGBA copy.
 
-The same materialized bytes may be reused for the candidate's first upload.
-The proof does not add an unbounded frame copy, retain media bytes in
-diagnostics, or inspect arbitrary later frames.
+Canvas2D's first upload and WebGL2's RGBA reference probe may reuse the cached
+materialized bytes. WebGL2's primary upload remains the native `VideoFrame` and
+does not pretend to consume the cached bytes.
+The proof is deliberately limited to decoded packed-alpha semantics; shader
+coordinates, Y-flip, premultiplication, blending, Canvas composition, scaling,
+and the final framebuffer remain backend-conformance and real-device visual
+evidence responsibilities. The proof does not add an unbounded frame copy,
+retain media bytes in diagnostics, or inspect arbitrary later frames.
 
 ## 7. Renderer Architecture
 
@@ -237,32 +294,50 @@ Before adding output qualification, extract one renderer controller that owns:
 - stream-slot and resident-frame identity;
 - `VideoFrame` geometry validation and RGBA materialization;
 - copy timeout and in-flight accounting;
-- witness qualification;
 - common resize/redraw scheduling;
 - lifecycle state, context-change routing, terminalization, and disposal;
 - common budget accounting and snapshot fields; and
 - stable renderer diagnostics.
 
-Backend interfaces own only platform primitives and backend-specific resources:
+Semantic witness policy is not a renderer responsibility. The controller may
+share the bounded RGBA materializer with `DecodedOutputQualifier`, but it does
+not interpret witness unit/frame/sample semantics.
+
+Backend interfaces own only platform primitives and backend-specific
+resources. Targets are opaque handles, uploads expose a native frame plus a
+lazy bounded RGBA reference, and context state flows through an explicit event
+sink:
 
 ```ts
+interface RendererBackendTarget {
+  readonly rendererBackendTarget: unique symbol;
+}
+
+interface RendererUploadSource {
+  readonly frame: VideoFrame;
+  rgba(): Promise<RendererRgbaSource>;
+}
+
 interface RendererBackend {
   readonly kind: "webgl2" | "canvas2d";
+  setEventSink(sink: (event: RendererBackendEvent) => void): void;
   configure(layout: RenderLayout, presentation: RendererPresentation): void;
-  allocateResident(key: string): void;
-  upload(target: RendererTarget, source: RendererRgbaSource): Promise<void>;
-  draw(target: RendererTarget, viewport: RendererViewport): void;
-  releaseResident(key: string): void;
+  allocateTarget(): RendererBackendTarget;
+  upload(target: RendererBackendTarget, source: RendererUploadSource): Promise<void>;
+  draw(target: RendererBackendTarget, viewport: RendererViewport): void;
+  releaseTarget(target: RendererBackendTarget): void;
   backendSnapshot(): RendererBackendDetails;
   dispose(): void;
 }
 ```
 
 The WebGL2 backend retains texture/program/native-upload logic and its bounded
-native-versus-reference probe. The Canvas2D backend retains scratch surfaces,
-`putImageData`, scaling, and `destination-in` composition. Neither backend owns
-codec selection, queueing, generic frame validation, copy timeouts, readiness,
-or duplicated public diagnostics.
+native-versus-reference probe; it invokes the lazy RGBA reference only when the
+probe or fallback path requires it. The Canvas2D backend invokes the same lazy
+reference and retains scratch surfaces, `putImageData`, scaling, and
+`destination-in` composition. Neither backend owns authored identity, codec
+selection, queueing, generic frame validation, copy timeouts, readiness, or
+duplicated public diagnostics.
 
 Use `@pixel-point/aval-format` as the canonical authority for packed-alpha
 geometry and `PACKED_ALPHA_GUTTER`; do not retain a second hard-coded eight-pixel
@@ -273,32 +348,58 @@ Canvas2D no longer fills WebGL-only fields with artificial zero literals.
 
 ## 8. Typed Candidate Rejection
 
-Introduce one internal startup result:
+Before changing retry policy, extract provisional selection/qualification from
+the 3,000-line player into a focused `provisional-startup.ts` orchestrator and
+extract reusable candidate/WebCodecs fakes from the 1,400-line source-fallback
+test. `player.ts` must shrink in net lines. New production targets are bounded:
+provisional orchestrator at 500 lines, renderer controller at 700, RGBA
+materializer and decoded-output qualifier at 350 each, and each backend at 900.
+The reusable test harness target is 400 lines. Exceeding a target requires a
+thermo-nuclear design review before more behavior is added.
+
+Decoder, qualifier, and renderer boundaries return typed local failures without
+choosing codec policy. Only the provisional-startup orchestrator can construct
+a retryable candidate outcome. Invalid retry/stage/cause combinations are not
+representable:
 
 ```ts
-interface StartupCandidateRejection {
-  readonly disposition: "retry-next-candidate" | "terminal";
-  readonly stage: "probe" | "decode" | "output" | "renderer";
-  readonly cause:
-    | "unsupported-config"
-    | "decoder-operation"
-    | "decoded-metadata-incompatible"
-    | "decoded-output-incompatible"
-    | "renderer-unavailable"
-    | "terminal-runtime";
-}
+type RetryableCandidateRejection =
+  | { readonly stage: "probe"; readonly cause: "unsupported-config" }
+  | { readonly stage: "configure"; readonly cause: "configure-not-supported" }
+  | { readonly stage: "decode"; readonly cause: "decode-not-supported" }
+  | { readonly stage: "decode"; readonly cause: "decode-encoding-rejected" }
+  | { readonly stage: "flush"; readonly cause: "flush-not-supported" }
+  | { readonly stage: "flush"; readonly cause: "flush-encoding-rejected" }
+  | { readonly stage: "decode"; readonly cause: "decoded-metadata-incompatible" }
+  | { readonly stage: "output"; readonly cause: "decoded-output-incompatible" };
+
+type ProvisionalCandidateOutcome<T> =
+  | { readonly kind: "selected"; readonly value: T }
+  | { readonly kind: "retryable-rejection"; readonly rejection: RetryableCandidateRejection };
+
+type TerminalStartupFailure =
+  | RendererFailureError
+  | MaterializerFailureError
+  | AssetFailureError
+  | ResourceFailureError
+  | CleanupFailureError
+  | AbortFailureError;
 ```
 
-The decoder, output witness, and renderer create this result at their ownership
-boundary. Source selection consumes the disposition directly. Detailed
-diagnostics remain evidence and are no longer parsed to decide whether a source
-is retryable.
+The orchestrator uses an exhaustive decoder-local failure mapping table for the
+variants above and the one qualifier mismatch. Resource, timeout, abort,
+transport, malformed stream/asset, integrity, policy, cleanup, renderer, and
+materializer failures have no entry and therefore cannot become retryable.
+Every other failure is terminal and thrown through its existing typed public
+path. Detailed diagnostics remain evidence and are no longer parsed to decide
+whether a source is retryable.
 
 `decoded-output-incompatible` is retryable only during provisional
 qualification. If every authored source returns a retryable rejection, the
-generation terminates through the existing public typed error. Renderer
-backend selection remains within one source candidate: exact-null WebGL2 may
-select Canvas2D, but a renderer backend failure never advances the codec ladder.
+generation terminates through the existing public typed error. Renderer and
+materializer failures cannot inhabit the retryable union. Renderer backend
+selection remains within one source candidate: exact-null WebGL2 may select
+Canvas2D, but a renderer backend failure never advances the codec ladder.
 
 ## 9. Firefox Policy
 
@@ -311,8 +412,10 @@ Do not add a Firefox-specific runtime fix or fallback decoder in this cycle.
 - Firefox for Android remains separately uncertified until its WebCodecs and
   codec matrix is measured on real devices.
 
-Public browser-support documentation states the Firefox 130 feature floor and
-the one-release exception to a literal 24-month promise.
+Before real-device qualification, public browser-support documentation states
+Firefox 130 as the candidate feature floor and the one-release exception to a
+literal 24-month promise. It may be promoted to certified only after the
+Firefox 130 AVAL pixel/interaction run passes.
 
 ## 10. Testing and Evidence
 
@@ -322,14 +425,17 @@ the one-release exception to a literal 24-month promise.
   normalization, the existing sRGB normalization, and every conflicting member.
 - Decoder integration tests prove the captured Android tuple succeeds while
   diagnostics still preserve raw expected/observed arrays on a true mismatch.
-- Format/compiler tests prove deterministic bounded witness selection and
-  rejection of malformed coordinates, counts, classes, and geometry.
-- Renderer-controller tests prove the witness runs once before publication,
-  reuses materialized bytes, retries the next candidate on mismatch, and is
-  identical across WebGL2 and Canvas2D.
+- Format/compiler tests prove deterministic bounded witness selection, exact
+  interval endpoints, exact-emitted-rendition survival, terminal
+  missing/malformed handling, and rejection of malformed coordinates, counts,
+  intervals, references, and geometry.
+- Qualifier/materializer tests prove the witness runs once before publication,
+  reuses materialized bytes, rejects CPU-materialization failure terminally,
+  and presents identical qualified bytes to WebGL2 and Canvas2D.
 - Candidate-selection tests prove AV1 -> VP9 -> HEVC -> H.264, including a
   corrupt AV1 witness followed by successful VP9, and terminal exhaustion with
-  no static fallback.
+  no static fallback. They also prove HEVC success never touches H.264 and no
+  candidate after a winner is opened, probed, fetched, or decoded.
 - Missing-WebCodecs tests prove one typed Firefox-boundary
   `unsupported-profile` result.
 
@@ -363,17 +469,24 @@ timestamp-keyed evidence directory.
   direct AV1/VP9/HEVC/H.264 controls, interactions, and a 60-second soak.
 - Firefox on Windows 11: 152/151/150/130 positive; 129/128 negative.
 - Chrome on Windows 11: current/previous/previous-two and the 24-month sentinel.
-- Safari on real iPhone: current provider versions plus iOS 18 boundary; verify
-  HEVC is selected before H.264 when AV1 and VP9 are unavailable.
+- Brave on Windows 11: attempt current/previous/previous-two branded builds;
+  retain provider-unavailable evidence instead of inferring from Chrome.
+- Safari on real iPhone: attempt iOS 26.5, 26.4, and 26.3 plus the iOS 18.0
+  boundary; retain provider provisioning failures as explicit coverage gaps.
+  Verify HEVC is selected before H.264 when AV1 and VP9 are unavailable.
 
 Passing evidence requires correct pixels and interaction, not merely a
-readiness string. H.264 evidence is valid only when AV1, VP9, and HEVC were
-shown unavailable or failed qualification first.
+readiness string. Save attempt diagnostics beside screenshots. H.264 evidence
+is valid only when AV1, VP9, and HEVC were shown unavailable or failed
+qualification first; HEVC success evidence must show H.264 was untouched.
 
 ## 11. Delivery Boundaries
 
 This cycle may change internal renderer, decoder, format, compiler, diagnostics,
 example assets, tests, and browser-support documentation. It does not add a
-legacy decoder backend for Firefox 129 or earlier, add AVAL-owned fallback
-content, or promise untested Brave results. Branded Brave remains a separate
-matrix slot and cannot be inferred from Chrome.
+legacy decoder backend for Firefox 129 or earlier or add AVAL-owned fallback
+content. Legacy packed-alpha manifests remain parseable for inspection, but
+without a witness they are outside the playback-qualified profile and fail
+terminally. Branded Brave remains a separate attempted matrix slot and cannot
+be inferred from Chrome; provider unavailability is reported as a gap rather
+than a product pass.

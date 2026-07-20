@@ -20,8 +20,10 @@ match the reported product-version major. Safari and Mobile Safari retain the
 independently reported numeric WebKit/Safari build identifier instead of
 pretending that it shares the marketing-version major.
 
-Firefox 130 is the oldest certified desktop playback release. It is the first
-stable desktop Firefox release with AVAL's required WebCodecs interfaces.
+Firefox 130 is the candidate desktop playback floor pending recorded AVAL
+BrowserStack qualification. It is the first stable desktop Firefox release
+with AVAL's required WebCodecs interfaces, but API availability alone is not a
+compatibility pass.
 Firefox 129 is a one-release feature-floor exception. It remains inside the
 literal 24-month promise on 2026-07-20 but predates desktop WebCodecs. Firefox
 128 and 129 are mandatory negative sentinels: they must terminate preparation

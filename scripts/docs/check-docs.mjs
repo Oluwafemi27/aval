@@ -154,7 +154,9 @@ for (const claim of [
 }
 const support = await readFile("docs/browser-support.md", "utf8");
 for (const claim of [
-  "Firefox 130 is the oldest certified desktop playback release",
+  "Firefox 130 is the candidate desktop playback floor",
+  "pending recorded AVAL",
+  "BrowserStack qualification",
   "Firefox 129 is a one-release feature-floor exception",
   "literal 24-month promise",
   "`unsupported-profile`",
